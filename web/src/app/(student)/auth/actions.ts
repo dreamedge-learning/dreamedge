@@ -75,25 +75,11 @@ export async function registerStudent(
   }
 
   const referralCode = await generateReferralCode();
-
-  let freeTrialExpiresAt: string | null = null;
   const service = createServiceClient();
 
-  const { data: trialSetting } = await service
-    .from("site_settings")
-    .select("value")
-    .eq("key", "free_trial_days")
-    .single();
-
-  if (trialSetting?.value) {
-    const days = parseInt(String(trialSetting.value), 10);
-    if (days > 0) {
-      const expires = new Date();
-      expires.setDate(expires.getDate() + days);
-      freeTrialExpiresAt = expires.toISOString();
-    }
-  }
-
+  // NOTE: the live `students` table has no `free_trial_expires_at` column, so
+  // the `free_trial_days` site setting is deliberately not read or written on
+  // the signup path. Same as auth/callback/route.ts.
   const { error: insertError } = await service.from("students").insert({
     user_id: userId,
     full_name: fullName.trim(),
@@ -102,7 +88,6 @@ export async function registerStudent(
     class: studentClass,
     referral_code: referralCode,
     referred_by: referredBy?.trim() || null,
-    free_trial_expires_at: freeTrialExpiresAt,
   });
 
   if (insertError) {
@@ -316,22 +301,7 @@ export async function verifyPhoneOtp(
 
   const referralCode = await generateReferralCode();
 
-  let freeTrialExpiresAt: string | null = null;
-  const { data: trialSetting } = await service
-    .from("site_settings")
-    .select("value")
-    .eq("key", "free_trial_days")
-    .maybeSingle();
-
-  if (trialSetting?.value) {
-    const days = parseInt(String(trialSetting.value), 10);
-    if (days > 0) {
-      const expires = new Date();
-      expires.setDate(expires.getDate() + days);
-      freeTrialExpiresAt = expires.toISOString();
-    }
-  }
-
+  // No `free_trial_expires_at` on the live `students` table — see registerStudent.
   const syntheticEmail = `${normalized.replace(/[^0-9]/g, "")}@phone.dreamedge.local`;
 
   const { error: insertError } = await service.from("students").insert({
@@ -340,7 +310,6 @@ export async function verifyPhoneOtp(
     email: syntheticEmail,
     phone: normalized,
     referral_code: referralCode,
-    free_trial_expires_at: freeTrialExpiresAt,
   });
 
   if (insertError) {

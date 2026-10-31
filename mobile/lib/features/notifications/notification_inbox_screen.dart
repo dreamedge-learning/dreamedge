@@ -97,9 +97,10 @@ class NotificationInboxScreen extends ConsumerWidget {
     AppNotification notification,
   ) {
     if (!notification.isRead) {
+      // `student_notifications.id`, not the broadcast id.
       ref
           .read(notificationInboxServiceProvider)
-          .markAsRead(notification.id);
+          .markAsRead(notification.studentNotificationId);
       ref.invalidate(notificationsProvider);
       ref.invalidate(unreadCountProvider);
     }

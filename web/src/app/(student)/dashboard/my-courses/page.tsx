@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
+
 import { requireStudent } from "@/lib/auth-student";
 import { createClient } from "@/lib/supabase/server";
 import type { EnrollmentWithCourse } from "@/types/enrollment";
 import { MyCoursesContent } from "@/components/student/dashboard/my-courses-content";
 
-
 export const metadata: Metadata = {
   title: "My Courses",
 };
+
+interface CourseProgress {
+  total: number;
+  completed: number;
+  pct: number;
+}
 
 async function fetchEnrollments(
   studentId: string
@@ -38,58 +44,100 @@ async function fetchEnrollments(
   }
 }
 
+function blankProgress(courseIds: string[]): Map<string, CourseProgress> {
+  return new Map(
+    courseIds.map((id) => [id, { total: 0, completed: 0, pct: 0 }])
+  );
+}
+
+/**
+ * Per-course completion, counted over the published content the admin panel
+ * actually writes: subjects -> topics -> content_items, joined to
+ * `student_progress` on content_item_id. RLS hides anything unpublished or
+ * not paid for, so a course with no accessible items reports 0 of 0.
+ */
 async function fetchCourseProgress(
   studentId: string,
   courseIds: string[]
-): Promise<Map<string, { total: number; completed: number; pct: number }>> {
-  const progressMap = new Map<
-    string,
-    { total: number; completed: number; pct: number }
-  >();
-
-  if (courseIds.length === 0) return progressMap;
+): Promise<Map<string, CourseProgress>> {
+  if (courseIds.length === 0) return new Map();
 
   try {
     const supabase = await createClient();
 
-    const { data: lessons } = await supabase
-      .from("lessons")
+    const { data: subjects } = await supabase
+      .from("subjects")
       .select("id, course_id")
       .in("course_id", courseIds)
-      .eq("is_published", true);
+      .eq("is_visible", true);
+
+    if (!subjects || subjects.length === 0) return blankProgress(courseIds);
+
+    const { data: topics } = await supabase
+      .from("topics")
+      .select("id, subject_id")
+      .in(
+        "subject_id",
+        subjects.map((s) => s.id)
+      )
+      .eq("is_visible", true);
+
+    if (!topics || topics.length === 0) return blankProgress(courseIds);
+
+    const { data: items } = await supabase
+      .from("content_items")
+      .select("id, topic_id")
+      .in(
+        "topic_id",
+        topics.map((t) => t.id)
+      )
+      .eq("status", "published");
+
+    if (!items || items.length === 0) return blankProgress(courseIds);
+
+    const courseOfSubject = new Map(subjects.map((s) => [s.id, s.course_id]));
+    const courseOfTopic = new Map<string, string>();
+    for (const topic of topics) {
+      const courseId = courseOfSubject.get(topic.subject_id);
+      if (courseId) courseOfTopic.set(topic.id, courseId);
+    }
+
+    const progressMap = blankProgress(courseIds);
+    const courseOfItem = new Map<string, string>();
+
+    for (const item of items) {
+      const courseId = courseOfTopic.get(item.topic_id);
+      if (!courseId) continue;
+      courseOfItem.set(item.id, courseId);
+      const summary = progressMap.get(courseId);
+      if (summary) summary.total += 1;
+    }
 
     const { data: progress } = await supabase
       .from("student_progress")
-      .select("lesson_id, course_id, status")
+      .select("content_item_id, status")
       .eq("student_id", studentId)
-      .in("course_id", courseIds);
+      .eq("status", "completed")
+      .in("content_item_id", Array.from(courseOfItem.keys()));
 
-    const lessonsByCourse = new Map<string, number>();
-    for (const l of lessons ?? []) {
-      lessonsByCourse.set(l.course_id, (lessonsByCourse.get(l.course_id) ?? 0) + 1);
+    for (const row of progress ?? []) {
+      const courseId = courseOfItem.get(row.content_item_id);
+      if (!courseId) continue;
+      const summary = progressMap.get(courseId);
+      if (summary) summary.completed += 1;
     }
 
-    const completedByCourse = new Map<string, number>();
-    for (const p of progress ?? []) {
-      if (p.status === "completed") {
-        completedByCourse.set(
-          p.course_id,
-          (completedByCourse.get(p.course_id) ?? 0) + 1
-        );
-      }
+    for (const summary of progressMap.values()) {
+      summary.pct =
+        summary.total > 0
+          ? Math.round((summary.completed / summary.total) * 100)
+          : 0;
     }
 
-    for (const cid of courseIds) {
-      const total = lessonsByCourse.get(cid) ?? 0;
-      const completed = completedByCourse.get(cid) ?? 0;
-      const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-      progressMap.set(cid, { total, completed, pct });
-    }
+    return progressMap;
   } catch {
-    // Tables may not exist yet
+    return blankProgress(courseIds);
   }
-
-  return progressMap;
 }
 
 export default async function MyCoursesPage() {
@@ -102,15 +150,10 @@ export default async function MyCoursesPage() {
 
   const progressMap = await fetchCourseProgress(student.id, courseIds);
 
-  const progressData: Record<
-    string,
-    { total: number; completed: number; pct: number }
-  > = {};
-  for (const [cid, val] of progressMap) {
-    progressData[cid] = val;
+  const progressData: Record<string, CourseProgress> = {};
+  for (const [courseId, summary] of progressMap) {
+    progressData[courseId] = summary;
   }
 
-  return (
-    <MyCoursesContent enrollments={enrollments} progress={progressData} />
-  );
+  return <MyCoursesContent enrollments={enrollments} progress={progressData} />;
 }

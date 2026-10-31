@@ -40,7 +40,7 @@ class Student {
       id: json['id'] as String,
       userId: json['user_id'] as String,
       fullName: json['full_name'] as String,
-      email: json['email'] as String,
+      email: json['email'] as String? ?? '',
       phone: json['phone'] as String?,
       avatarUrl: json['avatar_url'] as String?,
       studentClass: json['class'] as String?,
@@ -49,12 +49,16 @@ class Student {
       state: json['state'] as String?,
       referralCode: json['referral_code'] as String?,
       referredBy: json['referred_by'] as String?,
-      isActive: json['is_active'] as bool? ?? true,
+      // Live column is `status` (student_status), not `is_active`.
+      isActive: json['is_active'] as bool? ??
+          (json['status'] as String? ?? 'active') == 'active',
       freeTrialExpiresAt: json['free_trial_expires_at'] != null
           ? DateTime.parse(json['free_trial_expires_at'] as String)
           : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updated_at'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 

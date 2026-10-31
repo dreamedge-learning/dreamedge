@@ -13,6 +13,9 @@ class Course {
   final int enrollmentCount;
   final int totalLessons;
   final int durationMinutes;
+
+  /// Server-owned access window for a purchase. Never computed on the device.
+  final int validityDays;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -31,6 +34,7 @@ class Course {
     required this.enrollmentCount,
     required this.totalLessons,
     required this.durationMinutes,
+    required this.validityDays,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -65,7 +69,9 @@ class Course {
       isFeatured: json['is_featured'] as bool? ?? false,
       enrollmentCount: (json['student_count'] as num?)?.toInt() ?? (json['enrollment_count'] as num?)?.toInt() ?? 0,
       totalLessons: (json['total_lessons'] as num?)?.toInt() ?? 0,
-      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ?? 0,
+      durationMinutes: (json['duration_minutes'] as num?)?.toInt() ??
+          (((json['duration_hours'] as num?)?.toDouble() ?? 0) * 60).round(),
+      validityDays: (json['validity_days'] as num?)?.toInt() ?? 365,
       createdAt: DateTime.parse(
           json['created_at'] as String? ?? DateTime.now().toIso8601String()),
       updatedAt: DateTime.parse(
@@ -89,6 +95,7 @@ class Course {
       'student_count': enrollmentCount,
       'total_lessons': totalLessons,
       'duration_minutes': durationMinutes,
+      'validity_days': validityDays,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };

@@ -9,8 +9,8 @@ final leaderboardServiceProvider = Provider<LeaderboardService>((ref) {
 });
 
 final courseLeaderboardProvider =
-    FutureProvider.family<LeaderboardSnapshot, String>((ref, courseId) {
-  final studentId = ref.watch(currentStudentIdProvider);
+    FutureProvider.family<LeaderboardSnapshot, String>((ref, courseId) async {
+  final studentId = await ref.watch(currentStudentIdProvider.future);
   return ref.watch(leaderboardServiceProvider).getCourseLeaderboard(
         courseId: courseId,
         currentStudentId: studentId,

@@ -13,7 +13,6 @@ export async function updateProfile(
 ): Promise<ActionResult<{ updated: boolean }>> {
   const fullName = formData.get("full_name") as string;
   const phone = (formData.get("phone") as string) || null;
-  const schoolName = (formData.get("school_name") as string) || null;
   const city = (formData.get("city") as string) || null;
   const state = (formData.get("state") as string) || null;
 
@@ -44,7 +43,6 @@ export async function updateProfile(
     .update({
       full_name: fullName.trim(),
       phone,
-      school_name: schoolName?.trim() || null,
       city: city?.trim() || null,
       state: state || null,
     })

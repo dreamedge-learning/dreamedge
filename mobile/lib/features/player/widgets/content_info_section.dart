@@ -38,7 +38,7 @@ class ContentInfoSection extends StatelessWidget {
                   icon: Icons.check_circle_outline_rounded,
                 ),
               BadgeChip(
-                label: content.isVideo ? 'Video' : content.contentType,
+                label: content.type.label,
                 color: AppColors.orange,
                 icon: content.isVideo
                     ? Icons.play_circle_outline_rounded

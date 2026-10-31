@@ -3,6 +3,22 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/lib/auth-guard";
+import { describeFailure, firstIssue } from "@/lib/validations/form";
+import {
+  bulkStudentStatusUpdateSchema,
+  leadCreateInput,
+  leadCreateSchema,
+  leadIdSchema,
+  leadListFilterSchema,
+  leadUpdateSchema,
+  studentIdSchema,
+  studentListFilterSchema,
+  studentStatusUpdateSchema,
+  testimonialIdSchema,
+  testimonialInput,
+  testimonialOrderSchema,
+  testimonialSchema,
+} from "@/lib/validations/student";
 
 function sanitizeSearch(input: string): string {
   return input.replace(/[,().%_*]/g, "");
@@ -23,14 +39,26 @@ export async function fetchStudents(filters: StudentFilters = {}) {
   try {
     await assertAdmin(["super_admin", "teacher", "support_staff"]);
     const supabase = await createClient();
-    const page = filters.page ?? 1;
-    const pageSize = filters.pageSize ?? 20;
+
+    const parsedFilters = studentListFilterSchema.safeParse({
+      status: filters.status,
+      courseId: filters.courseId,
+      page: filters.page,
+      pageSize: filters.pageSize,
+    });
+
+    if (!parsedFilters.success) {
+      return { error: firstIssue(parsedFilters.error) };
+    }
+
+    const page = parsedFilters.data.page ?? 1;
+    const pageSize = parsedFilters.data.pageSize ?? 20;
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
 
     let query = supabase
       .from("students")
-      .select("id, full_name, email, phone, avatar_url, class, city, is_active, created_at, enrollments(id)", { count: "exact" });
+      .select("id, full_name, email, phone, avatar_url, class, city, status, created_at, enrollments(id)", { count: "exact" });
 
     if (filters.search) {
       const safe = sanitizeSearch(filters.search);
@@ -41,12 +69,9 @@ export async function fetchStudents(filters: StudentFilters = {}) {
       }
     }
 
-    if (filters.status && filters.status !== "all") {
-      if (filters.status === "active") {
-        query = query.eq("is_active", true);
-      } else {
-        query = query.eq("is_active", false);
-      }
+    const statusFilter = parsedFilters.data.status;
+    if (statusFilter && statusFilter !== "all") {
+      query = query.eq("status", statusFilter);
     }
 
     if (filters.city) {
@@ -64,11 +89,12 @@ export async function fetchStudents(filters: StudentFilters = {}) {
       query = query.lte("created_at", filters.dateTo);
     }
 
-    if (filters.courseId) {
+    const courseFilter = parsedFilters.data.courseId;
+    if (courseFilter) {
       const { data: enrolled } = await supabase
         .from("enrollments")
         .select("student_id")
-        .eq("course_id", filters.courseId);
+        .eq("course_id", courseFilter);
 
       const ids = enrolled?.map((e) => e.student_id) ?? [];
       if (ids.length === 0) {
@@ -86,20 +112,23 @@ export async function fetchStudents(filters: StudentFilters = {}) {
       return { error: "Something went wrong. Please try again." };
     }
 
-    const students = (data ?? []).map((s: Record<string, unknown>) => ({
-      ...s,
-      status: s.is_active === true ? "active" : "inactive",
-      is_active: undefined,
-      enrollment_count: Array.isArray(s.enrollments)
-        ? s.enrollments.length
-        : 0,
-      enrollments: undefined,
+    const students = (data ?? []).map((s) => ({
+      id: s.id,
+      full_name: s.full_name,
+      email: s.email,
+      phone: s.phone,
+      avatar_url: s.avatar_url,
+      class: s.class,
+      city: s.city,
+      status: s.status,
+      created_at: s.created_at,
+      enrollment_count: Array.isArray(s.enrollments) ? s.enrollments.length : 0,
     }));
 
     return { data: students, count: count ?? 0 };
   } catch (err) {
     console.error("fetchStudents failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -108,10 +137,15 @@ export async function fetchStudentDetail(studentId: string) {
     await assertAdmin(["super_admin", "teacher", "support_staff"]);
     const supabase = await createClient();
 
+    const parsedId = studentIdSchema.safeParse(studentId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { data: student, error } = await supabase
       .from("students")
-      .select("id, user_id, full_name, email, phone, avatar_url, class, school_name, city, state, is_active, referral_code, created_at, updated_at")
-      .eq("id", studentId)
+      .select("id, user_id, full_name, email, phone, avatar_url, class, city, state, status, board, referral_code, wallet_balance, created_at, updated_at")
+      .eq("id", parsedId.data)
       .single();
 
     if (error) {
@@ -119,27 +153,24 @@ export async function fetchStudentDetail(studentId: string) {
       return { error: "Something went wrong. Please try again." };
     }
 
-    const studentRecord = {
-      ...student,
-      status: student.is_active === true ? "active" : "inactive",
-    } as Record<string, unknown>;
+    const studentRecord: Record<string, unknown> = { ...student };
 
     const [enrollments, testAttempts, orders, auditLog] = await Promise.all([
       supabase
         .from("enrollments")
         .select("*, course:courses(id, title)")
-        .eq("student_id", studentId)
+        .eq("student_id", parsedId.data)
         .order("purchased_at", { ascending: false }),
       supabase
         .from("test_attempts")
         .select("*, test:tests(name)")
-        .eq("student_id", studentId)
+        .eq("student_id", parsedId.data)
         .order("submitted_at", { ascending: false })
         .limit(50),
       supabase
         .from("orders")
         .select("*, course:courses(title)")
-        .eq("student_id", studentId)
+        .eq("student_id", parsedId.data)
         .order("created_at", { ascending: false }),
       supabase
         .from("audit_log")
@@ -170,7 +201,7 @@ export async function fetchStudentDetail(studentId: string) {
     };
   } catch (err) {
     console.error("fetchStudentDetail failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -182,10 +213,15 @@ export async function updateStudentStatus(
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
+    const parsed = studentStatusUpdateSchema.safeParse({ studentId, status });
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { error } = await supabase
       .from("students")
-      .update({ is_active: status === "active" })
-      .eq("id", studentId);
+      .update({ status: parsed.data.status })
+      .eq("id", parsed.data.studentId);
 
     if (error) {
       console.error("updateStudentStatus failed:", error);
@@ -196,7 +232,7 @@ export async function updateStudentStatus(
     return { success: true };
   } catch (err) {
     console.error("updateStudentStatus failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -208,10 +244,15 @@ export async function bulkUpdateStudentStatus(
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
+    const parsed = bulkStudentStatusUpdateSchema.safeParse({ studentIds, status });
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { error } = await supabase
       .from("students")
-      .update({ is_active: status === "active" })
-      .in("id", studentIds);
+      .update({ status: parsed.data.status })
+      .in("id", parsed.data.studentIds);
 
     if (error) {
       console.error("bulkUpdateStudentStatus failed:", error);
@@ -222,7 +263,7 @@ export async function bulkUpdateStudentStatus(
     return { success: true };
   } catch (err) {
     console.error("bulkUpdateStudentStatus failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -235,7 +276,7 @@ export async function fetchStudentAnalytics() {
       { data: students },
       { data: enrollments },
     ] = await Promise.all([
-      supabase.from("students").select("id, is_active, city, created_at"),
+      supabase.from("students").select("id, status, city, created_at"),
       supabase.from("enrollments").select("course_id, courses(title)"),
     ]);
 
@@ -243,14 +284,13 @@ export async function fetchStudentAnalytics() {
     const cityDist: Record<string, number> = {};
     const monthlyGrowth: Record<string, number> = {};
 
-    (students ?? []).forEach((s: Record<string, unknown>) => {
-      const status = s.is_active === true ? "active" : "inactive";
-      statusDist[status] = (statusDist[status] || 0) + 1;
+    (students ?? []).forEach((s) => {
+      statusDist[s.status] = (statusDist[s.status] || 0) + 1;
 
-      const city = (s.city as string) || "Unknown";
+      const city = s.city || "Unknown";
       cityDist[city] = (cityDist[city] || 0) + 1;
 
-      const month = (s.created_at as string).slice(0, 7);
+      const month = s.created_at.slice(0, 7);
       monthlyGrowth[month] = (monthlyGrowth[month] || 0) + 1;
     });
 
@@ -282,7 +322,7 @@ export async function fetchStudentAnalytics() {
     };
   } catch (err) {
     console.error("fetchStudentAnalytics failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -320,8 +360,14 @@ export async function fetchLeads(filters: { search?: string; status?: string; so
       }
     }
 
-    if (filters.status && filters.status !== "all") {
-      query = query.eq("status", filters.status);
+    const parsedFilters = leadListFilterSchema.safeParse({ status: filters.status });
+    if (!parsedFilters.success) {
+      return { error: firstIssue(parsedFilters.error) };
+    }
+
+    const statusFilter = parsedFilters.data.status;
+    if (statusFilter && statusFilter !== "all") {
+      query = query.eq("status", statusFilter);
     }
 
     if (filters.source && filters.source !== "all") {
@@ -337,7 +383,7 @@ export async function fetchLeads(filters: { search?: string; status?: string; so
     return { data: data ?? [], count: count ?? 0 };
   } catch (err) {
     console.error("fetchLeads failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -346,21 +392,18 @@ export async function createLead(formData: FormData) {
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
-    const name = formData.get("name") as string;
-    const phone = formData.get("phone") as string;
-    const email = formData.get("email") as string;
-    const source = formData.get("source") as string;
-    const remarks = formData.get("remarks") as string;
-
-    if (!name?.trim()) return { error: "Name is required" };
+    const parsed = leadCreateSchema.safeParse(leadCreateInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
 
     const { error } = await supabase.from("leads").insert({
-      name: name.trim(),
-      phone: phone?.trim() || null,
-      email: email?.trim() || null,
-      source: source || "other",
+      name: parsed.data.name,
+      phone: parsed.data.phone ?? null,
+      email: parsed.data.email ?? null,
+      source: parsed.data.source,
       status: "new",
-      remarks: remarks?.trim() || null,
+      remarks: parsed.data.remarks ?? null,
     });
 
     if (error) {
@@ -372,7 +415,7 @@ export async function createLead(formData: FormData) {
     return { success: true };
   } catch (err) {
     console.error("createLead failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -384,10 +427,24 @@ export async function updateLead(
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
+    const parsedId = leadIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const parsed = leadUpdateSchema.safeParse(updates);
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { error } = await supabase
       .from("leads")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id);
+      .update({
+        ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
+        ...(parsed.data.remarks !== undefined ? { remarks: parsed.data.remarks } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", parsedId.data);
 
     if (error) {
       console.error("updateLead failed:", error);
@@ -398,7 +455,7 @@ export async function updateLead(
     return { success: true };
   } catch (err) {
     console.error("updateLead failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -406,7 +463,13 @@ export async function deleteLead(id: string) {
   try {
     await assertAdmin(["super_admin"]);
     const supabase = await createClient();
-    const { error } = await supabase.from("leads").delete().eq("id", id);
+
+    const parsedId = leadIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const { error } = await supabase.from("leads").delete().eq("id", parsedId.data);
 
     if (error) {
       console.error("deleteLead failed:", error);
@@ -417,7 +480,7 @@ export async function deleteLead(id: string) {
     return { success: true };
   } catch (err) {
     console.error("deleteLead failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -426,20 +489,25 @@ export async function convertLeadToStudent(leadId: string) {
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
+    const parsedId = leadIdSchema.safeParse(leadId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { data: lead, error: fetchError } = await supabase
       .from("leads")
       .select("id, name, email, phone, source, status")
-      .eq("id", leadId)
+      .eq("id", parsedId.data)
       .single();
 
     if (fetchError || !lead) return { error: "Lead not found" };
 
     const { error: insertError } = await supabase.from("students").insert({
       user_id: crypto.randomUUID(),
-      full_name: lead.name ?? "",
+      full_name: lead.name,
       phone: lead.phone,
-      email: lead.email ?? "",
-      is_active: true,
+      email: lead.email,
+      status: "active",
     });
 
     if (insertError) {
@@ -450,14 +518,14 @@ export async function convertLeadToStudent(leadId: string) {
     await supabase
       .from("leads")
       .update({ status: "converted", updated_at: new Date().toISOString() })
-      .eq("id", leadId);
+      .eq("id", parsedId.data);
 
     revalidatePath("/admin/students/leads");
     revalidatePath("/admin/students");
     return { success: true };
   } catch (err) {
     console.error("convertLeadToStudent failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -488,7 +556,7 @@ export async function fetchTestimonials() {
     return { data: mapped };
   } catch (err) {
     console.error("fetchTestimonials failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -497,21 +565,21 @@ export async function createTestimonial(formData: FormData) {
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
-    const studentName = formData.get("student_name") as string;
-    if (!studentName?.trim()) return { error: "Student name is required" };
+    const parsed = testimonialSchema.safeParse(testimonialInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
 
     const { count } = await supabase
       .from("testimonials")
       .select("id", { count: "exact", head: true });
 
-    const yearVal = formData.get("year") as string;
-
     const { error } = await supabase.from("testimonials").insert({
-      student_name: studentName.trim(),
-      content: (formData.get("content") as string)?.trim() || null,
-      video_url: (formData.get("video_url") as string)?.trim() || null,
-      type: (formData.get("type") as string) || "text",
-      year: yearVal?.trim() || String(new Date().getFullYear()),
+      student_name: parsed.data.student_name,
+      content: parsed.data.content ?? null,
+      video_url: parsed.data.video_url ?? null,
+      type: parsed.data.type,
+      year: parsed.data.year ?? String(new Date().getFullYear()),
       is_visible: true,
       weight: (count ?? 0) + 1,
     });
@@ -525,7 +593,7 @@ export async function createTestimonial(formData: FormData) {
     return { success: true };
   } catch (err) {
     console.error("createTestimonial failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -534,18 +602,26 @@ export async function updateTestimonial(id: string, formData: FormData) {
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
-    const yearVal = formData.get("year") as string;
+    const parsedId = testimonialIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const parsed = testimonialSchema.safeParse(testimonialInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
 
     const { error } = await supabase
       .from("testimonials")
       .update({
-        student_name: (formData.get("student_name") as string)?.trim(),
-        content: (formData.get("content") as string)?.trim() || null,
-        video_url: (formData.get("video_url") as string)?.trim() || null,
-        type: (formData.get("type") as string) || "text",
-        year: yearVal?.trim() || String(new Date().getFullYear()),
+        student_name: parsed.data.student_name,
+        content: parsed.data.content ?? null,
+        video_url: parsed.data.video_url ?? null,
+        type: parsed.data.type,
+        year: parsed.data.year ?? String(new Date().getFullYear()),
       })
-      .eq("id", id);
+      .eq("id", parsedId.data);
 
     if (error) {
       console.error("updateTestimonial failed:", error);
@@ -556,7 +632,7 @@ export async function updateTestimonial(id: string, formData: FormData) {
     return { success: true };
   } catch (err) {
     console.error("updateTestimonial failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -565,10 +641,15 @@ export async function toggleTestimonialVisibility(id: string, visible: boolean) 
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
+    const parsedId = testimonialIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { error } = await supabase
       .from("testimonials")
       .update({ is_visible: visible })
-      .eq("id", id);
+      .eq("id", parsedId.data);
 
     if (error) {
       console.error("toggleTestimonialVisibility failed:", error);
@@ -579,7 +660,7 @@ export async function toggleTestimonialVisibility(id: string, visible: boolean) 
     return { success: true };
   } catch (err) {
     console.error("toggleTestimonialVisibility failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -587,7 +668,16 @@ export async function deleteTestimonial(id: string) {
   try {
     await assertAdmin(["super_admin"]);
     const supabase = await createClient();
-    const { error } = await supabase.from("testimonials").delete().eq("id", id);
+
+    const parsedId = testimonialIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const { error } = await supabase
+      .from("testimonials")
+      .delete()
+      .eq("id", parsedId.data);
 
     if (error) {
       console.error("deleteTestimonial failed:", error);
@@ -598,7 +688,7 @@ export async function deleteTestimonial(id: string) {
     return { success: true };
   } catch (err) {
     console.error("deleteTestimonial failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -607,7 +697,12 @@ export async function reorderTestimonials(orderedIds: string[]) {
     await assertAdmin(["super_admin", "support_staff"]);
     const supabase = await createClient();
 
-    const updates = orderedIds.map((id, index) =>
+    const parsedIds = testimonialOrderSchema.safeParse(orderedIds);
+    if (!parsedIds.success) {
+      return { error: firstIssue(parsedIds.error) };
+    }
+
+    const updates = parsedIds.data.map((id, index) =>
       supabase.from("testimonials").update({ weight: index + 1 }).eq("id", id)
     );
 
@@ -623,6 +718,6 @@ export async function reorderTestimonials(orderedIds: string[]) {
     return { success: true };
   } catch (err) {
     console.error("reorderTestimonials failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }

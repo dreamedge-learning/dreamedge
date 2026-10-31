@@ -1,31 +1,46 @@
+import 'subject.dart' show embeddedCount;
+
+/// Maps the live `topics` table:
+/// id, subject_id, name, slug, description, weight, is_visible, created_at.
 class Topic {
   final String id;
   final String subjectId;
   final String name;
+  final String slug;
   final String? description;
-  final int sortOrder;
+  final int weight;
+  final bool isVisible;
+  final DateTime? createdAt;
+
+  /// Count of child content items, when the query asked for
+  /// `content_items(count)`.
   final int contentCount;
-  final DateTime createdAt;
 
   const Topic({
     required this.id,
     required this.subjectId,
     required this.name,
+    required this.slug,
     this.description,
-    required this.sortOrder,
+    required this.weight,
+    required this.isVisible,
+    this.createdAt,
     required this.contentCount,
-    required this.createdAt,
   });
 
   factory Topic.fromJson(Map<String, dynamic> json) {
     return Topic(
       id: json['id'] as String,
       subjectId: json['subject_id'] as String,
-      name: json['name'] as String,
+      name: json['name'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
       description: json['description'] as String?,
-      sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
-      contentCount: (json['content_count'] as num?)?.toInt() ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      weight: (json['weight'] as num?)?.toInt() ?? 0,
+      isVisible: json['is_visible'] as bool? ?? true,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
+      contentCount: embeddedCount(json['content_items']),
     );
   }
 
@@ -34,10 +49,11 @@ class Topic {
       'id': id,
       'subject_id': subjectId,
       'name': name,
+      'slug': slug,
       'description': description,
-      'sort_order': sortOrder,
-      'content_count': contentCount,
-      'created_at': createdAt.toIso8601String(),
+      'weight': weight,
+      'is_visible': isVisible,
+      'created_at': createdAt?.toIso8601String(),
     };
   }
 }

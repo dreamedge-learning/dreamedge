@@ -50,7 +50,10 @@ class TestAttempt {
       percentage: (json['percentage'] as num?)?.toDouble() ?? 0,
       timeTakenSeconds: (json['time_taken_seconds'] as num?)?.toInt() ?? 0,
       attemptNumber: (json['attempt_number'] as num?)?.toInt() ?? 1,
-      submittedAt: DateTime.parse(json['submitted_at'] as String),
+      submittedAt: json['submitted_at'] != null
+          ? (DateTime.tryParse(json['submitted_at'] as String) ??
+              DateTime.now())
+          : DateTime.now(),
     );
   }
 }

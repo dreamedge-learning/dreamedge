@@ -17,41 +17,10 @@ interface TestimonialsSectionProps {
   testimonials: Testimonial[];
 }
 
-const PLACEHOLDER_TESTIMONIALS: Testimonial[] = [
-  {
-    id: "1",
-    student_name: "Aarav Sharma",
-    class: "Class 10",
-    rating: 5,
-    content:
-      "Dream Edge made Maths so easy! The concept-based approach helped me understand topics I struggled with for years. My marks improved from 65 to 92 in just one term.",
-    avatar_url: null,
-  },
-  {
-    id: "2",
-    student_name: "Priya Patel",
-    class: "Class 9",
-    rating: 5,
-    content:
-      "The live classes are amazing — Rahul Sir explains everything so clearly. The test series helped me prepare for exams with confidence. Highly recommend!",
-    avatar_url: null,
-  },
-  {
-    id: "3",
-    student_name: "Rohan Gupta",
-    class: "Class 8",
-    rating: 4,
-    content:
-      "I love the recorded lectures. I can rewatch any topic whenever I want. The study material quality is on par with the best coaching institutes.",
-    avatar_url: null,
-  },
-];
-
 export function TestimonialsSection({
   testimonials,
 }: TestimonialsSectionProps) {
-  const items =
-    testimonials.length > 0 ? testimonials : PLACEHOLDER_TESTIMONIALS;
+  const items = testimonials;
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
 
@@ -70,6 +39,10 @@ export function TestimonialsSection({
   }, [paused, next, items.length]);
 
   const current = items[active];
+
+  // No invented reviews: with no published testimonials the section is
+  // omitted entirely rather than filled with placeholder students.
+  if (!current) return null;
 
   return (
     <section className="bg-background py-16 sm:py-20 lg:py-24">

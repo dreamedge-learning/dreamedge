@@ -22,25 +22,10 @@ interface PopularCoursesProps {
   courses: Course[];
 }
 
-function PlaceholderCard({ index: _index }: { index: number }) {
-  return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex aspect-video items-center justify-center bg-gradient-to-br from-brand-orange/10 to-brand-blue/10">
-        <span className="text-2xl font-bold text-muted-foreground/30">
-          Coming Soon
-        </span>
-      </div>
-      <div className="p-4">
-        <div className="h-4 w-3/4 rounded bg-muted" />
-        <div className="mt-2 h-3 w-1/2 rounded bg-muted" />
-        <div className="mt-4 h-6 w-1/3 rounded bg-muted" />
-      </div>
-    </div>
-  );
-}
-
 export function PopularCourses({ courses }: PopularCoursesProps) {
-  const hasCourses = courses.length > 0;
+  // Rather than padding the page with placeholder cards, the section is
+  // omitted when no published course is available.
+  if (courses.length === 0) return null;
 
   return (
     <section className="bg-muted/30 py-16 sm:py-20 lg:py-24 dark:bg-white/[0.02]">
@@ -64,8 +49,7 @@ export function PopularCourses({ courses }: PopularCoursesProps) {
         </div>
 
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {hasCourses
-            ? courses.map((course) => (
+          {courses.map((course) => (
                 <CourseCard
                   key={course.id}
                   id={course.id}
@@ -80,9 +64,6 @@ export function PopularCourses({ courses }: PopularCoursesProps) {
                   studentCount={course.student_count}
                   ratingAvg={course.rating_avg}
                 />
-              ))
-            : Array.from({ length: 3 }, (_, i) => (
-                <PlaceholderCard key={i} index={i} />
               ))}
         </div>
 

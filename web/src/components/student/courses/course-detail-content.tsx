@@ -47,6 +47,7 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
   const { user, isLoading: authLoading } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
+  const [verifying, setVerifying] = useState(false);
 
   const discount =
     course.original_price && course.original_price > course.price
@@ -81,47 +82,69 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
 
   async function handlePaidEnroll() {
     setEnrolling(true);
-    try {
-      const orderResult = await createPaymentOrder(course.id);
-      if (orderResult.error) {
-        if (orderResult.error === "Please log in to continue") {
-          router.push("/login");
-          return;
-        }
-        toast.error(orderResult.error);
+
+    // The server action calls the create-razorpay-order Edge Function, which
+    // re-derives the price from the database, creates the `orders` row and
+    // returns the Razorpay key and amount. Nothing here is priced client-side.
+    const orderResult = await createPaymentOrder(course.id);
+
+    if (orderResult.error || !orderResult.data) {
+      if (orderResult.error === "Please log in to continue") {
+        router.push("/login");
         return;
       }
+      toast.error(orderResult.error ?? "Could not start checkout. Please try again.");
+      setEnrolling(false);
+      return;
+    }
 
-      const loaded = await loadRazorpay();
-      if (!loaded) {
-        toast.error("Could not load payment gateway. Please try again.");
-        return;
-      }
+    const order = orderResult.data;
 
-      const { orderId, amount, currency, key } = orderResult.data!;
+    const loaded = await loadRazorpay();
+    const Razorpay = typeof window !== "undefined" ? window.Razorpay : undefined;
+    if (!loaded || !Razorpay) {
+      toast.error("Could not load payment gateway. Please try again.");
+      setEnrolling(false);
+      return;
+    }
 
-      const options = {
-        key,
-        amount,
-        currency,
-        name: "Dream Edge Online",
-        description: course.title,
-        order_id: orderId,
-        theme: { color: "#F26A21" },
-        handler: async (response: {
-          razorpay_order_id: string;
-          razorpay_payment_id: string;
-          razorpay_signature: string;
-        }) => {
+    // Every figure below comes from the server's order response.
+    const options: Record<string, unknown> = {
+      key: order.key,
+      amount: order.amountInPaise,
+      currency: order.currency,
+      order_id: order.razorpayOrderId,
+      name: "Dream Edge Online",
+      description: course.title,
+      theme: { color: "#F26A21" },
+      prefill: {
+        name: order.prefill.name,
+        email: order.prefill.email,
+        contact: order.prefill.contact,
+      },
+      handler: async (response: {
+        razorpay_order_id: string;
+        razorpay_payment_id: string;
+        razorpay_signature: string;
+      }) => {
+        setVerifying(true);
+        try {
           const verifyResult = await verifyPayment({
+            // Internal orders.id — the server resolves the student, course and
+            // expected amount from that row, so the browser cannot pick them.
+            orderId: order.orderId,
             razorpay_order_id: response.razorpay_order_id,
             razorpay_payment_id: response.razorpay_payment_id,
             razorpay_signature: response.razorpay_signature,
             courseId: course.id,
           });
 
-          if (verifyResult.error) {
-            toast.error(verifyResult.error);
+          if (verifyResult.error || !verifyResult.data) {
+            toast.error(verifyResult.error ?? "Payment could not be confirmed.", {
+              description:
+                "Your payment may still have gone through — please contact support before paying again.",
+              duration: 10000,
+            });
             return;
           }
 
@@ -129,22 +152,30 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
             description: "You are now enrolled in this course.",
           });
           router.refresh();
+        } catch (err) {
+          toast.error("Could not confirm your payment.", {
+            description:
+              err instanceof Error ? err.message : "Please contact support.",
+            duration: 10000,
+          });
+        } finally {
+          setVerifying(false);
+          setEnrolling(false);
+        }
+      },
+      modal: {
+        ondismiss: () => {
+          setEnrolling(false);
         },
-        modal: {
-          ondismiss: () => {
-            setEnrolling(false);
-          },
-        },
-      };
+      },
+    };
 
-      const Razorpay = window.Razorpay;
-      if (!Razorpay) {
-        toast.error("Payment library failed to load. Please refresh and try again.");
-        setEnrolling(false);
-        return;
-      }
+    try {
       const rzp = new Razorpay(options) as unknown as {
-        on: (event: "payment.failed", handler: (response: { error?: { description?: string } }) => void) => void;
+        on: (
+          event: "payment.failed",
+          handler: (response: { error?: { description?: string } }) => void
+        ) => void;
         open: () => void;
       };
       rzp.on("payment.failed", (response) => {
@@ -154,10 +185,13 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
         setEnrolling(false);
       });
       rzp.open();
-      return; // Don't reset enrolling — modal handles it
-    } catch {
-      toast.error("Something went wrong. Please try again.");
-    } finally {
+      // Leave `enrolling` set: the modal's ondismiss / handler clears it.
+      // (The old code reset it in a `finally`, which runs on `return` too, so
+      // the button went live again while the checkout modal was still open.)
+    } catch (err) {
+      toast.error("Could not open the payment window.", {
+        description: err instanceof Error ? err.message : "Please try again.",
+      });
       setEnrolling(false);
     }
   }
@@ -212,13 +246,13 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
     return (
       <button
         onClick={handleEnroll}
-        disabled={enrolling || authLoading}
+        disabled={enrolling || verifying || authLoading}
         className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-orange py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-orange-dark disabled:opacity-70"
       >
-        {enrolling ? (
+        {enrolling || verifying ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Processing…
+            {verifying ? "Confirming payment…" : "Processing…"}
           </>
         ) : (
           label

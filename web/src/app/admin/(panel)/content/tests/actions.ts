@@ -3,8 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/lib/auth-guard";
-import type { Json } from "@/types/supabase";
+import type { Database, Json } from "@/types/supabase";
 import type { QuestionType, Difficulty } from "@/types/database";
+import { describeFailure, firstIssue } from "@/lib/validations/form";
+import {
+  questionBankIdSchema,
+  questionBankItemSchema,
+  questionBankUpdateSchema,
+  testFilterSchema,
+  testIdSchema,
+  testPayloadSchema,
+} from "@/lib/validations/test";
 
 interface QuestionPayload {
   id?: string;
@@ -39,31 +48,41 @@ interface TestPayload {
 async function upsertTest(payload: TestPayload) {
   const supabase = await createClient();
 
+  // The builder sends every enum as a plain string; parsing is what turns them
+  // into the question_type / difficulty_level / content_status literals the
+  // generated types require, and it rejects bad marks and durations.
+  const parsed = testPayloadSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { error: firstIssue(parsed.error) };
+  }
+  const test = parsed.data;
+
   const testRow = {
-    name: payload.name,
-    course_id: payload.course_id || null,
-    instructions: payload.instructions || null,
-    duration_minutes: payload.duration_minutes,
-    max_attempts: payload.max_attempts,
-    shuffle_questions: payload.shuffle_questions,
-    pass_percentage: payload.pass_percentage,
-    show_results_immediately: payload.show_results_immediately,
-    certificate_enabled: payload.certificate_enabled,
-    status: payload.status,
+    name: test.name,
+    course_id: test.course_id,
+    instructions: test.instructions,
+    duration_minutes: test.duration_minutes,
+    max_attempts: test.max_attempts,
+    shuffle_questions: test.shuffle_questions,
+    pass_percentage: test.pass_percentage,
+    show_results_immediately: test.show_results_immediately,
+    certificate_enabled: test.certificate_enabled,
+    status: test.status,
     updated_at: new Date().toISOString(),
   };
 
-  let testId = payload.id;
+  let testId: string;
 
-  if (testId) {
+  if (test.id) {
     const { error } = await supabase
       .from("tests")
       .update(testRow)
-      .eq("id", testId);
+      .eq("id", test.id);
     if (error) {
       console.error("upsertTest failed:", error);
-      return { error: "Something went wrong. Please try again." };
+      return { error: error.message };
     }
+    testId = test.id;
   } else {
     const { data, error } = await supabase
       .from("tests")
@@ -72,15 +91,15 @@ async function upsertTest(payload: TestPayload) {
       .single();
     if (error) {
       console.error("upsertTest failed:", error);
-      return { error: "Something went wrong. Please try again." };
+      return { error: error.message };
     }
     testId = data.id;
   }
 
   await supabase.from("questions").delete().eq("test_id", testId);
 
-  if (payload.questions.length > 0) {
-    const rows = payload.questions.map((q) => ({
+  if (test.questions.length > 0) {
+    const rows = test.questions.map((q) => ({
       test_id: testId,
       type: q.type,
       content: q.content,
@@ -98,7 +117,7 @@ async function upsertTest(payload: TestPayload) {
     const { error: qError } = await supabase.from("questions").insert(rows);
     if (qError) {
       console.error("upsertTest questions failed:", qError);
-      return { error: "Something went wrong. Please try again." };
+      return { error: qError.message };
     }
   }
 
@@ -112,7 +131,7 @@ export async function saveTest(payload: TestPayload) {
     return upsertTest({ ...payload, status: "draft" });
   } catch (err) {
     console.error("saveTest failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -122,7 +141,7 @@ export async function publishTest(payload: TestPayload) {
     return upsertTest({ ...payload, status: "published" });
   } catch (err) {
     console.error("publishTest failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -131,8 +150,13 @@ export async function deleteTest(id: string) {
     await assertAdmin(["super_admin"]);
     const supabase = await createClient();
 
-    await supabase.from("questions").delete().eq("test_id", id);
-    const { error } = await supabase.from("tests").delete().eq("id", id);
+    const parsedId = testIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    await supabase.from("questions").delete().eq("test_id", parsedId.data);
+    const { error } = await supabase.from("tests").delete().eq("id", parsedId.data);
 
     if (error) {
       console.error("deleteTest failed:", error);
@@ -142,7 +166,7 @@ export async function deleteTest(id: string) {
     return { data: true };
   } catch (err) {
     console.error("deleteTest failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -151,10 +175,15 @@ export async function duplicateTest(id: string) {
     await assertAdmin(["super_admin", "content_creator", "teacher"]);
     const supabase = await createClient();
 
+    const parsedId = testIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { data: test, error: tErr } = await supabase
       .from("tests")
       .select("*")
-      .eq("id", id)
+      .eq("id", parsedId.data)
       .single();
     if (tErr || !test) {
       console.error("duplicateTest failed:", tErr);
@@ -164,7 +193,7 @@ export async function duplicateTest(id: string) {
     const { data: questions, error: qErr } = await supabase
       .from("questions")
       .select("*")
-      .eq("test_id", id)
+      .eq("test_id", parsedId.data)
       .order("weight");
     if (qErr) {
       console.error("duplicateTest failed:", qErr);
@@ -200,7 +229,7 @@ export async function duplicateTest(id: string) {
     return { data: { id: newTest.id } };
   } catch (err) {
     console.error("duplicateTest failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -212,16 +241,27 @@ export async function fetchTests(filters?: {
     await assertAdmin(["super_admin", "content_creator", "teacher"]);
     const supabase = await createClient();
 
+    const parsedFilters = testFilterSchema.safeParse({
+      course_id: filters?.course_id,
+      status: filters?.status,
+    });
+
+    if (!parsedFilters.success) {
+      return { error: firstIssue(parsedFilters.error) };
+    }
+
     let query = supabase
       .from("tests")
       .select("*, course:courses(id, title)")
       .order("created_at", { ascending: false });
 
-    if (filters?.course_id) {
-      query = query.eq("course_id", filters.course_id);
+    const courseFilter = parsedFilters.data.course_id;
+    if (courseFilter && courseFilter !== "all") {
+      query = query.eq("course_id", courseFilter);
     }
-    if (filters?.status) {
-      query = query.eq("status", filters.status);
+    const statusFilter = parsedFilters.data.status;
+    if (statusFilter && statusFilter !== "all") {
+      query = query.eq("status", statusFilter);
     }
 
     const { data, error } = await query;
@@ -254,7 +294,7 @@ export async function fetchTests(filters?: {
     return { data: enriched };
   } catch (err) {
     console.error("fetchTests failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -263,10 +303,15 @@ export async function fetchTestById(id: string) {
     await assertAdmin(["super_admin", "content_creator", "teacher"]);
     const supabase = await createClient();
 
+    const parsedId = testIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { data: test, error: tErr } = await supabase
       .from("tests")
       .select("*")
-      .eq("id", id)
+      .eq("id", parsedId.data)
       .single();
     if (tErr) {
       console.error("fetchTestById failed:", tErr);
@@ -276,7 +321,7 @@ export async function fetchTestById(id: string) {
     const { data: questions, error: qErr } = await supabase
       .from("questions")
       .select("*")
-      .eq("test_id", id)
+      .eq("test_id", parsedId.data)
       .order("weight");
     if (qErr) {
       console.error("fetchTestById failed:", qErr);
@@ -286,7 +331,7 @@ export async function fetchTestById(id: string) {
     return { data: { test, questions: questions || [] } };
   } catch (err) {
     console.error("fetchTestById failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -307,7 +352,7 @@ export async function fetchQuestionBank() {
     return { data: data || [] };
   } catch (err) {
     console.error("fetchQuestionBank failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -327,10 +372,24 @@ export async function addToQuestionBank(question: {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsed = questionBankItemSchema.safeParse(question);
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { data, error } = await supabase
       .from("question_bank")
       .insert({
-        ...question,
+        type: parsed.data.type,
+        content: parsed.data.content,
+        options: parsed.data.options,
+        correct_answer: parsed.data.correct_answer,
+        positive_marks: parsed.data.positive_marks,
+        negative_marks: parsed.data.negative_marks,
+        difficulty: parsed.data.difficulty,
+        topic_tag: parsed.data.topic_tag,
+        image_url: parsed.data.image_url,
+        hint: parsed.data.hint,
         used_count: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -346,7 +405,7 @@ export async function addToQuestionBank(question: {
     return { data };
   } catch (err) {
     console.error("addToQuestionBank failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -369,10 +428,40 @@ export async function updateQuestionBankItem(
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsedId = questionBankIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const parsed = questionBankUpdateSchema.safeParse(updates);
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
+    const patch: Database["public"]["Tables"]["question_bank"]["Update"] = {
+      updated_at: new Date().toISOString(),
+    };
+    if (parsed.data.type !== undefined) patch.type = parsed.data.type;
+    if (parsed.data.content !== undefined) patch.content = parsed.data.content;
+    if (parsed.data.options !== undefined) patch.options = parsed.data.options;
+    if (parsed.data.correct_answer !== undefined) {
+      patch.correct_answer = parsed.data.correct_answer;
+    }
+    if (parsed.data.positive_marks !== undefined) {
+      patch.positive_marks = parsed.data.positive_marks;
+    }
+    if (parsed.data.negative_marks !== undefined) {
+      patch.negative_marks = parsed.data.negative_marks;
+    }
+    if (parsed.data.difficulty !== undefined) patch.difficulty = parsed.data.difficulty;
+    if (parsed.data.topic_tag !== undefined) patch.topic_tag = parsed.data.topic_tag;
+    if (parsed.data.image_url !== undefined) patch.image_url = parsed.data.image_url;
+    if (parsed.data.hint !== undefined) patch.hint = parsed.data.hint;
+
     const { data, error } = await supabase
       .from("question_bank")
-      .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq("id", id)
+      .update(patch)
+      .eq("id", parsedId.data)
       .select()
       .single();
 
@@ -384,7 +473,7 @@ export async function updateQuestionBankItem(
     return { data };
   } catch (err) {
     console.error("updateQuestionBankItem failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -392,7 +481,16 @@ export async function deleteQuestionBankItem(id: string) {
   try {
     await assertAdmin(["super_admin"]);
     const supabase = await createClient();
-    const { error } = await supabase.from("question_bank").delete().eq("id", id);
+
+    const parsedId = questionBankIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const { error } = await supabase
+      .from("question_bank")
+      .delete()
+      .eq("id", parsedId.data);
     if (error) {
       console.error("deleteQuestionBankItem failed:", error);
       return { error: "Something went wrong. Please try again." };
@@ -401,7 +499,7 @@ export async function deleteQuestionBankItem(id: string) {
     return { data: true };
   } catch (err) {
     console.error("deleteQuestionBankItem failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -420,6 +518,6 @@ export async function fetchCourses() {
     return { data: data || [] };
   } catch (err) {
     console.error("fetchCourses failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }

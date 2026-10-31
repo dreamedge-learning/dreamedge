@@ -1,6 +1,7 @@
 class Test {
   final String id;
-  final String courseId;
+  /// Nullable live: `tests.course_id` is `on delete set null`.
+  final String? courseId;
   final String? topicId;
   final String name;
   final String? description;
@@ -20,7 +21,7 @@ class Test {
 
   const Test({
     required this.id,
-    required this.courseId,
+    this.courseId,
     this.topicId,
     required this.name,
     this.description,
@@ -57,7 +58,7 @@ class Test {
   factory Test.fromJson(Map<String, dynamic> json) {
     return Test(
       id: json['id'] as String,
-      courseId: json['course_id'] as String,
+      courseId: json['course_id'] as String?,
       topicId: json['topic_id'] as String?,
       name: json['name'] as String? ?? '',
       description: json['description'] as String?,

@@ -64,7 +64,7 @@ class CourseOrder {
       remarks: json['remarks'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
-      courseName: courseData?['name'] as String?,
+      courseName: courseData?['title'] as String?,
       courseThumbnailUrl: courseData?['thumbnail_url'] as String?,
     );
   }

@@ -4,6 +4,16 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/lib/auth-guard";
 import type { Database } from "@/types/supabase";
+import { describeFailure, firstIssue, uuid } from "@/lib/validations/form";
+import {
+  contentItemCreateSchema,
+  contentItemUpdateSchema,
+  reorderSchema,
+  subjectCreateSchema,
+  subjectUpdateSchema,
+  topicCreateSchema,
+  topicUpdateSchema,
+} from "@/lib/validations/content";
 
 function toSlug(text: string): string {
   return text
@@ -14,8 +24,6 @@ function toSlug(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-const ALLOWED_REORDER_TABLES = ["subjects", "topics", "content_items"] as const;
-type ReorderTable = (typeof ALLOWED_REORDER_TABLES)[number];
 
 // ─── Subject ───
 
@@ -24,17 +32,22 @@ export async function createSubject(courseId: string, name: string) {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsed = subjectCreateSchema.safeParse({ course_id: courseId, name });
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { count } = await supabase
       .from("subjects")
       .select("id", { count: "exact", head: true })
-      .eq("course_id", courseId);
+      .eq("course_id", parsed.data.course_id);
 
     const { data, error } = await supabase
       .from("subjects")
       .insert({
-        course_id: courseId,
-        name,
-        slug: toSlug(name),
+        course_id: parsed.data.course_id,
+        name: parsed.data.name,
+        slug: toSlug(parsed.data.name),
         weight: (count ?? 0) + 1,
         color_code: "#6366f1",
         is_visible: true,
@@ -50,7 +63,7 @@ export async function createSubject(courseId: string, name: string) {
     return { data };
   } catch (err) {
     console.error("createSubject failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -62,13 +75,28 @@ export async function updateSubject(
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
-    const update = { ...fields } as Record<string, unknown>;
-    if (fields.name) update.slug = toSlug(fields.name);
+    const parsedId = uuid("Subject").safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const parsed = subjectUpdateSchema.safeParse(fields);
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
+    const update: Database["public"]["Tables"]["subjects"]["Update"] = {};
+    if (parsed.data.name !== undefined) {
+      update.name = parsed.data.name;
+      update.slug = toSlug(parsed.data.name);
+    }
+    if (parsed.data.color_code !== undefined) update.color_code = parsed.data.color_code;
+    if (parsed.data.is_visible !== undefined) update.is_visible = parsed.data.is_visible;
 
     const { data, error } = await supabase
       .from("subjects")
-      .update(update as Database["public"]["Tables"]["subjects"]["Update"])
-      .eq("id", id)
+      .update(update)
+      .eq("id", parsedId.data)
       .select()
       .single();
 
@@ -80,7 +108,7 @@ export async function updateSubject(
     return { data };
   } catch (err) {
     console.error("updateSubject failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -89,16 +117,21 @@ export async function deleteSubject(id: string) {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsedId = uuid("Subject").safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { count } = await supabase
       .from("topics")
       .select("id", { count: "exact", head: true })
-      .eq("subject_id", id);
+      .eq("subject_id", parsedId.data);
 
     if (count && count > 0) {
       return { error: `Cannot delete: ${count} topic${count > 1 ? "s" : ""} exist under this subject` };
     }
 
-    const { error } = await supabase.from("subjects").delete().eq("id", id);
+    const { error } = await supabase.from("subjects").delete().eq("id", parsedId.data);
     if (error) {
       console.error("deleteSubject failed:", error);
       return { error: "Something went wrong. Please try again." };
@@ -107,7 +140,7 @@ export async function deleteSubject(id: string) {
     return { success: true };
   } catch (err) {
     console.error("deleteSubject failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -118,17 +151,22 @@ export async function createTopic(subjectId: string, name: string) {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsed = topicCreateSchema.safeParse({ subject_id: subjectId, name });
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { count } = await supabase
       .from("topics")
       .select("id", { count: "exact", head: true })
-      .eq("subject_id", subjectId);
+      .eq("subject_id", parsed.data.subject_id);
 
     const { data, error } = await supabase
       .from("topics")
       .insert({
-        subject_id: subjectId,
-        name,
-        slug: toSlug(name),
+        subject_id: parsed.data.subject_id,
+        name: parsed.data.name,
+        slug: toSlug(parsed.data.name),
         weight: (count ?? 0) + 1,
         is_visible: true,
       })
@@ -143,7 +181,7 @@ export async function createTopic(subjectId: string, name: string) {
     return { data };
   } catch (err) {
     console.error("createTopic failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -155,13 +193,28 @@ export async function updateTopic(
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
-    const update = { ...fields } as Record<string, unknown>;
-    if (fields.name) update.slug = toSlug(fields.name);
+    const parsedId = uuid("Topic").safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const parsed = topicUpdateSchema.safeParse(fields);
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
+    const update: Database["public"]["Tables"]["topics"]["Update"] = {};
+    if (parsed.data.name !== undefined) {
+      update.name = parsed.data.name;
+      update.slug = toSlug(parsed.data.name);
+    }
+    if (parsed.data.description !== undefined) update.description = parsed.data.description;
+    if (parsed.data.is_visible !== undefined) update.is_visible = parsed.data.is_visible;
 
     const { data, error } = await supabase
       .from("topics")
-      .update(update as Database["public"]["Tables"]["topics"]["Update"])
-      .eq("id", id)
+      .update(update)
+      .eq("id", parsedId.data)
       .select()
       .single();
 
@@ -173,7 +226,7 @@ export async function updateTopic(
     return { data };
   } catch (err) {
     console.error("updateTopic failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -182,16 +235,21 @@ export async function deleteTopic(id: string) {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsedId = uuid("Topic").safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { count } = await supabase
       .from("content_items")
       .select("id", { count: "exact", head: true })
-      .eq("topic_id", id);
+      .eq("topic_id", parsedId.data);
 
     if (count && count > 0) {
       return { error: `Cannot delete: ${count} content item${count > 1 ? "s" : ""} exist under this topic` };
     }
 
-    const { error } = await supabase.from("topics").delete().eq("id", id);
+    const { error } = await supabase.from("topics").delete().eq("id", parsedId.data);
     if (error) {
       console.error("deleteTopic failed:", error);
       return { error: "Something went wrong. Please try again." };
@@ -200,7 +258,7 @@ export async function deleteTopic(id: string) {
     return { success: true };
   } catch (err) {
     console.error("deleteTopic failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -215,17 +273,26 @@ export async function createContentItem(
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsed = contentItemCreateSchema.safeParse({
+      topic_id: topicId,
+      title,
+      type,
+    });
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { count } = await supabase
       .from("content_items")
       .select("id", { count: "exact", head: true })
-      .eq("topic_id", topicId);
+      .eq("topic_id", parsed.data.topic_id);
 
     const { data, error } = await supabase
       .from("content_items")
       .insert({
-        topic_id: topicId,
-        title,
-        type,
+        topic_id: parsed.data.topic_id,
+        title: parsed.data.title,
+        type: parsed.data.type,
         weight: (count ?? 0) + 1,
         is_paid: true,
         is_downloadable: false,
@@ -243,7 +310,7 @@ export async function createContentItem(
     return { data };
   } catch (err) {
     console.error("createContentItem failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -255,10 +322,38 @@ export async function updateContentItem(
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
+    const parsedId = uuid("Content item").safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const parsed = contentItemUpdateSchema.safeParse(fields);
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
+    const update: Database["public"]["Tables"]["content_items"]["Update"] = {};
+    if (parsed.data.title !== undefined) update.title = parsed.data.title;
+    if (parsed.data.type !== undefined) update.type = parsed.data.type;
+    if (parsed.data.status !== undefined) update.status = parsed.data.status;
+    if (parsed.data.description !== undefined) update.description = parsed.data.description;
+    if (parsed.data.file_url !== undefined) update.file_url = parsed.data.file_url;
+    if (parsed.data.video_id !== undefined) update.video_id = parsed.data.video_id;
+    if (parsed.data.is_paid !== undefined) update.is_paid = parsed.data.is_paid;
+    if (parsed.data.is_downloadable !== undefined) {
+      update.is_downloadable = parsed.data.is_downloadable;
+    }
+    if (parsed.data.is_printable !== undefined) update.is_printable = parsed.data.is_printable;
+    if (parsed.data.play_limit !== undefined) update.play_limit = parsed.data.play_limit;
+    if (parsed.data.duration_seconds !== undefined) {
+      update.duration_seconds = parsed.data.duration_seconds;
+    }
+    if (parsed.data.weight !== undefined) update.weight = parsed.data.weight;
+
     const { data, error } = await supabase
       .from("content_items")
-      .update(fields as Database["public"]["Tables"]["content_items"]["Update"])
-      .eq("id", id)
+      .update(update)
+      .eq("id", parsedId.data)
       .select()
       .single();
 
@@ -270,7 +365,7 @@ export async function updateContentItem(
     return { data };
   } catch (err) {
     console.error("updateContentItem failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -278,7 +373,16 @@ export async function deleteContentItem(id: string) {
   try {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
-    const { error } = await supabase.from("content_items").delete().eq("id", id);
+
+    const parsedId = uuid("Content item").safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const { error } = await supabase
+      .from("content_items")
+      .delete()
+      .eq("id", parsedId.data);
     if (error) {
       console.error("deleteContentItem failed:", error);
       return { error: "Something went wrong. Please try again." };
@@ -287,7 +391,7 @@ export async function deleteContentItem(id: string) {
     return { success: true };
   } catch (err) {
     console.error("deleteContentItem failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -300,14 +404,15 @@ export async function reorderItems(
   try {
     await assertAdmin(["super_admin", "content_creator"]);
 
-    if (!ALLOWED_REORDER_TABLES.includes(table as ReorderTable)) {
-      return { error: "Invalid table" };
+    const parsed = reorderSchema.safeParse({ table, orderedIds });
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
     }
 
     const supabase = await createClient();
-    const safeTable = table as ReorderTable;
+    const safeTable = parsed.data.table;
 
-    const updates = orderedIds.map((id, index) =>
+    const updates = parsed.data.orderedIds.map((id, index) =>
       supabase.from(safeTable).update({ weight: index + 1 }).eq("id", id)
     );
 
@@ -321,7 +426,7 @@ export async function reorderItems(
     return { success: true };
   } catch (err) {
     console.error("reorderItems failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -335,12 +440,19 @@ export async function uploadContentFile(
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
-    const file = formData.get("file") as File;
-    if (!file || file.size === 0) return { error: "No file provided" };
+    const parsedId = uuid("Content item").safeParse(contentId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0) {
+      return { error: "No file provided" };
+    }
     if (file.size > 50 * 1024 * 1024) return { error: "File must be under 50MB" };
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-    const path = `content/${contentId}/file.${ext}`;
+    const path = `content/${parsedId.data}/file.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from("content-files")
@@ -358,7 +470,7 @@ export async function uploadContentFile(
     const { error: updateError } = await supabase
       .from("content_items")
       .update({ file_url: urlData.publicUrl })
-      .eq("id", contentId);
+      .eq("id", parsedId.data);
 
     if (updateError) {
       console.error("uploadContentFile failed:", updateError);
@@ -369,7 +481,7 @@ export async function uploadContentFile(
     return { success: true, url: urlData.publicUrl };
   } catch (err) {
     console.error("uploadContentFile failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }
 
@@ -380,10 +492,15 @@ export async function fetchCourseTree(courseId: string) {
     await assertAdmin(["super_admin", "content_creator", "teacher"]);
     const supabase = await createClient();
 
+    const parsedId = uuid("Course").safeParse(courseId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { data: subjects, error: sErr } = await supabase
       .from("subjects")
       .select("*")
-      .eq("course_id", courseId)
+      .eq("course_id", parsedId.data)
       .order("weight");
 
     if (sErr) {
@@ -464,6 +581,6 @@ export async function fetchCourseTree(courseId: string) {
     return { data: tree };
   } catch (err) {
     console.error("fetchCourseTree failed:", err);
-    return { error: "You don't have permission to perform this action." };
+    return { error: describeFailure(err) };
   }
 }

@@ -83,7 +83,7 @@ class PaymentService {
 
     final response = await _supabase
         .from('orders')
-        .select('*, courses(name, thumbnail_url)')
+        .select('*, courses(title, thumbnail_url)')
         .eq('student_id', studentId)
         .order('created_at', ascending: false);
 

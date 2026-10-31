@@ -100,15 +100,15 @@ class LeaderboardService {
 
     // Fetch student profiles for names/avatars.
     final studentIds = best.keys.toList();
+    // `test_attempts.student_id` holds `students.id`, not the auth user id.
     final studentsData = await _client
         .from('students')
-        .select('user_id, full_name, avatar_url')
-        .inFilter('user_id', studentIds);
+        .select('id, full_name, avatar_url')
+        .inFilter('id', studentIds);
     final profiles = <String, Map<String, dynamic>>{};
     for (final row in studentsData as List) {
-      final r = row as Map;
-      profiles[r['user_id'] as String] =
-          Map<String, dynamic>.from(r as Map);
+      final r = Map<String, dynamic>.from(row as Map);
+      profiles[r['id'] as String] = r;
     }
 
     final entries = <LeaderboardEntry>[];

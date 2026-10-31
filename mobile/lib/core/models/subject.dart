@@ -1,34 +1,43 @@
+/// Maps the live `subjects` table:
+/// id, course_id, name, slug, color_code, weight, is_visible, created_at.
 class Subject {
   final String id;
   final String courseId;
   final String name;
-  final String? description;
-  final String? iconUrl;
-  final int sortOrder;
+  final String slug;
+  final String? colorCode;
+  final int weight;
+  final bool isVisible;
+  final DateTime? createdAt;
+
+  /// Count of child topics, when the query asked for `topics(count)`.
   final int topicCount;
-  final DateTime createdAt;
 
   const Subject({
     required this.id,
     required this.courseId,
     required this.name,
-    this.description,
-    this.iconUrl,
-    required this.sortOrder,
+    required this.slug,
+    this.colorCode,
+    required this.weight,
+    required this.isVisible,
+    this.createdAt,
     required this.topicCount,
-    required this.createdAt,
   });
 
   factory Subject.fromJson(Map<String, dynamic> json) {
     return Subject(
       id: json['id'] as String,
       courseId: json['course_id'] as String,
-      name: json['name'] as String,
-      description: json['description'] as String?,
-      iconUrl: json['icon_url'] as String?,
-      sortOrder: (json['sort_order'] as num?)?.toInt() ?? 0,
-      topicCount: (json['topic_count'] as num?)?.toInt() ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      name: json['name'] as String? ?? '',
+      slug: json['slug'] as String? ?? '',
+      colorCode: json['color_code'] as String?,
+      weight: (json['weight'] as num?)?.toInt() ?? 0,
+      isVisible: json['is_visible'] as bool? ?? true,
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
+      topicCount: _embeddedCount(json['topics']),
     );
   }
 
@@ -37,11 +46,24 @@ class Subject {
       'id': id,
       'course_id': courseId,
       'name': name,
-      'description': description,
-      'icon_url': iconUrl,
-      'sort_order': sortOrder,
-      'topic_count': topicCount,
-      'created_at': createdAt.toIso8601String(),
+      'slug': slug,
+      'color_code': colorCode,
+      'weight': weight,
+      'is_visible': isVisible,
+      'created_at': createdAt?.toIso8601String(),
     };
   }
+}
+
+/// PostgREST returns an embedded aggregate as `[{"count": n}]`.
+int embeddedCount(Object? raw) => _embeddedCount(raw);
+
+int _embeddedCount(Object? raw) {
+  if (raw is num) return raw.toInt();
+  if (raw is Map) return (raw['count'] as num?)?.toInt() ?? 0;
+  if (raw is List && raw.isNotEmpty) {
+    final first = raw.first;
+    if (first is Map) return (first['count'] as num?)?.toInt() ?? 0;
+  }
+  return 0;
 }

@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+/// One inbox entry for the signed-in student.
+///
+/// `notifications` is an admin broadcast table with no per-user column; the
+/// per-student row lives in `student_notifications`. This model is built from
+/// a `student_notifications` row with the broadcast embedded, so it carries
+/// both ids: [id] for the broadcast and [studentNotificationId] for the
+/// read-state row this student may update.
 class AppNotification {
   final String id;
+  final String studentNotificationId;
   final String title;
   final String body;
   final String? imageUrl;
@@ -13,6 +21,7 @@ class AppNotification {
 
   const AppNotification({
     required this.id,
+    required this.studentNotificationId,
     required this.title,
     required this.body,
     this.imageUrl,
@@ -22,32 +31,46 @@ class AppNotification {
     required this.createdAt,
   });
 
-  factory AppNotification.fromJson(Map<String, dynamic> json) {
+  /// Builds from a `student_notifications` row with `notifications(...)`
+  /// embedded. Returns null when the broadcast payload is not readable.
+  static AppNotification? fromStudentRow(Map<String, dynamic> row) {
+    final raw = row['notifications'];
+    Map<String, dynamic>? broadcast;
+    if (raw is Map) {
+      broadcast = Map<String, dynamic>.from(raw);
+    } else if (raw is List && raw.isNotEmpty && raw.first is Map) {
+      broadcast = Map<String, dynamic>.from(raw.first as Map);
+    }
+    if (broadcast == null) return null;
+
+    final sentAt = broadcast['sent_at'] as String? ??
+        row['created_at'] as String?;
+
     return AppNotification(
-      id: json['id'] as String,
-      title: json['title'] as String? ?? '',
-      body: json['body'] as String? ?? '',
-      imageUrl: json['image_url'] as String?,
-      route: json['route'] as String?,
-      type: json['type'] as String? ?? 'promo',
-      isRead: json['is_read'] as bool? ?? false,
-      createdAt: DateTime.parse(
-        json['created_at'] as String? ?? DateTime.now().toIso8601String(),
-      ),
+      id: broadcast['id'] as String? ?? row['notification_id'] as String? ?? '',
+      studentNotificationId: row['id'] as String,
+      title: broadcast['title'] as String? ?? '',
+      body: broadcast['message'] as String? ?? '',
+      imageUrl: broadcast['thumbnail_url'] as String?,
+      route: broadcast['action_url'] as String?,
+      type: _typeFor(broadcast),
+      isRead: row['is_read'] as bool? ?? false,
+      createdAt: sentAt != null
+          ? (DateTime.tryParse(sentAt) ?? DateTime.now())
+          : DateTime.now(),
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'title': title,
-      'body': body,
-      'image_url': imageUrl,
-      'route': route,
-      'type': type,
-      'is_read': isRead,
-      'created_at': createdAt.toIso8601String(),
-    };
+  /// `notifications` carries no `type` column; the kind is inferred from what
+  /// the broadcast points at.
+  static String _typeFor(Map<String, dynamic> broadcast) {
+    final explicit = broadcast['type'] as String?;
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+
+    final action = (broadcast['action_url'] as String?) ?? '';
+    if (action.startsWith('/live')) return 'live_class';
+    if (broadcast['course_id'] != null) return 'course_update';
+    return 'promo';
   }
 
   IconData get typeIcon {

@@ -6,8 +6,10 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/course.dart';
 import '../../core/models/subject.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/content_provider.dart';
 import '../../core/providers/course_provider.dart';
 import '../../core/providers/enrollment_provider.dart';
+import '../../core/services/enrollment_service.dart';
 import '../../core/utils/extensions.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
@@ -303,22 +305,23 @@ class _EnrollButton extends ConsumerStatefulWidget {
 }
 
 class _EnrollButtonState extends ConsumerState<_EnrollButton> {
-  bool _enrolling = false;
+  bool _working = false;
 
+  /// Free enrolment is server-side; this surfaces the real reason when the
+  /// endpoint is missing instead of failing silently.
   Future<void> _enroll() async {
-    final studentId = ref.read(currentStudentIdProvider);
-    if (studentId == null) return;
-
-    setState(() => _enrolling = true);
+    setState(() => _working = true);
 
     try {
-      await ref
-          .read(enrollmentServiceProvider)
-          .enrollInCourse(studentId, widget.courseId);
+      await ref.read(enrollmentServiceProvider).enrollInCourse(widget.courseId);
       ref.invalidate(myEnrollmentsProvider);
       ref.invalidate(courseEnrollmentProvider(widget.courseId));
       if (mounted) {
         context.showSnackBar('Successfully enrolled!');
+      }
+    } on MissingBackendEndpointException catch (e) {
+      if (mounted) {
+        context.showSnackBar(e.message, isError: true);
       }
     } catch (e) {
       if (mounted) {
@@ -328,8 +331,61 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
         );
       }
     } finally {
-      if (mounted) setState(() => _enrolling = false);
+      if (mounted) setState(() => _working = false);
     }
+  }
+
+  /// Opens the first playable lesson of the course, falling back to the
+  /// lesson list for the first topic that has content.
+  Future<void> _continueLearning() async {
+    setState(() => _working = true);
+
+    try {
+      final courseService = ref.read(courseServiceProvider);
+      final contentService = ref.read(contentServiceProvider);
+
+      final subjects = await courseService.getSubjects(widget.courseId);
+      for (final subject in subjects) {
+        final topics = await courseService.getTopics(subject.id);
+        for (final topic in topics) {
+          final contents = await contentService.getContentsByTopic(topic.id);
+          if (contents.isEmpty) continue;
+          if (!mounted) return;
+
+          final playable = contents.where((c) => c.hasVideo).toList();
+          if (playable.isNotEmpty) {
+            context.push('/player/${playable.first.id}');
+          } else {
+            context.push('/lessons/${topic.id}', extra: topic.name);
+          }
+          return;
+        }
+      }
+
+      if (mounted) {
+        context.showSnackBar('No lessons have been published yet.');
+      }
+    } catch (e) {
+      if (mounted) {
+        context.showSnackBar(
+          'Could not open this course. Please try again.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _working = false);
+    }
+  }
+
+  Widget _spinner() {
+    return const SizedBox(
+      height: 20,
+      width: 20,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
+      ),
+    );
   }
 
   @override
@@ -353,11 +409,11 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
           return SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () => context.pop(),
+              onPressed: _working ? null : _continueLearning,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
               ),
-              child: const Text('Continue Learning'),
+              child: _working ? _spinner() : const Text('Continue Learning'),
             ),
           );
         }
@@ -377,18 +433,9 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
         return SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _enrolling ? null : _enroll,
-            child: _enrolling
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(AppColors.white),
-                    ),
-                  )
-                : const Text('Enroll Now — Free'),
+            onPressed: _working ? null : _enroll,
+            child:
+                _working ? _spinner() : const Text('Enroll Now — Free'),
           ),
         );
       },
@@ -396,14 +443,7 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
         width: double.infinity,
         child: ElevatedButton(
           onPressed: null,
-          child: const SizedBox(
-            height: 20,
-            width: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(AppColors.white),
-            ),
-          ),
+          child: _spinner(),
         ),
       ),
       error: (_, _) => SizedBox(
@@ -413,7 +453,7 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
               ? () {
                   context.push('/checkout/${widget.courseId}');
                 }
-              : (_enrolling ? null : _enroll),
+              : (_working ? null : _enroll),
           child: widget.price > 0
               ? Text('Buy Now — ₹${widget.price.toInt()}')
               : const Text('Enroll Now — Free'),

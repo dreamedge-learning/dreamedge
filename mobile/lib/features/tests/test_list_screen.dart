@@ -220,7 +220,11 @@ class _UpcomingTestCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final remaining = test.maxAttempts - attemptsUsed;
-    final courseAsync = ref.watch(courseDetailProvider(test.courseId));
+    // `tests.course_id` is nullable, so there may be no course to name.
+    final courseId = test.courseId;
+    final courseAsync = courseId == null
+        ? null
+        : ref.watch(courseDetailProvider(courseId));
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
@@ -254,15 +258,16 @@ class _UpcomingTestCard extends ConsumerWidget {
                           style: AppTypography.bodyLarge.copyWith(
                               fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
-                      courseAsync.when(
-                        data: (c) => Text(c.title,
-                            style: AppTypography.bodySmall),
-                        loading: () => const SizedBox(
-                            height: 14,
-                            width: 80,
-                            child: ShimmerBox(width: 80, height: 10)),
-                        error: (_, __) => const SizedBox.shrink(),
-                      ),
+                      if (courseAsync != null)
+                        courseAsync.when(
+                          data: (c) => Text(c.title,
+                              style: AppTypography.bodySmall),
+                          loading: () => const SizedBox(
+                              height: 14,
+                              width: 80,
+                              child: ShimmerBox(width: 80, height: 10)),
+                          error: (_, __) => const SizedBox.shrink(),
+                        ),
                     ],
                   ),
                 ),

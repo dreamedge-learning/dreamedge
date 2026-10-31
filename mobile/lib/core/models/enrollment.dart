@@ -4,22 +4,23 @@ class Enrollment {
   final String id;
   final String studentId;
   final String courseId;
-  final DateTime purchasedAt;
+  /// Nullable: not every enrolment row carries a purchase timestamp.
+  final DateTime? purchasedAt;
   final DateTime? validUntil;
   final String? paymentId;
   final String status;
-  final DateTime createdAt;
+  final DateTime? createdAt;
   final Course? course;
 
   Enrollment({
     required this.id,
     required this.studentId,
     required this.courseId,
-    required this.purchasedAt,
+    this.purchasedAt,
     this.validUntil,
     this.paymentId,
     required this.status,
-    required this.createdAt,
+    this.createdAt,
     this.course,
   });
 
@@ -37,13 +38,17 @@ class Enrollment {
       id: json['id'] as String,
       studentId: json['student_id'] as String,
       courseId: json['course_id'] as String,
-      purchasedAt: DateTime.parse(json['purchased_at'] as String),
+      purchasedAt: json['purchased_at'] != null
+          ? DateTime.tryParse(json['purchased_at'] as String)
+          : null,
       validUntil: json['valid_until'] != null
           ? DateTime.parse(json['valid_until'] as String)
           : null,
       paymentId: json['payment_id'] as String?,
       status: json['status'] as String? ?? 'active',
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at'] as String)
+          : null,
       course: course,
     );
   }
@@ -53,7 +58,7 @@ class Enrollment {
       'id': id,
       'student_id': studentId,
       'course_id': courseId,
-      'purchased_at': purchasedAt.toIso8601String(),
+      'purchased_at': purchasedAt?.toIso8601String(),
       'valid_until': validUntil?.toIso8601String(),
       'payment_id': paymentId,
       'status': status,

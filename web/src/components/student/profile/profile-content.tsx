@@ -12,7 +12,6 @@ import {
   Copy,
   Check,
   Calendar,
-  Clock,
   Shield,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -20,28 +19,19 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/student/auth/password-input";
 import { INDIAN_STATES } from "@/lib/constants/indian-states";
+import type { Database } from "@/types/supabase";
 import {
   updateProfile,
   updateAvatar,
   changePassword,
 } from "@/app/(student)/dashboard/profile/actions";
 
-interface Student {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  class: string | null;
-  school_name: string | null;
-  city: string | null;
-  state: string | null;
-  avatar_url: string | null;
-  referral_code: string | null;
-  free_trial_expires_at: string | null;
-  created_at: string | null;
-  is_active: boolean | null;
-  [key: string]: unknown;
-}
+/**
+ * Exactly the live `students` row — no hand-written shape to drift from the
+ * schema. The table has no school_name / free_trial_expires_at / is_active
+ * column; account state lives in the `status` enum.
+ */
+type Student = Database["public"]["Tables"]["students"]["Row"];
 
 function getInitials(fullName: string): string {
   const parts = fullName.trim().split(/\s+/);
@@ -164,9 +154,13 @@ export function ProfileContent({ student }: { student: Student }) {
     });
   }
 
-  const trialExpired = student.free_trial_expires_at
-    ? new Date(student.free_trial_expires_at) < new Date()
-    : false;
+  const isActive = student.status === "active";
+  const statusLabel =
+    student.status === "active"
+      ? "Active"
+      : student.status === "blocked"
+        ? "Blocked"
+        : "Inactive";
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
@@ -278,7 +272,7 @@ export function ProfileContent({ student }: { student: Student }) {
                 <div className="relative">
                   <Input
                     id="email"
-                    value={student.email}
+                    value={student.email ?? ""}
                     disabled
                     className="pr-8 opacity-60"
                   />
@@ -317,22 +311,11 @@ export function ProfileContent({ student }: { student: Student }) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="school_name">School Name</Label>
-                <Input
-                  id="school_name"
-                  name="school_name"
-                  defaultValue={(student.school_name as string) ?? ""}
-                  placeholder="Your school name"
-                  disabled={savePending}
-                />
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="city">City</Label>
                 <Input
                   id="city"
                   name="city"
-                  defaultValue={(student.city as string) ?? ""}
+                  defaultValue={student.city ?? ""}
                   placeholder="Your city"
                   disabled={savePending}
                 />
@@ -343,7 +326,7 @@ export function ProfileContent({ student }: { student: Student }) {
                 <select
                   id="state"
                   name="state"
-                  defaultValue={(student.state as string) ?? ""}
+                  defaultValue={student.state ?? ""}
                   disabled={savePending}
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
                 >
@@ -385,15 +368,11 @@ export function ProfileContent({ student }: { student: Student }) {
         ) : (
           <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
             <InfoRow label="Full Name" value={student.full_name} />
-            <InfoRow label="Email" value={student.email} badge="Verified" />
+            <InfoRow label="Email" value={student.email ?? "—"} badge="Verified" />
             <InfoRow label="Phone" value={student.phone ?? "—"} />
             <InfoRow label="Class" value={student.class ?? "—"} />
-            <InfoRow
-              label="School Name"
-              value={(student.school_name as string) ?? "—"}
-            />
-            <InfoRow label="City" value={(student.city as string) ?? "—"} />
-            <InfoRow label="State" value={(student.state as string) ?? "—"} />
+            <InfoRow label="City" value={student.city ?? "—"} />
+            <InfoRow label="State" value={student.state ?? "—"} />
           </div>
         )}
       </div>
@@ -507,29 +486,17 @@ export function ProfileContent({ student }: { student: Student }) {
             </div>
           )}
 
-          {student.free_trial_expires_at && (
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Free Trial</span>
-              <span className="font-medium text-foreground">
-                {trialExpired
-                  ? "Expired"
-                  : `Expires ${formatDate(student.free_trial_expires_at!)}`}
-              </span>
-            </div>
-          )}
-
           <div className="flex items-center gap-2 text-sm">
             <Shield className="h-4 w-4 text-muted-foreground" />
             <span className="text-muted-foreground">Account Status</span>
             <span
               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                student.status === "inactive"
-                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                  : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                isActive
+                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                  : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
               }`}
             >
-              {student.status === "inactive" ? "Inactive" : "Active"}
+              {statusLabel}
             </span>
           </div>
         </div>

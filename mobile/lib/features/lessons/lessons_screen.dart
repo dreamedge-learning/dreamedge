@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models/content.dart';
 import '../../core/providers/content_provider.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
@@ -114,24 +115,22 @@ class LessonsScreen extends ConsumerWidget {
     );
   }
 
-  void _onLessonTap(BuildContext context, content) {
-    if (content.isVideo && content.hasVideo) {
+  void _onLessonTap(BuildContext context, Content content) {
+    if (content.hasVideo) {
       context.push('/player/${content.id}');
-    } else if (!content.hasVideo) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Video coming soon'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } else if (!content.isVideo) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This content type is not supported yet'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      return;
     }
+
+    final message = content.isVideo
+        ? 'This video is not ready to stream yet'
+        : '${content.type.label} is not supported in the app yet';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Widget _buildShimmer() {

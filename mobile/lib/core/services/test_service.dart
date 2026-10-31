@@ -4,6 +4,36 @@ import '../models/test.dart';
 import '../models/test_attempt.dart';
 import '../models/test_question.dart';
 
+/// Server-graded result of `submit_test_attempt`.
+class TestSubmissionResult {
+  final String attemptId;
+  final int attemptNumber;
+  final double score;
+  final double totalMarks;
+  final double percentage;
+  final bool passed;
+
+  const TestSubmissionResult({
+    required this.attemptId,
+    required this.attemptNumber,
+    required this.score,
+    required this.totalMarks,
+    required this.percentage,
+    required this.passed,
+  });
+
+  factory TestSubmissionResult.fromRpc(Map<String, dynamic> json) {
+    return TestSubmissionResult(
+      attemptId: json['attempt_id']?.toString() ?? '',
+      attemptNumber: (json['attempt_number'] as num?)?.toInt() ?? 1,
+      score: (json['score'] as num?)?.toDouble() ?? 0,
+      totalMarks: (json['total_marks'] as num?)?.toDouble() ?? 0,
+      percentage: (json['percentage'] as num?)?.toDouble() ?? 0,
+      passed: json['passed'] as bool? ?? false,
+    );
+  }
+}
+
 class TestService {
   final SupabaseClient _client;
 
@@ -48,21 +78,32 @@ class TestService {
   }
 
   Future<Test> getTestById(String id) async {
-    final data =
-        await _client.from('tests').select().eq('id', id).single();
+    final data = await _client.from('tests').select().eq('id', id).single();
     return Test.fromJson(data);
   }
 
+  /// Questions for a test, with the answer key stripped server-side.
+  ///
+  /// Students have no read access to `questions` — that table holds the answer
+  /// key — so this goes through `get_test_questions(p_test_id)`.
   Future<List<TestQuestion>> getQuestionsForTest(String testId) async {
-    final data = await _client
-        .from('questions')
-        .select()
-        .eq('test_id', testId)
-        .order('sort_order', ascending: true);
+    final data = await _client.rpc(
+      'get_test_questions',
+      params: {'p_test_id': testId},
+    );
 
-    return (data as List)
-        .map((row) => TestQuestion.fromJson(row as Map<String, dynamic>))
+    if (data is! List) return [];
+
+    final questions = data
+        .whereType<Map>()
+        .map((row) => TestQuestion.fromRpc(
+              Map<String, dynamic>.from(row),
+              testId: testId,
+            ))
         .toList();
+
+    questions.sort((a, b) => a.weight.compareTo(b.weight));
+    return questions;
   }
 
   Future<List<TestAttempt>> getAttemptsForStudent(String studentId) async {
@@ -102,157 +143,42 @@ class TestService {
     return TestAttempt.fromJson(data);
   }
 
-  Future<TestAttempt> submitAttempt({
-    required String studentId,
-    required Test test,
-    required List<TestQuestion> questions,
+  /// Submits answers for server-side grading.
+  ///
+  /// The device never computes a score and never inserts into
+  /// `test_attempts` — `submit_test_attempt` grades, records the attempt and
+  /// enforces the attempt limit.
+  ///
+  /// `answers` is keyed by question id. The value is an option id for
+  /// mcq_single, a list of option ids for mcq_multiple, 'true'/'false' for
+  /// true_false, free text for short_answer/subjective, or a list of
+  /// `{'left': ..., 'right': ...}` maps for match_pair.
+  Future<TestSubmissionResult> submitAttempt({
+    required String testId,
     required Map<String, dynamic> answers,
-    required int timeTakenSeconds,
+    required DateTime startedAt,
   }) async {
-    // Compute auto-score client-side.
-    double score = 0;
-    double totalMarks = 0;
-    for (final q in questions) {
-      totalMarks += q.positiveMarks;
-      final answer = answers[q.id];
-      if (answer == null) continue;
-      final verdict = _evaluate(q, answer);
-      if (verdict == _Verdict.correct) {
-        score += q.positiveMarks;
-      } else if (verdict == _Verdict.wrong) {
-        score -= q.negativeMarks;
-      }
+    final data = await _client.rpc(
+      'submit_test_attempt',
+      params: {
+        'p_test_id': testId,
+        'p_answers': answers,
+        'p_started_at': startedAt.toUtc().toIso8601String(),
+      },
+    );
+
+    if (data is! Map) {
+      throw Exception('Could not submit the test. Please try again.');
     }
-    if (score < 0) score = 0;
 
-    final double effectiveTotal =
-        test.totalMarks > 0 ? test.totalMarks : totalMarks;
-    final double percentage =
-        effectiveTotal > 0 ? (score / effectiveTotal) * 100 : 0;
-
-    // Determine next attempt number.
-    final existing = await _client
-        .from('test_attempts')
-        .select('attempt_number')
-        .eq('student_id', studentId)
-        .eq('test_id', test.id);
-    final attemptNumber = ((existing as List).length) + 1;
-
-    final insert = {
-      'student_id': studentId,
-      'test_id': test.id,
-      'answers': answers,
-      'score': score,
-      'total_marks': effectiveTotal,
-      'percentage': double.parse(percentage.toStringAsFixed(2)),
-      'time_taken_seconds': timeTakenSeconds,
-      'attempt_number': attemptNumber,
-      'submitted_at': DateTime.now().toUtc().toIso8601String(),
-    };
-
-    final data = await _client
-        .from('test_attempts')
-        .insert(insert)
-        .select()
-        .single();
-
-    return TestAttempt.fromJson(data);
-  }
-
-  _Verdict _evaluate(TestQuestion q, dynamic answer) {
-    switch (q.type) {
-      case QuestionType.mcqSingle:
-        if (!q.hasAutoCorrectAnswer) return _Verdict.unscored;
-        final chosen = answer?.toString();
-        if (chosen == null || chosen.isEmpty) return _Verdict.blank;
-        return q.correctOptionIds.contains(chosen)
-            ? _Verdict.correct
-            : _Verdict.wrong;
-      case QuestionType.mcqMultiple:
-        if (!q.hasAutoCorrectAnswer) return _Verdict.unscored;
-        if (answer is! List) return _Verdict.blank;
-        final chosen = answer.map((e) => e.toString()).toSet();
-        if (chosen.isEmpty) return _Verdict.blank;
-        final correct = q.correctOptionIds.toSet();
-        return (chosen.length == correct.length &&
-                chosen.containsAll(correct))
-            ? _Verdict.correct
-            : _Verdict.wrong;
-      case QuestionType.trueFalse:
-        final chosen = answer?.toString().toLowerCase();
-        if (chosen == null || chosen.isEmpty) return _Verdict.blank;
-        final expected = q.correctAnswer?.toLowerCase();
-        if (expected == null || expected.isEmpty) return _Verdict.unscored;
-        return chosen == expected ? _Verdict.correct : _Verdict.wrong;
-      case QuestionType.shortAnswer:
-        final text = answer?.toString().trim();
-        if (text == null || text.isEmpty) return _Verdict.blank;
-        final expected = q.correctAnswer?.trim();
-        if (expected == null || expected.isEmpty) return _Verdict.unscored;
-        return text.toLowerCase() == expected.toLowerCase()
-            ? _Verdict.correct
-            : _Verdict.wrong;
-      case QuestionType.subjective:
-      case QuestionType.matchPair:
-      case QuestionType.imageBased:
-      case QuestionType.unknown:
-        return _Verdict.unscored;
+    final result = Map<String, dynamic>.from(data);
+    if (result['ok'] != true) {
+      final message = result['error']?.toString();
+      throw Exception(message == null || message.isEmpty
+          ? 'Could not submit the test. Please try again.'
+          : message);
     }
+
+    return TestSubmissionResult.fromRpc(result);
   }
 }
-
-enum _Verdict { correct, wrong, blank, unscored }
-
-/// Shared evaluator exposed for the results screen.
-class QuestionEvaluator {
-  const QuestionEvaluator._();
-
-  static QuestionVerdict evaluate(TestQuestion q, dynamic answer) {
-    if (!q.hasAutoCorrectAnswer) return QuestionVerdict.pendingReview;
-    switch (q.type) {
-      case QuestionType.mcqSingle:
-        final chosen = answer?.toString();
-        if (chosen == null || chosen.isEmpty) return QuestionVerdict.blank;
-        return q.correctOptionIds.contains(chosen)
-            ? QuestionVerdict.correct
-            : QuestionVerdict.wrong;
-      case QuestionType.mcqMultiple:
-        if (answer is! List || answer.isEmpty) return QuestionVerdict.blank;
-        final chosen = answer.map((e) => e.toString()).toSet();
-        final correct = q.correctOptionIds.toSet();
-        return (chosen.length == correct.length &&
-                chosen.containsAll(correct))
-            ? QuestionVerdict.correct
-            : QuestionVerdict.wrong;
-      case QuestionType.trueFalse:
-        final chosen = answer?.toString().toLowerCase();
-        if (chosen == null || chosen.isEmpty) return QuestionVerdict.blank;
-        return chosen == q.correctAnswer?.toLowerCase()
-            ? QuestionVerdict.correct
-            : QuestionVerdict.wrong;
-      case QuestionType.shortAnswer:
-        final text = answer?.toString().trim();
-        if (text == null || text.isEmpty) return QuestionVerdict.blank;
-        return text.toLowerCase() ==
-                (q.correctAnswer ?? '').trim().toLowerCase()
-            ? QuestionVerdict.correct
-            : QuestionVerdict.wrong;
-      default:
-        return QuestionVerdict.pendingReview;
-    }
-  }
-
-  static double marksFor(TestQuestion q, QuestionVerdict verdict) {
-    switch (verdict) {
-      case QuestionVerdict.correct:
-        return q.positiveMarks;
-      case QuestionVerdict.wrong:
-        return -q.negativeMarks;
-      case QuestionVerdict.blank:
-      case QuestionVerdict.pendingReview:
-        return 0;
-    }
-  }
-}
-
-enum QuestionVerdict { correct, wrong, blank, pendingReview }

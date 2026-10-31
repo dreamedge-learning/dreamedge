@@ -5,6 +5,11 @@ import '../models/course_category.dart';
 import '../models/subject.dart';
 import '../models/topic.dart';
 
+/// Reads courses and the syllabus hierarchy.
+///
+/// Live column names: `courses.title` / `courses.class`,
+/// `subjects.weight`, `topics.weight`, `course_categories.is_visible`
+/// and `course_categories.weight`.
 class CourseService {
   final SupabaseClient _client;
 
@@ -20,7 +25,7 @@ class CourseService {
     var query = _client.from('courses').select().eq('status', 'published');
 
     if (categoryId != null) query = query.eq('category_id', categoryId);
-    if (targetClass != null) query = query.eq('target_class', targetClass);
+    if (targetClass != null) query = query.eq('class', targetClass);
     if (searchQuery != null && searchQuery.isNotEmpty) {
       query = query.ilike('title', '%$searchQuery%');
     }
@@ -29,7 +34,9 @@ class CourseService {
         .order('is_featured', ascending: false)
         .order('created_at', ascending: false)
         .range(offset, offset + limit - 1);
-    return (data as List).map((e) => Course.fromJson(e as Map<String, dynamic>)).toList();
+    return (data as List)
+        .map((e) => Course.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<Course>> getFeaturedCourses() async {
@@ -40,42 +47,49 @@ class CourseService {
         .eq('is_featured', true)
         .order('created_at', ascending: false)
         .limit(6);
-    return (data as List).map((e) => Course.fromJson(e as Map<String, dynamic>)).toList();
+    return (data as List)
+        .map((e) => Course.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<Course> getCourseById(String id) async {
-    final data = await _client
-        .from('courses')
-        .select()
-        .eq('id', id)
-        .single();
+    final data =
+        await _client.from('courses').select().eq('id', id).single();
     return Course.fromJson(data);
   }
 
+  /// Visible subjects of a course, ordered by `weight`, with a topic count.
   Future<List<Subject>> getSubjects(String courseId) async {
     final data = await _client
         .from('subjects')
-        .select()
+        .select('*, topics(count)')
         .eq('course_id', courseId)
-        .order('sort_order');
-    return (data as List).map((e) => Subject.fromJson(e as Map<String, dynamic>)).toList();
+        .eq('is_visible', true)
+        .order('weight', ascending: true);
+    return (data as List)
+        .map((e) => Subject.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
+  /// Visible topics of a subject, ordered by `weight`, with a content count.
   Future<List<Topic>> getTopics(String subjectId) async {
     final data = await _client
         .from('topics')
-        .select()
+        .select('*, content_items(count)')
         .eq('subject_id', subjectId)
-        .order('sort_order');
-    return (data as List).map((e) => Topic.fromJson(e as Map<String, dynamic>)).toList();
+        .eq('is_visible', true)
+        .order('weight', ascending: true);
+    return (data as List)
+        .map((e) => Topic.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<CourseCategory>> getCategories() async {
     final data = await _client
         .from('course_categories')
         .select()
-        .eq('is_active', true)
-        .order('sort_order');
+        .eq('is_visible', true)
+        .order('weight', ascending: true);
     return (data as List)
         .map((e) => CourseCategory.fromJson(e as Map<String, dynamic>))
         .toList();

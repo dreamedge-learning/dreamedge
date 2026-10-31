@@ -211,7 +211,7 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
                 <InfoRow icon={MapPin} label="City" value={student.city as string} />
                 <InfoRow icon={MapPin} label="State" value={student.state as string} />
                 <InfoRow icon={Calendar} label="Class" value={student.class as string} />
-                <InfoRow icon={BookOpen} label="School" value={student.school_name as string} />
+                <InfoRow icon={BookOpen} label="Board" value={student.board as string} />
                 <InfoRow icon={User} label="Referral Code" value={student.referral_code as string} />
               </TabsContent>
 

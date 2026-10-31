@@ -52,6 +52,13 @@ export interface UpcomingLiveClass {
   course: { id: string; title: string; slug: string } | null;
 }
 
+export interface CourseProgress {
+  total: number;
+  completed: number;
+  pct: number;
+  lastActivityAt: string | null;
+}
+
 interface DashboardContentProps {
   student: {
     id: string;
@@ -62,6 +69,8 @@ interface DashboardContentProps {
     [key: string]: unknown;
   };
   enrollments: Enrollment[];
+  /** Keyed by course id. A Map cannot cross the server/client boundary. */
+  progressByCourse: Record<string, CourseProgress>;
   upcomingClasses: UpcomingLiveClass[];
   stats: DashboardStats;
 }
@@ -125,6 +134,7 @@ const QUICK_ACTIONS = [
 export function DashboardContent({
   student,
   enrollments,
+  progressByCourse,
   upcomingClasses,
   stats,
 }: DashboardContentProps) {
@@ -200,8 +210,11 @@ export function DashboardContent({
                   key={enrollment.id}
                   title={enrollment.course!.title}
                   thumbnailUrl={enrollment.course!.thumbnail_url}
-                  progress={0}
-                  lastAccessed={enrollment.purchased_at}
+                  progress={progressByCourse[enrollment.course!.id]?.pct ?? 0}
+                  lastAccessed={
+                    progressByCourse[enrollment.course!.id]?.lastActivityAt ??
+                    enrollment.purchased_at
+                  }
                   slug={enrollment.course!.slug}
                   className={enrollment.course!.class}
                 />

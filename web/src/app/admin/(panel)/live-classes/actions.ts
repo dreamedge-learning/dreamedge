@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { assertAdmin, type AdminRole } from "@/lib/auth-guard";
+import type { Json } from "@/types/supabase";
 
 const scheduleSchema = z.object({
   course_id: z.string().uuid("Pick a course"),
@@ -36,20 +38,57 @@ export interface LiveClassRow {
   teacher: { id: string; full_name: string } | null;
 }
 
-async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { ok: false as const, error: "Not signed in" };
-  const { data: admin } = await supabase
-    .from("admin_users")
-    .select("id, role")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!admin) return { ok: false as const, error: "Not an admin" };
-  return { ok: true as const, admin };
+/** Roles permitted to author or delete scheduled classes. */
+const SCHEDULERS: AdminRole[] = ["super_admin", "content_creator"];
+/** Roles permitted to move a class between states (teachers go live). */
+const BROADCASTERS: AdminRole[] = ["super_admin", "content_creator", "teacher"];
+
+type Guard = Awaited<ReturnType<typeof assertAdmin>>;
+
+/**
+ * Every exported action below funnels through this. The previous
+ * implementation selected a non-existent `admin_users.role` column, so
+ * PostgREST errored, `maybeSingle()` returned null, and the guard reported
+ * "Not an admin" to every caller including super_admin -- which silently
+ * disabled the entire live-class workflow. It also left the four read actions
+ * completely ungated while they queried through the service-role client.
+ */
+async function guardOrNull(roles?: AdminRole[]): Promise<Guard | null> {
+  try {
+    return await assertAdmin(roles);
+  } catch {
+    return null;
+  }
 }
 
-export async function listLiveClasses(filter: "scheduled" | "live" | "pending_recording" | "rewatch_library") {
+async function writeAudit(
+  guard: Guard,
+  action: string,
+  entityId: string,
+  data: Record<string, unknown>
+) {
+  try {
+    const supabase = await createClient();
+    await supabase.from("audit_log").insert({
+      user_id: guard.adminUser.user_id,
+      action,
+      entity_type: "live_class",
+      entity_id: entityId,
+      // audit_log.new_data is jsonb; the payloads below are plain
+      // string/number/null records, which Json models structurally.
+      new_data: data as unknown as Json,
+    });
+  } catch {
+    // Audit must never block the operation it records.
+  }
+}
+
+export async function listLiveClasses(
+  filter: "scheduled" | "live" | "pending_recording" | "rewatch_library"
+) {
+  const guard = await guardOrNull();
+  if (!guard) return [];
+
   const supabase = createServiceClient();
   let query = supabase
     .from("live_classes")
@@ -60,6 +99,7 @@ export async function listLiveClasses(filter: "scheduled" | "live" | "pending_re
        course:courses(id, title, slug),
        teacher:admin_users(id, full_name)`
     );
+
   if (filter === "scheduled") {
     query = query.in("status", ["scheduled"]).order("scheduled_at", { ascending: true });
   } else if (filter === "live") {
@@ -75,22 +115,33 @@ export async function listLiveClasses(filter: "scheduled" | "live" | "pending_re
       .not("rewatch_content_id", "is", null)
       .order("scheduled_at", { ascending: false });
   }
+
   const { data } = await query;
   const rows = (data ?? []) as unknown as LiveClassRow[];
-  return rows.map((r) => ({
+  const mapped = rows.map((r) => ({
     ...r,
     course: Array.isArray(r.course) ? r.course[0] ?? null : r.course,
     teacher: Array.isArray(r.teacher) ? r.teacher[0] ?? null : r.teacher,
   }));
+
+  // A teacher only ever sees the classes assigned to them.
+  if (guard.adminUser.role_name === "teacher") {
+    return mapped.filter((r) => r.teacher_id === guard.adminUser.id);
+  }
+  return mapped;
 }
 
 export async function listTeachers() {
+  const guard = await guardOrNull(SCHEDULERS);
+  if (!guard) return [];
+
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("admin_users")
     .select("id, full_name, is_active, role:roles(name)")
     .eq("is_active", true)
     .order("full_name", { ascending: true });
+
   type Row = {
     id: string;
     full_name: string;
@@ -98,7 +149,6 @@ export async function listTeachers() {
     role: { name: string } | { name: string }[] | null;
   };
   const rows = (data ?? []) as unknown as Row[];
-  // Normalize the role shape and filter down to teachable roles.
   const teachable = new Set(["teacher", "content_creator", "super_admin"]);
   return rows
     .map((r) => {
@@ -109,6 +159,9 @@ export async function listTeachers() {
 }
 
 export async function listCoursesForSchedule() {
+  const guard = await guardOrNull(SCHEDULERS);
+  if (!guard) return [];
+
   const supabase = createServiceClient();
   const { data } = await supabase
     .from("courses")
@@ -118,8 +171,8 @@ export async function listCoursesForSchedule() {
 }
 
 export async function scheduleLiveClass(formData: FormData) {
-  const guard = await requireAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  const guard = await guardOrNull(SCHEDULERS);
+  if (!guard) return { ok: false, error: "You don't have permission to schedule classes." };
 
   const parsed = scheduleSchema.safeParse({
     course_id: formData.get("course_id"),
@@ -132,8 +185,12 @@ export async function scheduleLiveClass(formData: FormData) {
     meeting_url: formData.get("meeting_url") ?? "",
   });
   if (!parsed.success) {
-    const first = parsed.error.issues[0];
-    return { ok: false, error: first.message };
+    return { ok: false, error: parsed.error.issues[0].message };
+  }
+
+  const scheduledAt = new Date(parsed.data.scheduled_at);
+  if (Number.isNaN(scheduledAt.getTime())) {
+    return { ok: false, error: "That date & time could not be read." };
   }
 
   const service = createServiceClient();
@@ -142,15 +199,21 @@ export async function scheduleLiveClass(formData: FormData) {
     teacher_id: parsed.data.teacher_id || null,
     title: parsed.data.title,
     description: parsed.data.description || null,
-    scheduled_at: new Date(parsed.data.scheduled_at).toISOString(),
+    scheduled_at: scheduledAt.toISOString(),
     duration_minutes: parsed.data.duration_minutes,
     platform: parsed.data.platform,
     meeting_url: parsed.data.meeting_url || null,
     status: "scheduled" as const,
   };
-  const { data, error } = await service.from("live_classes").insert(payload).select("id").single();
+
+  const { data, error } = await service
+    .from("live_classes")
+    .insert(payload)
+    .select("id")
+    .single();
   if (error) return { ok: false, error: error.message };
 
+  await writeAudit(guard, "create", data.id, payload);
   revalidatePath("/admin/live-classes");
   return { ok: true, id: data.id };
 }
@@ -160,10 +223,26 @@ export async function transitionLiveClass(
   nextStatus: "live" | "ended" | "cancelled",
   options?: { meeting_url?: string | null; recording_url?: string | null }
 ) {
-  const guard = await requireAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  const guard = await guardOrNull(BROADCASTERS);
+  if (!guard) return { ok: false, error: "You don't have permission to change this class." };
 
   const service = createServiceClient();
+
+  // A teacher may only act on a class assigned to them, and may never cancel.
+  if (guard.adminUser.role_name === "teacher") {
+    if (nextStatus === "cancelled") {
+      return { ok: false, error: "Only an admin can cancel a class." };
+    }
+    const { data: owned } = await service
+      .from("live_classes")
+      .select("teacher_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (!owned || owned.teacher_id !== guard.adminUser.id) {
+      return { ok: false, error: "That class is not assigned to you." };
+    }
+  }
+
   const patch: {
     status: "live" | "ended" | "cancelled";
     meeting_url?: string | null;
@@ -175,14 +254,14 @@ export async function transitionLiveClass(
   const { error } = await service.from("live_classes").update(patch).eq("id", id);
   if (error) return { ok: false, error: error.message };
 
+  await writeAudit(guard, "transition", id, patch);
   revalidatePath("/admin/live-classes");
   return { ok: true };
 }
 
 export async function attachRewatchContent(id: string, contentItemId: string) {
-  const guard = await requireAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
-
+  const guard = await guardOrNull(SCHEDULERS);
+  if (!guard) return { ok: false, error: "You don't have permission to link recordings." };
   if (!contentItemId) return { ok: false, error: "Pick a content item to link" };
 
   const service = createServiceClient();
@@ -192,13 +271,14 @@ export async function attachRewatchContent(id: string, contentItemId: string) {
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
 
+  await writeAudit(guard, "attach_rewatch", id, { rewatch_content_id: contentItemId });
   revalidatePath("/admin/live-classes");
   return { ok: true };
 }
 
 export async function detachRewatchContent(id: string) {
-  const guard = await requireAdmin();
-  if (!guard.ok) return { ok: false, error: guard.error };
+  const guard = await guardOrNull(SCHEDULERS);
+  if (!guard) return { ok: false, error: "You don't have permission to unlink recordings." };
 
   const service = createServiceClient();
   const { error } = await service
@@ -207,18 +287,28 @@ export async function detachRewatchContent(id: string) {
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
 
+  await writeAudit(guard, "detach_rewatch", id, { rewatch_content_id: null });
   revalidatePath("/admin/live-classes");
   return { ok: true };
 }
 
 export async function listRewatchableContentItems(courseId: string) {
-  // Content items of type video that are already uploaded and could be
-  // linked as a rewatch for a class in this course.
+  const guard = await guardOrNull(SCHEDULERS);
+  if (!guard) return [];
+
+  // Video content under this course that could be linked as a class rewatch.
   const service = createServiceClient();
+  const { data: subjects } = await service
+    .from("subjects")
+    .select("id")
+    .eq("course_id", courseId);
+  const subjectIds = (subjects ?? []).map((s) => s.id);
+  if (subjectIds.length === 0) return [];
+
   const { data: topics } = await service
     .from("topics")
-    .select("id, subject:subjects!inner(course_id)")
-    .eq("subject.course_id", courseId);
+    .select("id")
+    .in("subject_id", subjectIds);
   const topicIds = (topics ?? []).map((t) => t.id);
   if (topicIds.length === 0) return [];
 
@@ -229,6 +319,7 @@ export async function listRewatchableContentItems(courseId: string) {
     .eq("type", "video")
     .order("created_at", { ascending: false })
     .limit(100);
+
   return (data ?? []) as {
     id: string;
     title: string;

@@ -40,9 +40,12 @@ class AuthService {
           'email': email.trim(),
           if (phone != null && phone.isNotEmpty) 'phone': phone.trim(),
           if (studentClass != null) 'class': studentClass,
-          if (referralCode != null && referralCode.isNotEmpty)
-            'referred_by': referralCode.trim(),
-          'is_active': true,
+          // `students` has no `is_active` column (it has `status`), and
+          // `referred_by` is a uuid FK to students(id) — a referral *code*
+          // cannot be written into it from here.
+          // TODO(backend): resolve a referral code to the referring student
+          // server-side (e.g. in the signup trigger) and set `referred_by`
+          // there.
         } as Map<String, dynamic>);
       } catch (_) {
         // Student row creation is handled by DB trigger as fallback

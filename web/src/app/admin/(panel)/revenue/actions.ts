@@ -3,6 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/lib/auth-guard";
+import { describeFailure, firstIssue, uuid } from "@/lib/validations/form";
+import {
+  manualPaymentInput,
+  manualPaymentSchema,
+  orderFilterSchema,
+  referralCodeCreateSchema,
+  referralCodeIdSchema,
+  referralCodeInput,
+  referralCodeUpdateSchema,
+  refundFilterSchema,
+  refundInitiateInput,
+  refundInitiateSchema,
+  refundProcessSchema,
+  topCoursesLimitSchema,
+} from "@/lib/validations/revenue";
 
 function sanitizeSearch(input: string): string {
   return input.replace(/[,().%_*]/g, "");
@@ -148,6 +163,16 @@ export async function fetchOrders(filters: OrderFilters = {}) {
     await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
+    const parsedFilters = orderFilterSchema.safeParse({
+      status: filters.status,
+      paymentMethod: filters.paymentMethod,
+      courseId: filters.courseId,
+    });
+
+    if (!parsedFilters.success) {
+      return { data: null, count: 0, error: firstIssue(parsedFilters.error) };
+    }
+
     const page = filters.page ?? 1;
     const pageSize = filters.pageSize ?? 20;
     const from = (page - 1) * pageSize;
@@ -174,16 +199,19 @@ export async function fetchOrders(filters: OrderFilters = {}) {
       }
     }
 
-    if (filters.status && filters.status !== "all") {
-      query = query.eq("status", filters.status);
+    const status = parsedFilters.data.status;
+    if (status && status !== "all") {
+      query = query.eq("status", status);
     }
 
-    if (filters.paymentMethod && filters.paymentMethod !== "all") {
-      query = query.eq("payment_method", filters.paymentMethod);
+    const paymentMethod = parsedFilters.data.paymentMethod;
+    if (paymentMethod && paymentMethod !== "all") {
+      query = query.eq("payment_method", paymentMethod);
     }
 
-    if (filters.courseId && filters.courseId !== "all") {
-      query = query.eq("course_id", filters.courseId);
+    const courseId = parsedFilters.data.courseId;
+    if (courseId && courseId !== "all") {
+      query = query.eq("course_id", courseId);
     }
 
     if (filters.dateFrom) {
@@ -221,8 +249,9 @@ export async function fetchOrders(filters: OrderFilters = {}) {
     }));
 
     return { data: rows, count: count ?? 0, error: null };
-  } catch {
-    return { data: null, count: 0, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchOrders failed:", err);
+    return { data: null, count: 0, error: describeFailure(err) };
   }
 }
 
@@ -231,25 +260,23 @@ export async function getOrderDetail(orderId: string) {
     await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
-    const [orderResult, _enrollmentResult] = await Promise.all([
-      supabase
-        .from("orders")
-        .select(
-          `id, student_id, course_id, amount, discount_amount, final_amount,
-           payment_method, razorpay_order_id, razorpay_payment_id, status,
-           invoice_url, invoice_number, referral_code_used, remarks,
-           processed_by, created_at, updated_at,
-           student:students(full_name, phone, email),
-           course:courses(title)`
-        )
-        .eq("id", orderId)
-        .single(),
-      supabase
-        .from("enrollments")
-        .select("id, purchased_at, valid_until, status")
-        .eq("student_id", orderId)
-        .limit(1),
-    ]);
+    const parsedId = uuid("Order").safeParse(orderId);
+    if (!parsedId.success) {
+      return { data: null, error: firstIssue(parsedId.error) };
+    }
+
+    const orderResult = await supabase
+      .from("orders")
+      .select(
+        `id, student_id, course_id, amount, discount_amount, final_amount,
+         payment_method, razorpay_order_id, razorpay_payment_id, status,
+         invoice_url, invoice_number, referral_code_used, remarks,
+         processed_by, created_at, updated_at,
+         student:students(full_name, phone, email),
+         course:courses(title)`
+      )
+      .eq("id", parsedId.data)
+      .single();
 
     if (orderResult.error) {
       return { data: null, error: orderResult.error.message };
@@ -290,8 +317,9 @@ export async function getOrderDetail(orderId: string) {
     };
 
     return { data: detail, error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("getOrderDetail failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
 
@@ -310,14 +338,27 @@ export async function exportOrdersCsv(filters: OrderFilters = {}) {
       )
       .order("created_at", { ascending: false });
 
-    if (filters.status && filters.status !== "all") {
-      query = query.eq("status", filters.status);
+    const parsedFilters = orderFilterSchema.safeParse({
+      status: filters.status,
+      paymentMethod: filters.paymentMethod,
+      courseId: filters.courseId,
+    });
+
+    if (!parsedFilters.success) {
+      return { data: null, error: firstIssue(parsedFilters.error) };
     }
-    if (filters.paymentMethod && filters.paymentMethod !== "all") {
-      query = query.eq("payment_method", filters.paymentMethod);
+
+    const status = parsedFilters.data.status;
+    if (status && status !== "all") {
+      query = query.eq("status", status);
     }
-    if (filters.courseId && filters.courseId !== "all") {
-      query = query.eq("course_id", filters.courseId);
+    const paymentMethod = parsedFilters.data.paymentMethod;
+    if (paymentMethod && paymentMethod !== "all") {
+      query = query.eq("payment_method", paymentMethod);
+    }
+    const courseId = parsedFilters.data.courseId;
+    if (courseId && courseId !== "all") {
+      query = query.eq("course_id", courseId);
     }
     if (filters.dateFrom) {
       query = query.gte("created_at", filters.dateFrom);
@@ -333,8 +374,9 @@ export async function exportOrdersCsv(filters: OrderFilters = {}) {
     }
 
     return { data: data ?? [], error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("exportOrdersCsv failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
 
@@ -354,13 +396,14 @@ export async function searchStudentsForPayment(query: string) {
       .from("students")
       .select("id, full_name, phone, email")
       .or(`full_name.ilike.%${safe}%,phone.ilike.%${safe}%,email.ilike.%${safe}%`)
-      .eq("is_active", true)
+      .eq("status", "active")
       .limit(20);
 
     if (error) return { data: null, error: error.message };
     return { data: data ?? [], error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("searchStudentsForPayment failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
 
@@ -377,8 +420,9 @@ export async function fetchPublishedCourses() {
 
     if (error) return { data: null, error: error.message };
     return { data: data ?? [], error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchPublishedCourses failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
 
@@ -387,26 +431,20 @@ export async function recordManualPayment(formData: FormData) {
     const { adminUser } = await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
-    const studentId = formData.get("student_id") as string;
-    const courseId = formData.get("course_id") as string;
-    const amount = Number(formData.get("amount"));
-    const paymentMethod = formData.get("payment_method") as string;
-    const reference = (formData.get("reference") as string) || null;
-    const remarks = (formData.get("remarks") as string) || null;
-    const paymentDate = (formData.get("payment_date") as string) || new Date().toISOString();
-
-    if (!studentId || !courseId || !amount || !paymentMethod) {
-      return { error: "Student, course, amount, and payment method are required." };
+    const parsed = manualPaymentSchema.safeParse(manualPaymentInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
     }
 
-    if (amount <= 0) {
-      return { error: "Amount must be greater than zero." };
-    }
-
-    const validMethods = ["manual_cash", "manual_upi", "manual_bank"];
-    if (!validMethods.includes(paymentMethod)) {
-      return { error: "Invalid payment method." };
-    }
+    const {
+      student_id: studentId,
+      course_id: courseId,
+      amount,
+      payment_method: paymentMethod,
+      reference,
+      remarks,
+    } = parsed.data;
+    const paymentDate = parsed.data.payment_date ?? new Date().toISOString();
 
     // Check if enrollment already exists
     const { data: existing } = await supabase
@@ -448,7 +486,9 @@ export async function recordManualPayment(formData: FormData) {
         final_amount: amount,
         payment_method: paymentMethod,
         status: "completed",
-        remarks: [remarks, reference ? `Ref: ${reference}` : null].filter(Boolean).join(" | "),
+        remarks:
+          [remarks, reference ? `Ref: ${reference}` : null].filter(Boolean).join(" | ") ||
+          null,
         processed_by: adminUser.id,
         created_at: paymentDate,
       })
@@ -486,8 +526,9 @@ export async function recordManualPayment(formData: FormData) {
 
     revalidatePath("/admin/revenue");
     return { success: true, orderId: order.id };
-  } catch {
-    return { error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("recordManualPayment failed:", err);
+    return { error: describeFailure(err) };
   }
 }
 
@@ -514,8 +555,14 @@ export async function fetchRefunds(filters: RefundFilters = {}) {
       )
       .order("created_at", { ascending: false });
 
-    if (filters.status && filters.status !== "all") {
-      query = query.eq("status", filters.status);
+    const parsedFilters = refundFilterSchema.safeParse({ status: filters.status });
+    if (!parsedFilters.success) {
+      return { data: null, count: 0, error: firstIssue(parsedFilters.error) };
+    }
+
+    const status = parsedFilters.data.status;
+    if (status && status !== "all") {
+      query = query.eq("status", status);
     }
     if (filters.dateFrom) {
       query = query.gte("created_at", filters.dateFrom);
@@ -559,8 +606,9 @@ export async function fetchRefunds(filters: RefundFilters = {}) {
     });
 
     return { data: rows, count: count ?? 0, error: null };
-  } catch {
-    return { data: null, count: 0, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchRefunds failed:", err);
+    return { data: null, count: 0, error: describeFailure(err) };
   }
 }
 
@@ -569,17 +617,12 @@ export async function initiateRefund(formData: FormData) {
     const { adminUser } = await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
-    const orderId = formData.get("order_id") as string;
-    const amount = Number(formData.get("amount"));
-    const reason = formData.get("reason") as string;
-
-    if (!orderId || !amount || !reason) {
-      return { error: "Order ID, amount, and reason are required." };
+    const parsed = refundInitiateSchema.safeParse(refundInitiateInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
     }
 
-    if (amount <= 0) {
-      return { error: "Refund amount must be greater than zero." };
-    }
+    const { order_id: orderId, amount, reason } = parsed.data;
 
     // Verify order exists and is refundable
     const { data: order, error: orderError } = await supabase
@@ -633,8 +676,9 @@ export async function initiateRefund(formData: FormData) {
 
     revalidatePath("/admin/revenue");
     return { success: true };
-  } catch {
-    return { error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("initiateRefund failed:", err);
+    return { error: describeFailure(err) };
   }
 }
 
@@ -647,10 +691,15 @@ export async function processRefund(
     const { adminUser } = await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
+    const parsed = refundProcessSchema.safeParse({ refundId, action, reason });
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
+
     const { data: refund, error: refundError } = await supabase
       .from("refunds")
       .select("id, order_id, amount, status")
-      .eq("id", refundId)
+      .eq("id", parsed.data.refundId)
       .single();
 
     if (refundError || !refund) {
@@ -665,18 +714,18 @@ export async function processRefund(
     const { error: updateError } = await supabase
       .from("refunds")
       .update({
-        status: action,
+        status: parsed.data.action,
         processed_by: adminUser.id,
         processed_at: new Date().toISOString(),
       })
-      .eq("id", refundId);
+      .eq("id", parsed.data.refundId);
 
     if (updateError) {
       return { error: updateError.message };
     }
 
     // If approved, update order and enrollment status
-    if (action === "approved") {
+    if (parsed.data.action === "approved") {
       await supabase
         .from("orders")
         .update({ status: "refunded", updated_at: new Date().toISOString() })
@@ -701,16 +750,17 @@ export async function processRefund(
 
     await supabase.from("audit_log").insert({
       user_id: adminUser.user_id,
-      action: `refund_${action}`,
+      action: `refund_${parsed.data.action}`,
       entity_type: "refund",
-      entity_id: refundId,
-      new_data: { action, reason: reason ?? null },
+      entity_id: parsed.data.refundId,
+      new_data: { action: parsed.data.action, reason: parsed.data.reason ?? null },
     });
 
     revalidatePath("/admin/revenue");
     return { success: true };
-  } catch {
-    return { error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("processRefund failed:", err);
+    return { error: describeFailure(err) };
   }
 }
 
@@ -778,8 +828,9 @@ export async function fetchInvoices(filters: {
     }));
 
     return { data: rows, count: count ?? 0, error: null };
-  } catch {
-    return { data: null, count: 0, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchInvoices failed:", err);
+    return { data: null, count: 0, error: describeFailure(err) };
   }
 }
 
@@ -845,8 +896,9 @@ export async function fetchReferralCodes(filters: {
     }));
 
     return { data: rows, count: count ?? 0, error: null };
-  } catch {
-    return { data: null, count: 0, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchReferralCodes failed:", err);
+    return { data: null, count: 0, error: describeFailure(err) };
   }
 }
 
@@ -855,27 +907,18 @@ export async function createReferralCode(formData: FormData) {
     const { adminUser } = await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
-    const code = (formData.get("code") as string).toUpperCase().trim();
-    const discountType = formData.get("discount_type") as string;
-    const discountValue = Number(formData.get("discount_value"));
-    const maxUses = formData.get("max_uses") ? Number(formData.get("max_uses")) : null;
-    const validUntil = (formData.get("valid_until") as string) || null;
-
-    if (!code || !discountType || !discountValue) {
-      return { error: "Code, discount type, and discount value are required." };
+    const parsed = referralCodeCreateSchema.safeParse(referralCodeInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
     }
 
-    if (!/^[A-Z0-9]{3,20}$/.test(code)) {
-      return { error: "Code must be 3-20 uppercase alphanumeric characters." };
-    }
-
-    if (discountType === "percentage" && (discountValue < 1 || discountValue > 100)) {
-      return { error: "Percentage discount must be between 1 and 100." };
-    }
-
-    if (discountType === "fixed" && discountValue < 1) {
-      return { error: "Fixed discount must be at least ₹1." };
-    }
+    const {
+      code,
+      discount_type: discountType,
+      discount_value: discountValue,
+      max_uses: maxUses,
+      valid_until: validUntil,
+    } = parsed.data;
 
     // Check uniqueness
     const { data: existing } = await supabase
@@ -892,8 +935,8 @@ export async function createReferralCode(formData: FormData) {
       code,
       discount_type: discountType,
       discount_value: discountValue,
-      max_uses: maxUses,
-      valid_until: validUntil,
+      max_uses: maxUses ?? null,
+      valid_until: validUntil ?? null,
       created_by: adminUser.id,
       is_active: true,
     });
@@ -904,8 +947,9 @@ export async function createReferralCode(formData: FormData) {
 
     revalidatePath("/admin/revenue");
     return { success: true };
-  } catch {
-    return { error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("createReferralCode failed:", err);
+    return { error: describeFailure(err) };
   }
 }
 
@@ -914,24 +958,25 @@ export async function updateReferralCode(id: string, formData: FormData) {
     await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
-    const discountType = formData.get("discount_type") as string;
-    const discountValue = Number(formData.get("discount_value"));
-    const maxUses = formData.get("max_uses") ? Number(formData.get("max_uses")) : null;
-    const validUntil = (formData.get("valid_until") as string) || null;
+    const parsedId = referralCodeIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
 
-    if (!discountType || !discountValue) {
-      return { error: "Discount type and value are required." };
+    const parsed = referralCodeUpdateSchema.safeParse(referralCodeInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
     }
 
     const { error: updateError } = await supabase
       .from("referral_codes")
       .update({
-        discount_type: discountType,
-        discount_value: discountValue,
-        max_uses: maxUses,
-        valid_until: validUntil,
+        discount_type: parsed.data.discount_type,
+        discount_value: parsed.data.discount_value,
+        max_uses: parsed.data.max_uses ?? null,
+        valid_until: parsed.data.valid_until ?? null,
       })
-      .eq("id", id);
+      .eq("id", parsedId.data);
 
     if (updateError) {
       return { error: updateError.message };
@@ -939,8 +984,9 @@ export async function updateReferralCode(id: string, formData: FormData) {
 
     revalidatePath("/admin/revenue");
     return { success: true };
-  } catch {
-    return { error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("updateReferralCode failed:", err);
+    return { error: describeFailure(err) };
   }
 }
 
@@ -949,10 +995,15 @@ export async function toggleReferralCode(id: string) {
     await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
+    const parsedId = referralCodeIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { data: current, error: fetchError } = await supabase
       .from("referral_codes")
       .select("is_active")
-      .eq("id", id)
+      .eq("id", parsedId.data)
       .single();
 
     if (fetchError || !current) {
@@ -962,7 +1013,7 @@ export async function toggleReferralCode(id: string) {
     const { error: updateError } = await supabase
       .from("referral_codes")
       .update({ is_active: !current.is_active })
-      .eq("id", id);
+      .eq("id", parsedId.data);
 
     if (updateError) {
       return { error: updateError.message };
@@ -970,8 +1021,9 @@ export async function toggleReferralCode(id: string) {
 
     revalidatePath("/admin/revenue");
     return { success: true };
-  } catch {
-    return { error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("toggleReferralCode failed:", err);
+    return { error: describeFailure(err) };
   }
 }
 
@@ -980,10 +1032,15 @@ export async function deleteReferralCode(id: string) {
     await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
+    const parsedId = referralCodeIdSchema.safeParse(id);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
     const { error } = await supabase
       .from("referral_codes")
       .delete()
-      .eq("id", id);
+      .eq("id", parsedId.data);
 
     if (error) {
       return { error: error.message };
@@ -991,8 +1048,9 @@ export async function deleteReferralCode(id: string) {
 
     revalidatePath("/admin/revenue");
     return { success: true };
-  } catch {
-    return { error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("deleteReferralCode failed:", err);
+    return { error: describeFailure(err) };
   }
 }
 
@@ -1070,8 +1128,9 @@ export async function fetchRevenueAnalytics(dateRange: {
     }));
 
     return { data: { stats, monthlyRevenue }, error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchRevenueAnalytics failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
 
@@ -1100,8 +1159,9 @@ export async function fetchPaymentMethodBreakdown(dateFrom: string, dateTo: stri
     }));
 
     return { data: rows, error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchPaymentMethodBreakdown failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
 
@@ -1130,8 +1190,9 @@ export async function fetchDailyOrders(dateFrom: string, dateTo: string) {
     }));
 
     return { data: rows, error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchDailyOrders failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
 
@@ -1140,18 +1201,22 @@ export async function fetchCourseRevenue(limit = 10) {
     await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
 
-    const { data, error } = await supabase.rpc("get_top_courses", { result_limit: limit });
+    const parsedLimit = topCoursesLimitSchema.safeParse(limit);
+    if (!parsedLimit.success) {
+      return { data: null, error: firstIssue(parsedLimit.error) };
+    }
+
+    // get_top_courses is declared in the generated types and already returns
+    // { id, name, enrollment_count, total_revenue }, so no cast is needed.
+    const { data, error } = await supabase.rpc("get_top_courses", {
+      result_limit: parsedLimit.data,
+    });
 
     if (error) {
       return { data: null, error: error.message };
     }
 
-    const rows: CourseRevenue[] = ((data ?? []) as {
-      id: string;
-      name: string;
-      enrollment_count: number;
-      total_revenue: number;
-    }[]).map((r) => ({
+    const rows: CourseRevenue[] = (data ?? []).map((r) => ({
       id: r.id,
       name: r.name,
       enrollmentCount: Number(r.enrollment_count),
@@ -1159,7 +1224,8 @@ export async function fetchCourseRevenue(limit = 10) {
     }));
 
     return { data: rows, error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
+  } catch (err) {
+    console.error("fetchCourseRevenue failed:", err);
+    return { data: null, error: describeFailure(err) };
   }
 }
