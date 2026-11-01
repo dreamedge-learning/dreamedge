@@ -114,7 +114,12 @@ export function ContentFilesPanel({ contentId }: { contentId: string }) {
   /** Signs, uploads, and reports where the object landed. */
   const sendToStorage = useCallback(
     async (file: File, key: string) => {
-      const ticket = await createUploadTicket(contentId, file.name, file.size);
+      const ticket = await createUploadTicket(
+        contentId,
+        file.name,
+        file.size,
+        file.type || null
+      );
       if (ticket.error || !ticket.data) {
         throw new Error(ticket.error ?? "Could not start the upload.");
       }
@@ -313,7 +318,7 @@ export function ContentFilesPanel({ contentId }: { contentId: string }) {
           </button>
         </p>
         <p className="text-xs text-muted-foreground">
-          PDF, Word, PowerPoint, ePub or images — up to 50 MB each
+          PDF, Word, PowerPoint, ePub or images — up to 40 MB each
         </p>
       </div>
 

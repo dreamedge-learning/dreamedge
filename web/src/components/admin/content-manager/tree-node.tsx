@@ -5,6 +5,7 @@ import {
   ChevronRight,
   ChevronDown,
   BookOpen,
+  CloudDownload,
   FileText,
   Video,
   FileCheck,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import type { TreeNode as TreeNodeType, NodeKind } from "@/stores/content-tree";
+import type { ContentItem } from "@/types/database";
 
 const contentTypeIcons: Record<string, React.ElementType> = {
   video: Video,
@@ -62,6 +64,26 @@ interface TreeNodeProps {
   onAdd?: (kind: NodeKind) => void;
   onRename?: () => void;
   onDelete?: () => void;
+  onEnableOffline?: () => void;
+}
+
+/**
+ * The two things about a content item worth seeing without selecting it:
+ * whether students can keep a copy, and whether its video is in trouble.
+ *
+ * A tree of sixty lessons is where "which of these are offline" and "did that
+ * upload ever finish" actually get asked, and both answers are already in the
+ * row's data.
+ */
+function contentFlags(node: TreeNodeType) {
+  if (node.kind !== "content") return null;
+
+  const item = node.data as ContentItem;
+  return {
+    offline: item.is_downloadable === true,
+    videoProcessing: item.video_status === "processing",
+    videoFailed: item.video_status === "failed",
+  };
 }
 
 export const TreeNodeRow = memo(function TreeNodeRow({
@@ -74,10 +96,12 @@ export const TreeNodeRow = memo(function TreeNodeRow({
   onAdd,
   onRename,
   onDelete,
+  onEnableOffline,
 }: TreeNodeProps) {
   const hasChildren = node.kind !== "content";
   const Icon = getIcon(node);
   const isDraft = node.status === "draft";
+  const flags = contentFlags(node);
 
   const {
     attributes,
@@ -154,6 +178,30 @@ export const TreeNodeRow = memo(function TreeNodeRow({
         {node.name}
       </span>
 
+      {/* A video that is still transcoding, or that never made it */}
+      {(flags?.videoProcessing || flags?.videoFailed) && (
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            flags.videoFailed
+              ? "bg-red-500"
+              : "animate-pulse bg-amber-500"
+          )}
+          title={
+            flags.videoFailed
+              ? "Transcoding failed"
+              : "Video is still processing"
+          }
+        />
+      )}
+
+      {/* Saved to the device when offline */}
+      {flags?.offline && (
+        <span className="shrink-0" title="Available offline in app">
+          <CloudDownload className="h-3.5 w-3.5 text-muted-foreground" />
+        </span>
+      )}
+
       {/* Content count badge */}
       {hasChildren && node.children.length > 0 && (
         <Badge
@@ -197,6 +245,17 @@ export const TreeNodeRow = memo(function TreeNodeRow({
             >
               <Plus className="mr-2 h-3.5 w-3.5" />
               Add {childKind === "topic" ? "Topic" : "Content"}
+            </DropdownMenuItem>
+          )}
+          {hasChildren && onEnableOffline && (
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onEnableOffline();
+              }}
+            >
+              <CloudDownload className="mr-2 h-3.5 w-3.5" />
+              Enable offline for all items below
             </DropdownMenuItem>
           )}
           {onRename && (

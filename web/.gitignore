@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# .env.example holds no values, only the list of variables and what each one
+# is for. It is the only record of what a working deployment needs, so it is
+# the one env file that has to be in version control.
+!.env.example
 
 # vercel
 .vercel

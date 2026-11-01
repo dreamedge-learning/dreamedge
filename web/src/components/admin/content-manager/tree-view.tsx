@@ -53,6 +53,7 @@ import {
   deleteSubject,
   deleteTopic,
   deleteContentItem,
+  enableOfflineForSubtree,
   reorderItems,
 } from "@/app/admin/(panel)/content/manager/actions";
 import type { Course, ContentType, ContentStatus } from "@/types/database";
@@ -268,6 +269,39 @@ export function TreeView({ courses }: TreeViewProps) {
     });
   }
 
+  /**
+   * Turns the offline switch on for everything under one node.
+   *
+   * The tree is reloaded afterwards rather than patched in place: the action
+   * decides which items it skipped -- quizzes, and anything already on -- and
+   * guessing that here would put the wrong badges on the wrong rows.
+   */
+  function handleEnableOffline(node: TreeNode) {
+    if (node.kind === "content") return;
+    const kind = node.kind;
+
+    startTransition(async () => {
+      const result = await enableOfflineForSubtree(kind, node.id);
+
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+
+      const updated = result.data?.updated ?? 0;
+      toast.success(
+        updated === 0
+          ? "Everything below this was already offline"
+          : `${updated} item${updated === 1 ? "" : "s"} available offline`
+      );
+
+      if (updated > 0 && store.courseId) {
+        const tree = await fetchCourseTree(store.courseId);
+        if (tree.data) store.setTree(tree.data as unknown as TreeNode[]);
+      }
+    });
+  }
+
   function renderNode(node: TreeNode, depth: number): React.ReactNode {
     const isExpanded = store.expandedIds.has(node.id);
     const isSelected = store.selectedNode?.id === node.id;
@@ -316,6 +350,7 @@ export function TreeView({ courses }: TreeViewProps) {
             })
           }
           onDelete={() => openDeleteDialog(node.id, node.kind, node.name)}
+          onEnableOffline={() => handleEnableOffline(node)}
         />
         {isExpanded && node.children.length > 0 && (
           <SortableContext

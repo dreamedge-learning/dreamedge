@@ -73,6 +73,16 @@ export const contentItemUpdateSchema = z
         (value) => value == null || (Number.isInteger(value) && value >= 0),
         "Duration must be a whole number of seconds."
       ),
+    // How long a downloaded copy keeps working offline. The video columns
+    // beside it are deliberately absent: those are owned by video-actions.ts,
+    // which checks that an upload belongs to the item before it writes a GUID,
+    // and routing them through the generic updater would skip that check.
+    offline_license_days: optionalNumber("Offline licence").refine(
+      (value) =>
+        value === undefined ||
+        (Number.isInteger(value) && value >= 1 && value <= 365),
+      "Offline licence must be between 1 and 365 days."
+    ),
     weight: optionalNumber("Order").refine(
       (value) => value === undefined || (Number.isInteger(value) && value >= 0),
       "Order must be a whole number."

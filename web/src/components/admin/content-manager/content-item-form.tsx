@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -19,12 +19,17 @@ import {
 
 import { updateContentItem } from "@/app/admin/(panel)/content/manager/actions";
 import { ContentFilesPanel } from "@/components/admin/content-manager/content-files-panel";
+import { VideoUploadPanel } from "@/components/admin/content-manager/video-upload-panel";
 import { useContentTree } from "@/stores/content-tree";
 import type { ContentItem } from "@/types/database";
 
 export function ContentItemForm({ item }: { item: ContentItem }) {
   const [isPending, startTransition] = useTransition();
   const updateContentInTree = useContentTree((s) => s.updateContentItem);
+
+  // The licence field only means anything while offline is on, so the switch
+  // has to be state rather than an uncontrolled input.
+  const [downloadable, setDownloadable] = useState(item.is_downloadable);
 
   function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -43,11 +48,11 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
     const playLimit = fd.get("play_limit") as string;
     fields.play_limit = playLimit ? parseInt(playLimit) : null;
 
-    const videoUrl = fd.get("video_url") as string;
-    if (videoUrl) fields.file_url = videoUrl;
-
     const duration = fd.get("duration_seconds") as string;
     fields.duration_seconds = duration ? parseInt(duration) * 60 : null;
+
+    const licenceDays = fd.get("offline_license_days") as string;
+    if (licenceDays) fields.offline_license_days = parseInt(licenceDays);
 
     if (!fields.title) return;
 
@@ -67,9 +72,10 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
   }
 
   const isVideo = item.type === "video";
+  const isQuiz = item.type === "quiz";
   // Everything but a quiz can carry files. A video lesson routinely ships with
   // the worked examples as a PDF alongside it.
-  const showFiles = item.type !== "quiz";
+  const showFiles = !isQuiz;
   const hasReadingControls = ["pdf", "pyp", "note", "ebook"].includes(item.type);
 
   return (
@@ -121,22 +127,12 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
         />
       </div>
 
-      {/* Video-specific fields */}
+      {/* Video */}
       {isVideo && (
-        <div className="space-y-4 rounded-lg border border-border p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Video Settings
-          </p>
-          <div className="space-y-2">
-            <Label htmlFor="ci-video-url">Video URL</Label>
-            <Input
-              id="ci-video-url"
-              name="video_url"
-              defaultValue={item.file_url || ""}
-              placeholder="https://..."
-            />
-          </div>
-          <div className="space-y-2">
+        <div className="space-y-4">
+          <VideoUploadPanel item={item} onItemChange={updateContentInTree} />
+
+          <div className="space-y-2 rounded-lg border border-border p-4">
             <Label htmlFor="ci-duration">Duration (minutes)</Label>
             <Input
               id="ci-duration"
@@ -150,6 +146,11 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
               }
               placeholder="e.g. 45"
             />
+            <p className="text-xs text-muted-foreground">
+              {item.video_provider === "bunny" && item.duration_seconds
+                ? "Measured from the uploaded file. Editing it overrides what Bunny reported."
+                : "Shown on the lesson tile before the video has been measured."}
+            </p>
           </div>
         </div>
       )}
@@ -161,16 +162,6 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
 
           {hasReadingControls && (
             <div className="flex gap-6 rounded-lg border border-border p-4">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="ci-downloadable"
-                  name="is_downloadable"
-                  defaultChecked={item.is_downloadable}
-                />
-                <Label htmlFor="ci-downloadable" className="text-xs cursor-pointer">
-                  Downloadable
-                </Label>
-              </div>
               <div className="flex items-center gap-2">
                 <Switch
                   id="ci-printable"
@@ -235,6 +226,53 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
             Paid content (requires enrollment)
           </Label>
         </div>
+
+        {/*
+          Offline applies to every kind of content a student can keep -- a
+          video as much as a PDF. Quizzes are the exception: they are scored
+          server-side, so a downloaded one could be re-attempted with nothing
+          recording it, and the app keeps tests online-only.
+        */}
+        {!isQuiz && (
+          <div className="space-y-4 border-t border-border pt-4">
+            <div className="flex items-start gap-3">
+              <Switch
+                id="ci-downloadable"
+                name="is_downloadable"
+                checked={downloadable}
+                onCheckedChange={setDownloadable}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="ci-downloadable" className="cursor-pointer">
+                  Available offline in app
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Students can save this to their device and open it without
+                  internet.
+                </p>
+              </div>
+            </div>
+
+            {downloadable && (
+              <div className="space-y-2 sm:max-w-xs">
+                <Label htmlFor="ci-offline-licence">Offline licence</Label>
+                <Input
+                  id="ci-offline-licence"
+                  name="offline_license_days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  defaultValue={item.offline_license_days}
+                  placeholder="30"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Days a downloaded copy keeps working before the student must
+                  reconnect once.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <Button

@@ -348,6 +348,9 @@ export async function updateContentItem(
     if (parsed.data.duration_seconds !== undefined) {
       update.duration_seconds = parsed.data.duration_seconds;
     }
+    if (parsed.data.offline_license_days !== undefined) {
+      update.offline_license_days = parsed.data.offline_license_days;
+    }
     if (parsed.data.weight !== undefined) update.weight = parsed.data.weight;
 
     const { data, error } = await supabase
@@ -391,6 +394,73 @@ export async function deleteContentItem(id: string) {
     return { success: true };
   } catch (err) {
     console.error("deleteContentItem failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+// ─── Offline ───
+
+/**
+ * Turns the offline switch on for every content item under a subject or topic.
+ *
+ * A Maths course is sixty-odd items, and a mentor who has decided the course
+ * should work on a phone with no signal should not have to click sixty
+ * switches to say so. The update is scoped by walking down from the node, so
+ * passing a topic id can only ever reach that topic's own items.
+ *
+ * Quizzes are skipped. Tests are online-only -- they are scored server-side
+ * and a downloaded one could be re-attempted offline with no record of it --
+ * so marking them downloadable would promise something the app cannot do.
+ */
+export async function enableOfflineForSubtree(
+  kind: "subject" | "topic",
+  nodeId: string
+) {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    const parsedId = uuid(kind === "subject" ? "Subject" : "Topic").safeParse(
+      nodeId
+    );
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    let topicIds: string[] = [parsedId.data];
+
+    if (kind === "subject") {
+      const { data: topics, error: topicError } = await supabase
+        .from("topics")
+        .select("id")
+        .eq("subject_id", parsedId.data);
+
+      if (topicError) {
+        console.error("enableOfflineForSubtree failed:", topicError);
+        return { error: "Something went wrong. Please try again." };
+      }
+      topicIds = (topics ?? []).map((topic) => topic.id);
+    }
+
+    if (topicIds.length === 0) return { data: { updated: 0 } };
+
+    const { data, error } = await supabase
+      .from("content_items")
+      .update({ is_downloadable: true })
+      .in("topic_id", topicIds)
+      .neq("type", "quiz")
+      .eq("is_downloadable", false)
+      .select("id");
+
+    if (error) {
+      console.error("enableOfflineForSubtree failed:", error);
+      return { error: "Something went wrong. Please try again." };
+    }
+
+    revalidatePath("/admin/content/manager");
+    return { data: { updated: (data ?? []).length } };
+  } catch (err) {
+    console.error("enableOfflineForSubtree failed:", err);
     return { error: describeFailure(err) };
   }
 }

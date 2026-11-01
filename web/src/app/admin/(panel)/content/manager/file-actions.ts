@@ -7,7 +7,18 @@ import { createClient } from "@/lib/supabase/server";
 import { describeFailure, firstIssue, uuid } from "@/lib/validations/form";
 
 const BUCKET = "content-files";
-const MAX_BYTES = 50 * 1024 * 1024;
+
+// The bucket holds documents and images only, and 40 MB is already generous
+// for a print-ready booklet. The limit is set on the bucket as well, in
+// 20261102200000_video_hosting_and_offline.sql; this is the copy that can
+// explain itself to an admin before the upload starts.
+const MAX_BYTES = 40 * 1024 * 1024;
+
+// A video that reaches this path is an admin working in the wrong box. It
+// cannot be allowed through -- it would blow the cap, and even a short one
+// would sit in the bucket untranscoded, unplayable at any quality but its own
+// and uncoverable by a playback token.
+const VIDEO_EXTENSIONS = /\.(mp4|m4v|mov|mkv|avi|wmv|flv|webm|mpe?g|3gp|ts|m2ts)$/i;
 
 export interface ContentFile {
   id: string;
@@ -77,7 +88,7 @@ export async function listContentFiles(contentId: string) {
  * The file deliberately never passes through this server. A server action
  * body is capped at 1 MB by default and Vercel refuses any request body over
  * 4.5 MB whatever the framework is configured to allow, so the old
- * upload-through-the-action path could not have carried the 50 MB it
+ * upload-through-the-action path could not have carried the limit it
  * advertised. Signing here and uploading from the browser sidesteps both
  * limits and keeps the bucket private.
  *
@@ -87,7 +98,8 @@ export async function listContentFiles(contentId: string) {
 export async function createUploadTicket(
   contentId: string,
   fileName: string,
-  sizeBytes: number
+  sizeBytes: number,
+  mimeType: string | null = null
 ) {
   try {
     await assertAdmin(["super_admin", "content_creator"]);
@@ -96,11 +108,20 @@ export async function createUploadTicket(
     const parsed = uuid("Content item").safeParse(contentId);
     if (!parsed.success) return { error: firstIssue(parsed.error) };
 
+    // The extension is checked as well as the type, because a browser reports
+    // an empty type for a format it does not recognise and .mkv is one of them.
+    if (mimeType?.startsWith("video/") || VIDEO_EXTENSIONS.test(fileName)) {
+      return {
+        error:
+          "Videos are uploaded in the Video section above, not as an attachment.",
+      };
+    }
+
     if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
       return { error: "That file looks empty." };
     }
     if (sizeBytes > MAX_BYTES) {
-      return { error: "File must be under 50MB." };
+      return { error: "File must be under 40 MB." };
     }
 
     // A fresh key per upload. Reusing one would collide with the CDN cache and
