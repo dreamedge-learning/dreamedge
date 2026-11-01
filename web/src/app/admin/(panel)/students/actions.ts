@@ -233,7 +233,7 @@ export async function fetchStudentDetail(studentId: string) {
 
     const { data: student, error } = await supabase
       .from("students")
-      .select("id, user_id, full_name, email, phone, avatar_url, class, city, state, status, school_name, referral_code, created_at, updated_at")
+      .select("id, user_id, full_name, email, phone, avatar_url, class, city, state, status, board, school_name, referral_code, wallet_balance, created_at, updated_at")
       .eq("id", parsedId.data)
       .single();
 
