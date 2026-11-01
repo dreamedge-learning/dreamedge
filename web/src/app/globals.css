@@ -54,6 +54,12 @@
 }
 
 :root {
+  /* Height of the sticky student navbar (nav is h-20). Panes that want the
+     remaining viewport subtract this rather than hardcoding a pixel value. */
+  --header-height: 5rem;
+}
+
+:root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);

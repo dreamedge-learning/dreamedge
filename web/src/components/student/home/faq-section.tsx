@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, HelpCircle } from "lucide-react";
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/site";
 
 const FAQS = [
   {
@@ -35,7 +36,7 @@ const FAQS = [
   },
   {
     q: "I have more questions.",
-    a: "Email support@dreamedge.online or use the contact form. We respond within one working day.",
+    a: `Email ${SUPPORT_EMAIL} or use the contact form. We respond within one working day.`,
   },
 ];
 

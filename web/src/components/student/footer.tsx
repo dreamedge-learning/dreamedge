@@ -22,6 +22,12 @@ const LEGAL_LINKS = [
   { href: "/refund-policy", label: "Refund Policy" },
 ];
 
+const SOCIAL_CHANNELS = [
+  { key: "youtube", label: "YouTube", Icon: Play },
+  { key: "instagram", label: "Instagram", Icon: Camera },
+  { key: "telegram", label: "Telegram", Icon: Send },
+] as const;
+
 interface SocialLinks {
   youtube?: string;
   instagram?: string;
@@ -33,6 +39,13 @@ interface FooterProps {
 }
 
 export function Footer({ socialLinks }: FooterProps) {
+  // Only networks with a configured handle are rendered; a placeholder "#"
+  // link reads as a broken social icon to anyone who clicks it.
+  const channels = SOCIAL_CHANNELS.flatMap((channel) => {
+    const href = socialLinks?.[channel.key];
+    return href ? [{ ...channel, href }] : [];
+  });
+
   return (
     <footer className="bg-brand-black text-white">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
@@ -44,35 +57,22 @@ export function Footer({ socialLinks }: FooterProps) {
               मजबूत नींव, शानदार भविष्य — Premium coaching for Classes 6-10 by
               IITian mentors.
             </p>
-            <div className="flex items-center gap-3">
-              <a
-                href={socialLinks?.youtube ?? "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-brand-orange"
-                aria-label="YouTube"
-              >
-                <Play className="h-4 w-4" />
-              </a>
-              <a
-                href={socialLinks?.instagram ?? "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-brand-orange"
-                aria-label="Instagram"
-              >
-                <Camera className="h-4 w-4" />
-              </a>
-              <a
-                href={socialLinks?.telegram ?? "#"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-brand-orange"
-                aria-label="Telegram"
-              >
-                <Send className="h-4 w-4" />
-              </a>
-            </div>
+            {channels.length > 0 && (
+              <div className="flex items-center gap-3">
+                {channels.map(({ key, href, label, Icon }) => (
+                  <a
+                    key={key}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-brand-orange"
+                    aria-label={label}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Quick Links */}

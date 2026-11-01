@@ -67,7 +67,7 @@ export function CourseForm({ course, categories }: CourseFormProps) {
       slug: course?.slug || "",
       description: course?.description || "",
       short_description: course?.long_description || "",
-      category_id: "",
+      category_id: course?.category_id || "",
       language: "hinglish" as "hindi" | "english" | "hinglish",
       price: course?.price || 0,
       discount_price: course?.original_price ?? undefined,

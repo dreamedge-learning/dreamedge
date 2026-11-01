@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
 import { ContactForm } from "@/components/student/contact-form";
+import { SUPPORT_EMAIL, SUPPORT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Contact Dream Edge",
@@ -12,16 +13,16 @@ const CHANNELS = [
   {
     icon: Mail,
     label: "Email us",
-    value: "support@dreamedge.online",
-    href: "mailto:support@dreamedge.online",
+    value: SUPPORT_EMAIL,
+    href: `mailto:${SUPPORT_EMAIL}`,
     note: "Fastest route for course or payment questions.",
   },
   {
     icon: Phone,
     label: "Call us",
-    value: "+91 — speak with our team",
-    href: "tel:+911234567890",
-    note: "Mon–Sat, 10 AM – 7 PM IST.",
+    value: SUPPORT_PHONE,
+    href: SUPPORT_PHONE_HREF,
+    note: `${SUPPORT_HOURS}.`,
   },
   {
     icon: MapPin,
@@ -41,7 +42,7 @@ const CHANNELS = [
 
 export default function ContactPage() {
   return (
-    <main className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
       <header className="text-center">
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
           Talk to us
@@ -106,6 +107,6 @@ export default function ContactPage() {
           </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

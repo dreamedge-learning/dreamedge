@@ -49,6 +49,11 @@ async function getCourses(params: SearchParams) {
   const { data, count, error } = await query;
 
   if (error) {
+    // Returning an empty list on error renders the "No courses yet" empty
+    // state, which reads as "the table is empty" rather than "the query
+    // failed" - that hid a broken course_categories embed. Log it so the
+    // next failure is visible.
+    console.error("getCourses failed:", error);
     return { courses: [], total: 0 };
   }
 

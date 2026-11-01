@@ -132,6 +132,95 @@ export async function fetchStudents(filters: StudentFilters = {}) {
   }
 }
 
+/**
+ * What deleting this student would destroy.
+ *
+ * Every table referencing `students` cascades, so a delete is far wider than
+ * one row. The confirm dialog shows these numbers, and the revenue total in
+ * particular, so nobody removes paid order history by accident.
+ */
+export async function fetchStudentDeletionImpact(studentId: string) {
+  try {
+    await assertAdmin(["super_admin"]);
+    const supabase = await createClient();
+
+    const parsedId = studentIdSchema.safeParse(studentId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const id = parsedId.data;
+
+    const [student, enrollments, attempts, orders] = await Promise.all([
+      supabase.from("students").select("full_name, email").eq("id", id).single(),
+      supabase.from("enrollments").select("id", { count: "exact", head: true }).eq("student_id", id),
+      supabase.from("test_attempts").select("id", { count: "exact", head: true }).eq("student_id", id),
+      supabase.from("orders").select("final_amount, status").eq("student_id", id),
+    ]);
+
+    if (student.error || !student.data) {
+      return { error: "Student not found." };
+    }
+
+    const orderRows = orders.data ?? [];
+    const paidRevenue = orderRows
+      .filter((o) => o.status === "completed")
+      .reduce((sum, o) => sum + Number(o.final_amount ?? 0), 0);
+
+    return {
+      data: {
+        fullName: student.data.full_name,
+        email: student.data.email,
+        enrollmentCount: enrollments.count ?? 0,
+        testAttemptCount: attempts.count ?? 0,
+        orderCount: orderRows.length,
+        paidOrderCount: orderRows.filter((o) => o.status === "completed").length,
+        paidRevenue,
+      },
+    };
+  } catch (err) {
+    console.error("fetchStudentDeletionImpact failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+export async function deleteStudent(studentId: string) {
+  try {
+    await assertAdmin(["super_admin"]);
+    const supabase = await createClient();
+
+    const parsedId = studentIdSchema.safeParse(studentId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    // Deleting zero rows is not an error to PostgREST, and RLS refusing the
+    // delete looks exactly like success. Count the affected rows so a blocked
+    // delete cannot be reported as a completed one.
+    const { data, error } = await supabase
+      .from("students")
+      .delete()
+      .eq("id", parsedId.data)
+      .select("id");
+
+    if (error) {
+      console.error("deleteStudent failed:", error);
+      return { error: "Something went wrong. Please try again." };
+    }
+
+    if (!data || data.length === 0) {
+      return { error: "Student was not deleted. Only a super admin can remove a student." };
+    }
+
+    revalidatePath("/admin/students");
+    revalidatePath("/admin");
+    return { success: true };
+  } catch (err) {
+    console.error("deleteStudent failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
 export async function fetchStudentDetail(studentId: string) {
   try {
     await assertAdmin(["super_admin", "teacher", "support_staff"]);
@@ -144,7 +233,7 @@ export async function fetchStudentDetail(studentId: string) {
 
     const { data: student, error } = await supabase
       .from("students")
-      .select("id, user_id, full_name, email, phone, avatar_url, class, city, state, status, board, referral_code, wallet_balance, created_at, updated_at")
+      .select("id, user_id, full_name, email, phone, avatar_url, class, city, state, status, school_name, referral_code, created_at, updated_at")
       .eq("id", parsedId.data)
       .single();
 
@@ -290,8 +379,10 @@ export async function fetchStudentAnalytics() {
       const city = s.city || "Unknown";
       cityDist[city] = (cityDist[city] || 0) + 1;
 
-      const month = s.created_at.slice(0, 7);
-      monthlyGrowth[month] = (monthlyGrowth[month] || 0) + 1;
+      if (s.created_at) {
+        const month = s.created_at.slice(0, 7);
+        monthlyGrowth[month] = (monthlyGrowth[month] || 0) + 1;
+      }
     });
 
     const courseDist: Record<string, number> = {};
@@ -484,6 +575,21 @@ export async function deleteLead(id: string) {
   }
 }
 
+/**
+ * Marks a lead as converted.
+ *
+ * It deliberately does NOT create a `students` row. `students.user_id` is NOT
+ * NULL and references `auth.users`, and every student-facing RLS policy
+ * resolves access through it -- a row with no auth user behind it would be
+ * invisible to the person it describes and unreachable by the policies. An
+ * earlier version inserted without `user_id` on the assumption the column had
+ * been made nullable; it never was, so the insert failed on every call.
+ *
+ * The student record is created the moment the person registers, which is the
+ * only point at which there is an auth user to attach it to. Until there is an
+ * invite flow that provisions one, converting means "this lead signed up" and
+ * the lead is flagged so it drops out of the active pipeline.
+ */
 export async function convertLeadToStudent(leadId: string) {
   try {
     await assertAdmin(["super_admin", "support_staff"]);
@@ -496,33 +602,43 @@ export async function convertLeadToStudent(leadId: string) {
 
     const { data: lead, error: fetchError } = await supabase
       .from("leads")
-      .select("id, name, email, phone, source, status")
+      .select("id, name, email, phone, status")
       .eq("id", parsedId.data)
       .single();
 
     if (fetchError || !lead) return { error: "Lead not found" };
 
-    const { error: insertError } = await supabase.from("students").insert({
-      user_id: crypto.randomUUID(),
-      full_name: lead.name,
-      phone: lead.phone,
-      email: lead.email,
-      status: "active",
-    });
-
-    if (insertError) {
-      console.error("convertLeadToStudent failed:", insertError);
-      return { error: "Something went wrong. Please try again." };
+    // If they already registered, the student row exists and the lead is
+    // simply catching up with reality.
+    let alreadyRegistered = false;
+    if (lead.email) {
+      const { data: existing } = await supabase
+        .from("students")
+        .select("id")
+        .eq("email", lead.email)
+        .maybeSingle();
+      alreadyRegistered = !!existing;
     }
 
-    await supabase
+    const { error: updateError } = await supabase
       .from("leads")
       .update({ status: "converted", updated_at: new Date().toISOString() })
       .eq("id", parsedId.data);
 
+    if (updateError) {
+      console.error("convertLeadToStudent failed:", updateError);
+      return { error: "Something went wrong. Please try again." };
+    }
+
     revalidatePath("/admin/students/leads");
     revalidatePath("/admin/students");
-    return { success: true };
+
+    return {
+      success: true,
+      message: alreadyRegistered
+        ? "Lead marked as converted; their student account already exists."
+        : "Lead marked as converted. They will appear under Students once they register with this email.",
+    };
   } catch (err) {
     console.error("convertLeadToStudent failed:", err);
     return { error: describeFailure(err) };

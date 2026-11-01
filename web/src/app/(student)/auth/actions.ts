@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { RATE_LIMITS, describeRetryAfter, rateLimit } from "@/lib/rate-limit";
+import { SITE_URL } from "@/lib/site";
 
 interface ActionResult<T = Record<string, unknown>> {
   data?: T;
@@ -50,6 +52,17 @@ export async function registerStudent(
 
   if (!password || password.length < 8) {
     return { error: "Password must be at least 8 characters." };
+  }
+
+  const limit = await rateLimit({
+    bucket: "register",
+    key: email.toLowerCase(),
+    ...RATE_LIMITS.register,
+  });
+  if (!limit.allowed) {
+    return {
+      error: `Too many sign-up attempts from this device. Please try again ${describeRetryAfter(limit.retryAfter)}.`,
+    };
   }
 
   const supabase = await createClient();
@@ -108,6 +121,17 @@ export async function loginStudent(
     return { error: "Email and password are required." };
   }
 
+  const limit = await rateLimit({
+    bucket: "login",
+    key: email.toLowerCase(),
+    ...RATE_LIMITS.login,
+  });
+  if (!limit.allowed) {
+    return {
+      error: `Too many sign-in attempts. Please try again ${describeRetryAfter(limit.retryAfter)}.`,
+    };
+  }
+
   const supabase = await createClient();
 
   const { data: authData, error: authError } =
@@ -145,13 +169,21 @@ export async function forgotPassword(
     return { error: "Please enter a valid email address." };
   }
 
+  const limit = await rateLimit({
+    bucket: "passwordReset",
+    key: email.toLowerCase(),
+    ...RATE_LIMITS.passwordReset,
+  });
+  if (!limit.allowed) {
+    return {
+      error: `Too many password reset requests. Please try again ${describeRetryAfter(limit.retryAfter)}.`,
+    };
+  }
+
   const supabase = await createClient();
 
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl}/auth/reset-password`,
+    redirectTo: `${SITE_URL}/auth/reset-password`,
   });
 
   return { data: { sent: true } };
@@ -228,6 +260,17 @@ export async function startPhoneOtp(
     return { error: "Enter a valid 10-digit Indian mobile number." };
   }
 
+  const limit = await rateLimit({
+    bucket: "phoneOtpSend",
+    key: normalized,
+    ...RATE_LIMITS.phoneOtpSend,
+  });
+  if (!limit.allowed) {
+    return {
+      error: `Too many OTP requests for this number. Please try again ${describeRetryAfter(limit.retryAfter)}.`,
+    };
+  }
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithOtp({ phone: normalized });
 
@@ -260,6 +303,17 @@ export async function verifyPhoneOtp(
   const cleanToken = (token || "").replace(/\D/g, "");
   if (cleanToken.length < 4 || cleanToken.length > 10) {
     return { error: "Enter the OTP you received by SMS." };
+  }
+
+  const limit = await rateLimit({
+    bucket: "phoneOtpVerify",
+    key: normalized,
+    ...RATE_LIMITS.phoneOtpVerify,
+  });
+  if (!limit.allowed) {
+    return {
+      error: `Too many incorrect codes. Please try again ${describeRetryAfter(limit.retryAfter)}.`,
+    };
   }
 
   const supabase = await createClient();

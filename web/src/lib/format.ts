@@ -57,3 +57,20 @@ export function formatRelativeTime(date: string | Date, now: number = Date.now()
 
   return relativeFormatter.format(Math.round(seconds / 60), "minute");
 }
+
+/**
+ * Up to two uppercase initials for an avatar fallback.
+ *
+ * Accepts null/undefined/blank because `full_name` is nullable on both
+ * `students` and `admin_users` — a Google sign-in without a name set, or a
+ * profile saved before the name step, used to throw here and take the whole
+ * dashboard down with it.
+ */
+export function getInitials(name: string | null | undefined): string {
+  const parts = name?.trim().split(/\s+/).filter(Boolean) ?? [];
+
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}

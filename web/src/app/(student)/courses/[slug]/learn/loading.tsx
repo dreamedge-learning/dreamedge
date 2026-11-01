@@ -1,6 +1,6 @@
 export default function LearnLoading() {
   return (
-    <div className="flex h-[calc(100vh-64px)]">
+    <div className="flex h-[calc(100vh-var(--header-height))]">
       {/* Sidebar skeleton — hidden on mobile */}
       <aside className="hidden w-72 shrink-0 border-r border-border bg-card md:block">
         <div className="space-y-4 p-4">
@@ -22,7 +22,7 @@ export default function LearnLoading() {
       </aside>
 
       {/* Main content skeleton */}
-      <main className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6">
         <div className="flex items-center gap-3">
           <div className="h-5 w-5 animate-pulse rounded bg-muted" />
           <div className="h-5 w-48 animate-pulse rounded bg-muted" />
@@ -33,7 +33,7 @@ export default function LearnLoading() {
           <div className="h-4 w-full animate-pulse rounded bg-muted" />
           <div className="h-4 w-3/4 animate-pulse rounded bg-muted" />
         </div>
-      </main>
+      </div>
     </div>
   );
 }

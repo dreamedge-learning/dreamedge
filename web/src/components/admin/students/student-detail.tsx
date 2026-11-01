@@ -33,24 +33,42 @@ import {
   ShieldBan,
   ShieldCheck,
   Loader2,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
-import { fetchStudentDetail, updateStudentStatus } from "@/app/admin/(panel)/students/actions";
-
-function getInitials(name: string | null | undefined): string {
-  if (!name?.trim()) return "?";
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  deleteStudent,
+  fetchStudentDeletionImpact,
+  fetchStudentDetail,
+  updateStudentStatus,
+} from "@/app/admin/(panel)/students/actions";
+import { getInitials } from "@/lib/format";
 
 interface StudentDetailProps {
   studentId: string | null;
   onClose: () => void;
   onStatusChange: () => void;
+}
+
+interface DeletionImpact {
+  fullName: string;
+  email: string | null;
+  enrollmentCount: number;
+  testAttemptCount: number;
+  orderCount: number;
+  paidOrderCount: number;
+  paidRevenue: number;
 }
 
 const statusColors: Record<string, string> = {
@@ -60,6 +78,8 @@ const statusColors: Record<string, string> = {
 };
 
 export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDetailProps) {
+  const [impact, setImpact] = useState<DeletionImpact | null>(null);
+  const [isDeleting, startDeleteTransition] = useTransition();
   const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
   const [isFetching, startFetchTransition] = useTransition();
   const [isUpdating, startUpdateTransition] = useTransition();
@@ -107,6 +127,35 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
     });
   };
 
+  // The impact is fetched before the dialog opens, so the confirmation can
+  // state exactly what the cascade will take rather than a vague warning.
+  const openDeleteDialog = () => {
+    if (!studentId) return;
+    startDeleteTransition(async () => {
+      const result = await fetchStudentDeletionImpact(studentId);
+      if (result.error || !result.data) {
+        toast.error(result.error ?? "Could not check what deleting this would affect.");
+        return;
+      }
+      setImpact(result.data as DeletionImpact);
+    });
+  };
+
+  const handleDelete = () => {
+    if (!studentId) return;
+    startDeleteTransition(async () => {
+      const result = await deleteStudent(studentId);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setImpact(null);
+      toast.success("Student deleted.");
+      onStatusChange();
+      onClose();
+    });
+  };
+
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("en-IN", {
       day: "numeric",
@@ -137,7 +186,7 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
             <SheetHeader className="border-b border-border pb-4">
               <div className="flex items-start gap-4">
                 <div className="flex items-center justify-center w-12 h-12 rounded-full bg-brand-blue text-white text-sm font-semibold shrink-0">
-                  {getInitials(student.full_name as string)}
+                  {getInitials(student.full_name as string | null)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <SheetTitle className="text-lg">{student.full_name as string}</SheetTitle>
@@ -176,7 +225,19 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
                     Block
                   </Button>
                 )}
-                {isUpdating && <Loader2 className="h-4 w-4 animate-spin self-center" />}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 hover:text-red-700"
+                  onClick={openDeleteDialog}
+                  disabled={isUpdating || isDeleting}
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                  Delete
+                </Button>
+                {(isUpdating || isDeleting) && (
+                  <Loader2 className="h-4 w-4 animate-spin self-center" />
+                )}
               </div>
             </SheetHeader>
 
@@ -211,7 +272,7 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
                 <InfoRow icon={MapPin} label="City" value={student.city as string} />
                 <InfoRow icon={MapPin} label="State" value={student.state as string} />
                 <InfoRow icon={Calendar} label="Class" value={student.class as string} />
-                <InfoRow icon={BookOpen} label="Board" value={student.board as string} />
+                <InfoRow icon={BookOpen} label="School" value={student.school_name as string} />
                 <InfoRow icon={User} label="Referral Code" value={student.referral_code as string} />
               </TabsContent>
 
@@ -382,6 +443,57 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
           </>
         ) : null}
       </SheetContent>
+
+      <AlertDialog open={impact !== null} onOpenChange={(open) => !open && setImpact(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {impact?.fullName}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the student and everything linked to
+              them. It cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {impact && (
+            <div className="space-y-3">
+              <ul className="rounded-lg border border-border divide-y text-sm">
+                <li className="flex justify-between px-3 py-2">
+                  <span className="text-muted-foreground">Enrollments</span>
+                  <span className="font-medium">{impact.enrollmentCount}</span>
+                </li>
+                <li className="flex justify-between px-3 py-2">
+                  <span className="text-muted-foreground">Test attempts</span>
+                  <span className="font-medium">{impact.testAttemptCount}</span>
+                </li>
+                <li className="flex justify-between px-3 py-2">
+                  <span className="text-muted-foreground">Orders</span>
+                  <span className="font-medium">{impact.orderCount}</span>
+                </li>
+              </ul>
+
+              {impact.paidOrderCount > 0 && (
+                <div className="flex gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <p>
+                    {impact.paidOrderCount} paid{" "}
+                    {impact.paidOrderCount === 1 ? "order" : "orders"} worth{" "}
+                    {formatCurrency(impact.paidRevenue)} will be destroyed, and
+                    that revenue will disappear from your reports. Block the
+                    student instead if you only want to revoke their access.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete permanently"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }

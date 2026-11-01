@@ -21,7 +21,7 @@ const RAZORPAY_KEY_ID = Deno.env.get('RAZORPAY_KEY_ID')!
 const RAZORPAY_KEY_SECRET = Deno.env.get('RAZORPAY_KEY_SECRET')!
 
 const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') ??
-  'https://dreamedge.online,https://dream-edge-olive.vercel.app')
+  'https://dreamedgelearning.com,https://dream-edge-olive.vercel.app')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)

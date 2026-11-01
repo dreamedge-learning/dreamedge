@@ -80,6 +80,15 @@ export const studentStatusSchema = z.enum(["active", "inactive", "blocked"]);
 
 export const enrollmentStatusSchema = z.enum(["active", "expired", "cancelled"]);
 
+export const notificationChannelSchema = z.enum(["push", "in_app", "email", "sms"]);
+
+export const bannerPositionSchema = z.enum([
+  "home_top",
+  "home_bottom",
+  "course_page",
+  "dashboard",
+]);
+
 // --- Compile-time guards: each schema must still match the generated enum. ---
 type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 /** Exported only so the guard below is never treated as dead code. */
@@ -104,5 +113,13 @@ export const enumsMatchDatabase = {
   enrollment_status: true as Exact<
     z.infer<typeof enrollmentStatusSchema>,
     Enums["enrollment_status"]
+  >,
+  notification_channel: true as Exact<
+    z.infer<typeof notificationChannelSchema>,
+    Enums["notification_channel"]
+  >,
+  banner_position: true as Exact<
+    z.infer<typeof bannerPositionSchema>,
+    Enums["banner_position"]
   >,
 } satisfies Record<string, true>;

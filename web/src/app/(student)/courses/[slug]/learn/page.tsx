@@ -35,6 +35,20 @@ export async function generateMetadata({
 }
 
 /**
+ * Resolves what the player should request for a content item.
+ *
+ * `file_url` holds one of two things: a real URL for externally hosted media
+ * (Bunny.net), or an object path inside the private `content-files` bucket.
+ * The bucket cannot be read directly, so a path is rewritten to the route that
+ * checks entitlement and signs a short-lived URL.
+ */
+function resolveFileUrl(id: string, fileUrl: string | null): string | null {
+  if (!fileUrl) return null;
+  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+  return `/api/content/${id}/file`;
+}
+
+/**
  * Loads the published syllabus for a course: subjects -> topics ->
  * content_items, each level ordered by `weight`. Row-level security already
  * hides unpublished and unpaid-for items, so an empty result here is a real
@@ -90,7 +104,7 @@ async function fetchSyllabus(
       type: row.type as ContentItemType,
       title: row.title,
       description: row.description,
-      file_url: row.file_url,
+      file_url: resolveFileUrl(row.id, row.file_url),
       video_id: row.video_id,
       duration_seconds: row.duration_seconds,
       is_paid: row.is_paid,

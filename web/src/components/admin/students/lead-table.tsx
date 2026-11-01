@@ -148,7 +148,7 @@ export function LeadTable({ initialData }: LeadTableProps) {
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Lead converted to student");
+        toast.success(result.message ?? "Lead marked as converted");
         loadData();
       }
     });

@@ -2,6 +2,8 @@
 
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/service";
+import { SUPPORT_EMAIL } from "@/lib/site";
+import { RATE_LIMITS, describeRetryAfter, rateLimit } from "@/lib/rate-limit";
 
 const contactSchema = z.object({
   name: z.string().min(2, "Please enter your name").max(100),
@@ -44,6 +46,18 @@ export async function submitContact(formData: FormData): Promise<ContactResult> 
     return { ok: false, error: "Please fix the highlighted fields.", fieldErrors };
   }
 
+  const limit = await rateLimit({
+    bucket: "contact",
+    key: parsed.data.email.toLowerCase(),
+    ...RATE_LIMITS.contact,
+  });
+  if (!limit.allowed) {
+    return {
+      ok: false,
+      error: `You have sent several messages already. Please try again ${describeRetryAfter(limit.retryAfter)}, or email ${SUPPORT_EMAIL} directly.`,
+    };
+  }
+
   try {
     const supabase = createServiceClient();
     const { error } = await supabase.from("leads").insert({
@@ -60,7 +74,7 @@ export async function submitContact(formData: FormData): Promise<ContactResult> 
       return {
         ok: false,
         error:
-          "We couldn't record your message. Please try again, or email support@dreamedge.online.",
+          `We couldn't record your message. Please try again, or email ${SUPPORT_EMAIL}.`,
       };
     }
     return { ok: true };
@@ -69,7 +83,7 @@ export async function submitContact(formData: FormData): Promise<ContactResult> 
     return {
       ok: false,
       error:
-        "Something went wrong on our end. Please try again, or email support@dreamedge.online.",
+        `Something went wrong on our end. Please try again, or email ${SUPPORT_EMAIL}.`,
     };
   }
 }

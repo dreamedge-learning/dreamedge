@@ -80,7 +80,7 @@ export function RegisterForm() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
+    <div className="min-h-[calc(100vh-var(--header-height))] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-[480px]">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-brand-orange mb-4">

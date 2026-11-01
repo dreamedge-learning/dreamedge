@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/student/legal-page";
+import { SUPPORT_EMAIL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Refund & Cancellation Policy",
@@ -13,7 +14,7 @@ export default function RefundPolicyPage() {
       <p>
         This policy explains when and how you can cancel a Dream Edge Online
         subscription and request a refund. By completing a purchase on
-        dreamedge.online or the Dream Edge mobile app, you agree to the terms
+        dreamedgelearning.com or the Dream Edge mobile app, you agree to the terms
         on this page.
       </p>
 
@@ -60,7 +61,7 @@ export default function RefundPolicyPage() {
 
       <h2>3. How to request a refund</h2>
       <p>
-        Email <a href="mailto:support@dreamedge.online">support@dreamedge.online</a>{" "}
+        Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>{" "}
         from the email address registered on your Dream Edge account with the
         following:
       </p>
@@ -123,8 +124,8 @@ export default function RefundPolicyPage() {
       <h2>9. Contact</h2>
       <p>
         For anything related to refunds or cancellations:{" "}
-        <a href="mailto:support@dreamedge.online">
-          support@dreamedge.online
+        <a href={`mailto:${SUPPORT_EMAIL}`}>
+          {SUPPORT_EMAIL}
         </a>
         .
       </p>

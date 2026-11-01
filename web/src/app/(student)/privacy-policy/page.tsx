@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/student/legal-page";
+import { SUPPORT_EMAIL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -13,7 +14,7 @@ export default function PrivacyPolicyPage() {
       <p>
         Dream Edge Online (“Dream Edge”, “we”, “us”, “our”) is operated by
         Dream IIT Institute, Kalmeshwar, Nagpur. This Privacy Policy explains
-        what personal information we collect from users of dreamedge.online
+        what personal information we collect from users of dreamedgelearning.com
         and the Dream Edge mobile app, why we collect it, how we use it, and
         what rights you have over it. It is written to comply with India&apos;s
         Digital Personal Data Protection Act, 2023 (the &quot;DPDP Act&quot;) and the
@@ -197,8 +198,8 @@ export default function PrivacyPolicyPage() {
       <ul>
         <li>
           <strong>Email:</strong>{" "}
-          <a href="mailto:support@dreamedge.online">
-            support@dreamedge.online
+          <a href={`mailto:${SUPPORT_EMAIL}`}>
+            {SUPPORT_EMAIL}
           </a>
         </li>
         <li>

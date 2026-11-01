@@ -43,11 +43,20 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  render,
+  nativeButton,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+  // `render` swaps in another element - usually a Link, so an anchor rather
+  // than a native button. Base UI defaults nativeButton to true and warns that
+  // the non-button it ends up with loses form and accessibility semantics, so
+  // tell it the truth and let it supply role and keyboard handling instead.
+  // An explicit nativeButton from the caller still wins.
   return (
     <ButtonPrimitive
       data-slot="button"
+      render={render}
+      nativeButton={nativeButton ?? render === undefined}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

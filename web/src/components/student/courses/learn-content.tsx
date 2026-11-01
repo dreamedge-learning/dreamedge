@@ -896,13 +896,13 @@ export function LearnContent({ course, subjects }: LearnContentProps) {
   const currentDuration = formatDuration(currentItem?.duration_seconds ?? null);
 
   return (
-    <div className="flex h-[calc(100vh-64px)]">
+    <div className="flex h-[calc(100vh-var(--header-height))]">
       {/* Desktop sidebar */}
       <aside className="hidden w-80 shrink-0 overflow-y-auto border-r border-border bg-card md:block">
         {sidebar}
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         {/* Top bar */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3 sm:px-6">
           <Button
@@ -1104,7 +1104,7 @@ export function LearnContent({ course, subjects }: LearnContentProps) {
             </div>
           )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

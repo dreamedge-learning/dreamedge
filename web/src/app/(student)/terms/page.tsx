@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { LegalPage } from "@/components/student/legal-page";
+import { SUPPORT_EMAIL } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
@@ -12,7 +13,7 @@ export default function TermsPage() {
     <LegalPage title="Terms of Service" effectiveDate="22 October 2026">
       <p>
         These Terms of Service (“Terms”) govern your access to and use of
-        Dream Edge Online — the website at dreamedge.online and the Dream
+        Dream Edge Online — the website at dreamedgelearning.com and the Dream
         Edge mobile applications (collectively, the “Platform”), operated
         by Dream IIT Institute, Kalmeshwar, Nagpur. By creating an account,
         enrolling in a course, or otherwise using the Platform, you agree
@@ -94,8 +95,8 @@ export default function TermsPage() {
           rare cases the confirmation can take a few minutes — if your
           account was debited but access was not granted within an hour,
           write to{" "}
-          <a href="mailto:support@dreamedge.online">
-            support@dreamedge.online
+          <a href={`mailto:${SUPPORT_EMAIL}`}>
+            {SUPPORT_EMAIL}
           </a>{" "}
           with the Razorpay order ID.
         </li>
@@ -217,8 +218,8 @@ export default function TermsPage() {
       <h2>15. Contact</h2>
       <p>
         Questions about these Terms:{" "}
-        <a href="mailto:support@dreamedge.online">
-          support@dreamedge.online
+        <a href={`mailto:${SUPPORT_EMAIL}`}>
+          {SUPPORT_EMAIL}
         </a>
         .
       </p>

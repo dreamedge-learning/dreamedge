@@ -106,7 +106,7 @@ export function TestsContent({ attempts, upcoming }: TestsContentProps) {
   }, [attempts]);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-10 sm:px-6 md:py-12 lg:px-8">
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 md:py-12 lg:px-8">
       {/* Header */}
       <header className="mb-8">
         <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
@@ -199,7 +199,7 @@ export function TestsContent({ attempts, upcoming }: TestsContentProps) {
           )}
         </TabsContent>
       </Tabs>
-    </main>
+    </div>
   );
 }
 

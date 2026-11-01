@@ -26,6 +26,24 @@ async function fetchCourses() {
   }
 }
 
+/**
+ * A class that is live at this moment, if any. Drives the hero's live chip —
+ * which previously rendered unconditionally and so advertised a live class
+ * even when nothing was running.
+ */
+async function fetchLiveClassTitle(): Promise<string | undefined> {
+  try {
+    const supabase = await createClient();
+    // Visitors are anonymous and have no policy on live_classes; the row also
+    // carries meeting_url, so this goes through a function that returns the
+    // title and nothing else.
+    const { data } = await supabase.rpc("current_live_class_title");
+    return data ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchTestimonials() {
   try {
     const supabase = await createClient();
@@ -50,14 +68,15 @@ async function fetchTestimonials() {
 }
 
 export default async function HomePage() {
-  const [courses, testimonials] = await Promise.all([
+  const [courses, testimonials, liveClassTitle] = await Promise.all([
     fetchCourses(),
     fetchTestimonials(),
+    fetchLiveClassTitle(),
   ]);
 
   return (
     <>
-      <HeroSection />
+      <HeroSection liveClassTitle={liveClassTitle} />
       <ClassSelector />
       <PopularCourses courses={courses} />
       <MentorStrip />

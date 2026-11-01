@@ -4,12 +4,17 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Award, Play, Sparkles, Star, Users } from "lucide-react";
 
 const CHIPS = [
-  { icon: Users, label: "5,000+ students mentored" },
+  { icon: Users, label: "5,000+ mentored at Dream IIT" },
   { icon: Award, label: "IITian mentor · 8+ yrs teaching" },
   { icon: Sparkles, label: "100% concept-based" },
 ];
 
-export function HeroSection() {
+interface HeroSectionProps {
+  /** Title of a class that is live right now, if any. */
+  liveClassTitle?: string;
+}
+
+export function HeroSection({ liveClassTitle }: HeroSectionProps) {
   return (
     <section className="relative overflow-hidden bg-background">
       {/* Decorative background */}
@@ -114,11 +119,13 @@ export function HeroSection() {
               />
             </div>
 
-            {/* Floating "live class" chip */}
-            <div className="absolute -right-4 top-6 hidden rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold shadow-lg sm:block">
-              <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-red-500 align-middle" />
-              Live class in session
-            </div>
+            {/* Floating "live class" chip — only while a class is actually live */}
+            {liveClassTitle ? (
+              <div className="absolute -right-4 top-6 hidden max-w-[14rem] rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold shadow-lg sm:block">
+                <span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-red-500 align-middle" />
+                <span className="align-middle">Live now — {liveClassTitle}</span>
+              </div>
+            ) : null}
 
             {/* Floating "A+" chip */}
             <div className="absolute -left-4 bottom-6 hidden rounded-xl border border-border bg-background px-3 py-2 text-xs font-semibold shadow-lg sm:block">
@@ -132,7 +139,7 @@ export function HeroSection() {
       {/* Stats strip */}
       <div className="relative border-y border-border bg-muted/40 dark:bg-white/[0.02]">
         <div className="mx-auto grid max-w-7xl grid-cols-2 gap-y-6 px-4 py-8 sm:grid-cols-4 sm:gap-x-6 sm:px-6 lg:px-8">
-          <StatCell value="5,000+" label="students mentored" />
+          <StatCell value="5,000+" label="mentored at Dream IIT" />
           <StatCell value="8+ yrs" label="of teaching" />
           <StatCell value="100%" label="concept-based" />
           <StatCell value="24/7" label="doubt support" />

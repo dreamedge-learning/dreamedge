@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.18"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       admin_login_attempts: {
@@ -377,6 +402,7 @@ export type Database = {
       }
       courses: {
         Row: {
+          category_id: string | null
           class: string | null
           created_at: string | null
           currency: string | null
@@ -407,6 +433,7 @@ export type Database = {
           validity_days: number | null
         }
         Insert: {
+          category_id?: string | null
           class?: string | null
           created_at?: string | null
           currency?: string | null
@@ -437,6 +464,7 @@ export type Database = {
           validity_days?: number | null
         }
         Update: {
+          category_id?: string | null
           class?: string | null
           created_at?: string | null
           currency?: string | null
@@ -466,7 +494,15 @@ export type Database = {
           updated_at?: string | null
           validity_days?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "courses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "course_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       device_tokens: {
         Row: {
@@ -1042,6 +1078,27 @@ export type Database = {
           },
         ]
       }
+      rate_limit_hits: {
+        Row: {
+          bucket: string
+          created_at: string
+          id: number
+          identifier: string
+        }
+        Insert: {
+          bucket: string
+          created_at?: string
+          id?: number
+          identifier: string
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          id?: number
+          identifier?: string
+        }
+        Relationships: []
+      }
       referral_codes: {
         Row: {
           code: string
@@ -1176,18 +1233,21 @@ export type Database = {
       }
       site_settings: {
         Row: {
+          is_public: boolean
           key: string
           updated_at: string
           updated_by: string | null
           value: Json
         }
         Insert: {
+          is_public?: boolean
           key: string
           updated_at?: string
           updated_by?: string | null
           value?: Json
         }
         Update: {
+          is_public?: boolean
           key?: string
           updated_at?: string
           updated_by?: string | null
@@ -1312,6 +1372,7 @@ export type Database = {
           referred_by: string | null
           school_name: string | null
           state: string | null
+          status: Database["public"]["Enums"]["student_status"]
           updated_at: string | null
           user_id: string
         }
@@ -1330,6 +1391,7 @@ export type Database = {
           referred_by?: string | null
           school_name?: string | null
           state?: string | null
+          status?: Database["public"]["Enums"]["student_status"]
           updated_at?: string | null
           user_id: string
         }
@@ -1348,6 +1410,7 @@ export type Database = {
           referred_by?: string | null
           school_name?: string | null
           state?: string | null
+          status?: Database["public"]["Enums"]["student_status"]
           updated_at?: string | null
           user_id?: string
         }
@@ -1661,6 +1724,15 @@ export type Database = {
         Args: { p_email: string; p_ip?: string }
         Returns: Json
       }
+      check_rate_limit: {
+        Args: {
+          p_bucket: string
+          p_identifier: string
+          p_limit: number
+          p_window_seconds: number
+        }
+        Returns: Json
+      }
       complete_paid_order: {
         Args: {
           p_captured_paise: number
@@ -1670,6 +1742,7 @@ export type Database = {
         }
         Returns: Json
       }
+      current_live_class_title: { Args: never; Returns: string }
       current_student_id: { Args: never; Returns: string }
       enroll_free_course: { Args: { p_course_id: string }; Returns: Json }
       get_admin_role: {
@@ -1708,7 +1781,7 @@ export type Database = {
           weight: number
         }[]
       }
-      get_top_courses: { Args: { course_limit?: number }; Returns: Json }
+      get_top_courses: { Args: { result_limit?: number }; Returns: Json }
       has_admin_role: {
         Args: { allowed_roles: Database["public"]["Enums"]["user_role"][] }
         Returns: boolean
@@ -1719,6 +1792,7 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      prune_rate_limit_hits: { Args: never; Returns: undefined }
       record_admin_login_attempt: {
         Args: { p_email: string; p_ip?: string; p_succeeded?: boolean }
         Returns: undefined
@@ -1885,6 +1959,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       banner_position: ["home_top", "home_bottom", "course_page", "dashboard"],

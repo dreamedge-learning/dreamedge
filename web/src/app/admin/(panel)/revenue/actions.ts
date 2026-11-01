@@ -1206,8 +1206,6 @@ export async function fetchCourseRevenue(limit = 10) {
       return { data: null, error: firstIssue(parsedLimit.error) };
     }
 
-    // get_top_courses is declared in the generated types and already returns
-    // { id, name, enrollment_count, total_revenue }, so no cast is needed.
     const { data, error } = await supabase.rpc("get_top_courses", {
       result_limit: parsedLimit.data,
     });
@@ -1216,7 +1214,17 @@ export async function fetchCourseRevenue(limit = 10) {
       return { data: null, error: error.message };
     }
 
-    const rows: CourseRevenue[] = (data ?? []).map((r) => ({
+    // The function returns `json`, so the generated type is `Json` and the
+    // shape has to be asserted here. It is built by the migration alongside
+    // this call site, so the two move together.
+    const raw = (data ?? []) as unknown as Array<{
+      id: string;
+      name: string;
+      enrollment_count: number | string;
+      total_revenue: number | string;
+    }>;
+
+    const rows: CourseRevenue[] = raw.map((r) => ({
       id: r.id,
       name: r.name,
       enrollmentCount: Number(r.enrollment_count),

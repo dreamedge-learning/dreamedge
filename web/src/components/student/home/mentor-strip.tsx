@@ -49,7 +49,7 @@ export function MentorStrip() {
 
           <div className="mt-6 grid grid-cols-3 gap-4 border-y border-white/10 py-5">
             <MentorStat icon={GraduationCap} value="IIT Dhanbad" label="alumnus" />
-            <MentorStat icon={Users} value="5,000+" label="students mentored" />
+            <MentorStat icon={Users} value="5,000+" label="mentored at Dream IIT" />
             <MentorStat icon={Award} value="100% concept" label="never rote" />
           </div>
 

@@ -31,7 +31,12 @@ async function clientIp(): Promise<string | undefined> {
   }
 }
 
-export async function signIn(formData: FormData) {
+export type SignInState = { error: string } | null;
+
+export async function signIn(
+  _prevState: SignInState,
+  formData: FormData,
+): Promise<SignInState> {
   const parsed = credentialsSchema.safeParse({
     email: formData.get("email"),
     password: formData.get("password"),

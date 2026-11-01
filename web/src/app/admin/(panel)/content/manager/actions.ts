@@ -463,13 +463,12 @@ export async function uploadContentFile(
       return { error: "Something went wrong. Please try again." };
     }
 
-    const { data: urlData } = supabase.storage
-      .from("content-files")
-      .getPublicUrl(path);
-
+    // `content-files` is private. Storing the object path rather than a URL
+    // keeps the file reachable only through /api/content/[id]/file, which
+    // checks enrolment before signing.
     const { error: updateError } = await supabase
       .from("content_items")
-      .update({ file_url: urlData.publicUrl })
+      .update({ file_url: path })
       .eq("id", parsedId.data);
 
     if (updateError) {
@@ -478,7 +477,7 @@ export async function uploadContentFile(
     }
 
     revalidatePath("/admin/content/manager");
-    return { success: true, url: urlData.publicUrl };
+    return { success: true, path };
   } catch (err) {
     console.error("uploadContentFile failed:", err);
     return { error: describeFailure(err) };

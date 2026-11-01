@@ -32,6 +32,7 @@ export interface Course {
   long_description: string | null;
   thumbnail_url: string | null;
   preview_video_url: string | null;
+  category_id: string | null;
   class: string | null;
   subject: string | null;
   teacher_name: string | null;

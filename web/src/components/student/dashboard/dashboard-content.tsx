@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "./stat-card";
 import { Badge } from "@/components/ui/badge";
 import { CourseProgressCard } from "./course-progress-card";
+import { getInitials } from "@/lib/format";
 
 interface DashboardStats {
   enrolledCourses: number;
@@ -77,14 +78,6 @@ interface DashboardContentProps {
 
 function getFirstName(fullName: string): string {
   return fullName.split(" ")[0];
-}
-
-function getInitials(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return fullName.slice(0, 2).toUpperCase();
 }
 
 function formatDate(date: Date): string {

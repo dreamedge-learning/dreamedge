@@ -25,10 +25,12 @@ import {
   BarChart3,
   Target,
   Award,
+  ImageIcon,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
 import type { AdminSession } from "@/lib/admin";
 import type { UserRole } from "@/types/database";
+import { getInitials } from "@/lib/format";
 
 interface NavChild {
   label: string;
@@ -97,6 +99,10 @@ const navItems: NavItem[] = [
     href: "/admin/engage",
     icon: Bell,
     roles: ["super_admin", "support_staff"],
+    children: [
+      { label: "Notifications", href: "/admin/engage", icon: Bell },
+      { label: "Banners", href: "/admin/engage/banners", icon: ImageIcon },
+    ],
   },
   {
     label: "Settings",
@@ -105,16 +111,6 @@ const navItems: NavItem[] = [
     roles: ["super_admin", "technical"],
   },
 ];
-
-function getInitials(name: string | null | undefined): string {
-  if (!name?.trim()) return "?";
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 function roleLabel(role: string): string {
   return role

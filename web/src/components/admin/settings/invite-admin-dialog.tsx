@@ -117,7 +117,7 @@ export function InviteAdminDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-email">Email</Label>
-            <Input id="invite-email" name="email" type="email" required placeholder="admin@dreamedge.online" />
+            <Input id="invite-email" name="email" type="email" required placeholder="admin@dreamedgelearning.com" />
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-phone">Phone (optional)</Label>

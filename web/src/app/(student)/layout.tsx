@@ -10,22 +10,44 @@ export const metadata: Metadata = {
   },
 };
 
-async function getSocialLinks() {
+type SocialLinks = {
+  youtube?: string;
+  instagram?: string;
+  telegram?: string;
+};
+
+/**
+ * Social handles live in a single `social_links` jsonb row, not one row per
+ * network. Empty strings are treated as unset so the footer can fall back
+ * rather than render a dead link.
+ */
+async function getSocialLinks(): Promise<SocialLinks | undefined> {
   try {
     const supabase = await createClient();
     const { data } = await supabase
       .from("site_settings")
-      .select("key, value")
-      .in("key", ["social_youtube", "social_instagram", "social_telegram"]);
+      .select("value")
+      .eq("key", "social_links")
+      .maybeSingle();
 
-    if (!data) return undefined;
+    const links = data?.value as Record<string, unknown> | null | undefined;
+    if (!links || typeof links !== "object") return undefined;
 
-    const map = Object.fromEntries(data.map((row) => [row.key, row.value]));
-    return {
-      youtube: (map.social_youtube as string) ?? undefined,
-      instagram: (map.social_instagram as string) ?? undefined,
-      telegram: (map.social_telegram as string) ?? undefined,
+    const pick = (name: string): string | undefined => {
+      const raw = links[name];
+      if (typeof raw !== "string") return undefined;
+      const trimmed = raw.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
     };
+
+    const resolved: SocialLinks = {
+      youtube: pick("youtube"),
+      instagram: pick("instagram"),
+      telegram: pick("telegram"),
+    };
+
+    const hasAny = Object.values(resolved).some(Boolean);
+    return hasAny ? resolved : undefined;
   } catch {
     return undefined;
   }

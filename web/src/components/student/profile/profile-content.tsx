@@ -25,6 +25,7 @@ import {
   updateAvatar,
   changePassword,
 } from "@/app/(student)/dashboard/profile/actions";
+import { getInitials } from "@/lib/format";
 
 /**
  * Exactly the live `students` row — no hand-written shape to drift from the
@@ -32,14 +33,6 @@ import {
  * column; account state lives in the `status` enum.
  */
 type Student = Database["public"]["Tables"]["students"]["Row"];
-
-function getInitials(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return fullName.slice(0, 2).toUpperCase();
-}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-IN", {

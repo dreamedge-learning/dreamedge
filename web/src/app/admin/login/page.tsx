@@ -1,26 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useActionState } from "react";
 import { signIn } from "./actions";
 
 export default function AdminLoginPage() {
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    const formData = new FormData(e.currentTarget);
-    const result = await signIn(formData);
-
-    if (result?.error) {
-      setError(result.error);
-      setLoading(false);
-    }
-  }
+  // Driving the form with the server action keeps credentials in a POST body.
+  // An onSubmit handler alone falls back to a native GET before hydration,
+  // which writes the password into the URL and the browser history.
+  const [state, formAction, loading] = useActionState(signIn, null);
+  const error = state?.error ?? null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-black px-4">
@@ -33,7 +22,7 @@ export default function AdminLoginPage() {
 
         {/* Login Card */}
         <div className="rounded-xl border border-white/10 bg-brand-blue/50 p-6 backdrop-blur-sm">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form action={formAction} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
@@ -48,7 +37,7 @@ export default function AdminLoginPage() {
                 autoComplete="email"
                 required
                 className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-brand-orange focus:outline-none focus:ring-1 focus:ring-brand-orange transition-colors"
-                placeholder="admin@dreamedge.online"
+                placeholder="admin@dreamedgelearning.com"
               />
             </div>
 

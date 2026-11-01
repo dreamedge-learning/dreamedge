@@ -35,7 +35,7 @@ const PILLARS = [
 
 export default function AboutPage() {
   return (
-    <main>
+    <div>
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-border bg-gradient-to-b from-brand-orange/5 to-transparent">
         <div className="mx-auto max-w-5xl px-4 py-16 text-center sm:px-6 md:py-24 lg:px-8">
@@ -159,6 +159,6 @@ export default function AboutPage() {
           </Button>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
