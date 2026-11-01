@@ -377,20 +377,16 @@ export type Database = {
       }
       courses: {
         Row: {
-          category_id: string | null
           class: string | null
-          created_at: string
-          created_by: string | null
+          created_at: string | null
           currency: string | null
           description: string | null
           difficulty: string | null
           duration_hours: number | null
           id: string
-          is_featured: boolean
+          is_featured: boolean | null
           is_published: boolean | null
-          language: string
           long_description: string | null
-          meta: Json | null
           meta_description: string | null
           meta_title: string | null
           original_price: number | null
@@ -399,8 +395,7 @@ export type Database = {
           rating_avg: number | null
           rating_count: number | null
           slug: string
-          status: Database["public"]["Enums"]["content_status"]
-          student_count: number
+          student_count: number | null
           subject: string | null
           tags: string[] | null
           teacher_avatar_url: string | null
@@ -408,25 +403,20 @@ export type Database = {
           thumbnail_url: string | null
           title: string
           total_lessons: number | null
-          updated_at: string
-          validity_days: number
-          weight: number
+          updated_at: string | null
+          validity_days: number | null
         }
         Insert: {
-          category_id?: string | null
           class?: string | null
-          created_at?: string
-          created_by?: string | null
+          created_at?: string | null
           currency?: string | null
           description?: string | null
           difficulty?: string | null
           duration_hours?: number | null
           id?: string
-          is_featured?: boolean
+          is_featured?: boolean | null
           is_published?: boolean | null
-          language?: string
           long_description?: string | null
-          meta?: Json | null
           meta_description?: string | null
           meta_title?: string | null
           original_price?: number | null
@@ -435,8 +425,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number | null
           slug: string
-          status?: Database["public"]["Enums"]["content_status"]
-          student_count?: number
+          student_count?: number | null
           subject?: string | null
           tags?: string[] | null
           teacher_avatar_url?: string | null
@@ -444,25 +433,20 @@ export type Database = {
           thumbnail_url?: string | null
           title: string
           total_lessons?: number | null
-          updated_at?: string
-          validity_days?: number
-          weight?: number
+          updated_at?: string | null
+          validity_days?: number | null
         }
         Update: {
-          category_id?: string | null
           class?: string | null
-          created_at?: string
-          created_by?: string | null
+          created_at?: string | null
           currency?: string | null
           description?: string | null
           difficulty?: string | null
           duration_hours?: number | null
           id?: string
-          is_featured?: boolean
+          is_featured?: boolean | null
           is_published?: boolean | null
-          language?: string
           long_description?: string | null
-          meta?: Json | null
           meta_description?: string | null
           meta_title?: string | null
           original_price?: number | null
@@ -471,8 +455,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number | null
           slug?: string
-          status?: Database["public"]["Enums"]["content_status"]
-          student_count?: number
+          student_count?: number | null
           subject?: string | null
           tags?: string[] | null
           teacher_avatar_url?: string | null
@@ -480,26 +463,10 @@ export type Database = {
           thumbnail_url?: string | null
           title?: string
           total_lessons?: number | null
-          updated_at?: string
-          validity_days?: number
-          weight?: number
+          updated_at?: string | null
+          validity_days?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "courses_category_id_fkey"
-            columns: ["category_id"]
-            isOneToOne: false
-            referencedRelation: "course_categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "courses_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "admin_users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       device_tokens: {
         Row: {
@@ -531,33 +498,48 @@ export type Database = {
       enrollments: {
         Row: {
           course_id: string
-          created_at: string
+          created_at: string | null
           id: string
+          payment_amount: number | null
           payment_id: string | null
-          purchased_at: string
-          status: Database["public"]["Enums"]["enrollment_status"]
+          payment_method: string | null
+          payment_order_id: string | null
+          payment_status: string | null
+          purchased_at: string | null
+          status: string
           student_id: string
-          valid_until: string
+          updated_at: string | null
+          valid_until: string | null
         }
         Insert: {
           course_id: string
-          created_at?: string
+          created_at?: string | null
           id?: string
+          payment_amount?: number | null
           payment_id?: string | null
-          purchased_at?: string
-          status?: Database["public"]["Enums"]["enrollment_status"]
+          payment_method?: string | null
+          payment_order_id?: string | null
+          payment_status?: string | null
+          purchased_at?: string | null
+          status?: string
           student_id: string
-          valid_until: string
+          updated_at?: string | null
+          valid_until?: string | null
         }
         Update: {
           course_id?: string
-          created_at?: string
+          created_at?: string | null
           id?: string
+          payment_amount?: number | null
           payment_id?: string | null
-          purchased_at?: string
-          status?: Database["public"]["Enums"]["enrollment_status"]
+          payment_method?: string | null
+          payment_order_id?: string | null
+          payment_status?: string | null
+          purchased_at?: string | null
+          status?: string
           student_id?: string
-          valid_until?: string
+          updated_at?: string | null
+          valid_until?: string | null
         }
         Relationships: [
           {
@@ -1197,21 +1179,29 @@ export type Database = {
           key: string
           updated_at: string
           updated_by: string | null
-          value: Json | null
+          value: Json
         }
         Insert: {
           key: string
           updated_at?: string
           updated_by?: string | null
-          value?: Json | null
+          value?: Json
         }
         Update: {
           key?: string
           updated_at?: string
           updated_by?: string | null
-          value?: Json | null
+          value?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "site_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       student_notifications: {
         Row: {
@@ -1309,67 +1299,59 @@ export type Database = {
       students: {
         Row: {
           avatar_url: string | null
-          board: string | null
           city: string | null
           class: string | null
-          created_at: string
-          email: string | null
+          created_at: string | null
+          email: string
+          free_trial_expires_at: string | null
           full_name: string
           id: string
+          is_active: boolean | null
           phone: string | null
           referral_code: string | null
           referred_by: string | null
+          school_name: string | null
           state: string | null
-          status: Database["public"]["Enums"]["student_status"]
-          updated_at: string
+          updated_at: string | null
           user_id: string
-          wallet_balance: number
         }
         Insert: {
           avatar_url?: string | null
-          board?: string | null
           city?: string | null
           class?: string | null
-          created_at?: string
-          email?: string | null
+          created_at?: string | null
+          email: string
+          free_trial_expires_at?: string | null
           full_name: string
           id?: string
+          is_active?: boolean | null
           phone?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          school_name?: string | null
           state?: string | null
-          status?: Database["public"]["Enums"]["student_status"]
-          updated_at?: string
+          updated_at?: string | null
           user_id: string
-          wallet_balance?: number
         }
         Update: {
           avatar_url?: string | null
-          board?: string | null
           city?: string | null
           class?: string | null
-          created_at?: string
-          email?: string | null
+          created_at?: string | null
+          email?: string
+          free_trial_expires_at?: string | null
           full_name?: string
           id?: string
+          is_active?: boolean | null
           phone?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          school_name?: string | null
           state?: string | null
-          status?: Database["public"]["Enums"]["student_status"]
-          updated_at?: string
+          updated_at?: string | null
           user_id?: string
-          wallet_balance?: number
         }
-        Relationships: [
-          {
-            foreignKeyName: "students_referred_by_fkey"
-            columns: ["referred_by"]
-            isOneToOne: false
-            referencedRelation: "students"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       subjects: {
         Row: {
@@ -1419,7 +1401,6 @@ export type Database = {
           id: string
           percentage: number | null
           score: number | null
-          started_at: string | null
           student_id: string
           submitted_at: string
           test_id: string
@@ -1432,7 +1413,6 @@ export type Database = {
           id?: string
           percentage?: number | null
           score?: number | null
-          started_at?: string | null
           student_id: string
           submitted_at?: string
           test_id: string
@@ -1445,7 +1425,6 @@ export type Database = {
           id?: string
           percentage?: number | null
           score?: number | null
-          started_at?: string | null
           student_id?: string
           submitted_at?: string
           test_id?: string
@@ -1713,6 +1692,7 @@ export type Database = {
         Args: { end_date?: string; start_date?: string }
         Returns: Json
       }
+      get_student_id: { Args: never; Returns: string }
       get_test_questions: {
         Args: { p_test_id: string }
         Returns: {
@@ -1728,17 +1708,9 @@ export type Database = {
           weight: number
         }[]
       }
-      get_top_courses: {
-        Args: { result_limit?: number }
-        Returns: {
-          enrollment_count: number
-          id: string
-          name: string
-          total_revenue: number
-        }[]
-      }
+      get_top_courses: { Args: { course_limit?: number }; Returns: Json }
       has_admin_role: {
-        Args: { p_roles: Database["public"]["Enums"]["user_role"][] }
+        Args: { allowed_roles: Database["public"]["Enums"]["user_role"][] }
         Returns: boolean
       }
       increment_student_count: {
