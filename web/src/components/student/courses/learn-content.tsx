@@ -64,6 +64,12 @@ export interface SyllabusContentItem {
   title: string;
   description: string | null;
   file_url: string | null;
+  /**
+   * Extension of the underlying file, without the dot. A bucket-hosted file is
+   * served through /api/content/[id]/file, whose URL carries no extension, so
+   * the kind of file has to be stated rather than parsed out of `file_url`.
+   */
+  file_ext: string | null;
   video_id: string | null;
   duration_seconds: number | null;
   is_paid: boolean;
@@ -532,6 +538,17 @@ function VideoViewer({
   );
 }
 
+/**
+ * The content route redirects to a signed URL on Supabase's origin, where the
+ * `download` attribute is ignored -- the browser opens the file instead of
+ * saving it. Asking the route for an attachment makes it sign the URL with a
+ * Content-Disposition header, which the browser does honour. External URLs are
+ * someone else's to serve and are left alone.
+ */
+function downloadHref(url: string): string {
+  return url.startsWith("/api/content/") ? `${url}?download=1` : url;
+}
+
 function DocumentViewer({ item }: { item: SyllabusContentItem }) {
   const url = item.file_url?.trim();
 
@@ -547,7 +564,7 @@ function DocumentViewer({ item }: { item: SyllabusContentItem }) {
 
   // Only PDFs render reliably in a browser frame. Anything else (epub, docx)
   // gets an honest hand-off instead of a blank embed.
-  if (!/\.pdf(\?|#|$)/i.test(url)) {
+  if (item.file_ext !== "pdf") {
     return (
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start gap-3">
@@ -565,7 +582,11 @@ function DocumentViewer({ item }: { item: SyllabusContentItem }) {
               size="sm"
               className="mt-4 bg-brand-orange text-white hover:bg-brand-orange-dark"
               render={
-                <a href={url} target="_blank" rel="noopener noreferrer" />
+                <a
+                  href={downloadHref(url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
               }
             >
               Open file
@@ -974,7 +995,7 @@ export function LearnContent({ course, subjects }: LearnContentProps) {
                       size="sm"
                       render={
                         <a
-                          href={currentItem.file_url}
+                          href={downloadHref(currentItem.file_url)}
                           download
                           target="_blank"
                           rel="noopener noreferrer"

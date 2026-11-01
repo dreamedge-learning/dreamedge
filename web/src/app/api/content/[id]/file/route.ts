@@ -27,10 +27,15 @@ import { createServiceClient } from "@/lib/supabase/service";
 const SIGNED_URL_TTL_SECONDS = 60 * 10;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+
+  // The player asks for an attachment when the student used the download
+  // button. Anything else is served inline so the PDF viewer can embed it.
+  const asAttachment =
+    new URL(request.url).searchParams.get("download") === "1";
 
   const student = await getStudent();
   if (!student) {
@@ -69,12 +74,18 @@ export async function GET(
   }
 
   if (item.is_paid) {
+    // A renewal leaves a second active row for the same course, and
+    // `maybeSingle` on two rows is an error, not a row -- which would lock a
+    // paying student out. Take the longest-lived one; a null `valid_until`
+    // never expires and so sorts first.
     const { data: enrollment } = await supabase
       .from("enrollments")
       .select("id, valid_until")
       .eq("student_id", student.id)
       .eq("course_id", courseId)
       .eq("status", "active")
+      .order("valid_until", { ascending: false, nullsFirst: true })
+      .limit(1)
       .maybeSingle();
 
     const entitled =
@@ -95,7 +106,11 @@ export async function GET(
   const service = createServiceClient();
   const { data: signed, error: signError } = await service.storage
     .from("content-files")
-    .createSignedUrl(item.file_url, SIGNED_URL_TTL_SECONDS);
+    .createSignedUrl(
+      item.file_url,
+      SIGNED_URL_TTL_SECONDS,
+      asAttachment ? { download: true } : undefined
+    );
 
   if (signError || !signed?.signedUrl) {
     console.error("[content file] signing failed", signError);

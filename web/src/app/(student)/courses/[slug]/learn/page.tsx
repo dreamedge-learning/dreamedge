@@ -35,17 +35,42 @@ export async function generateMetadata({
 }
 
 /**
- * Resolves what the player should request for a content item.
+ * Last extension on a path or URL, lowercased and without the dot. Returns
+ * null for a name that carries none.
+ */
+function extensionOf(value: string): string | null {
+  const path = value.split(/[?#]/)[0];
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+
+  if (dot <= 0 || dot === name.length - 1) return null;
+  return name.slice(dot + 1).toLowerCase();
+}
+
+/**
+ * Resolves what the player should request for a content item, and what kind of
+ * file it should expect back.
  *
  * `file_url` holds one of two things: a real URL for externally hosted media
  * (Bunny.net), or an object path inside the private `content-files` bucket.
  * The bucket cannot be read directly, so a path is rewritten to the route that
  * checks entitlement and signs a short-lived URL.
+ *
+ * That rewrite costs the extension -- `/api/content/<id>/file` says nothing
+ * about what it serves -- so the extension travels separately, read off the
+ * stored value before it is rewritten. The player needs it to decide whether a
+ * document can render in a browser frame.
  */
-function resolveFileUrl(id: string, fileUrl: string | null): string | null {
-  if (!fileUrl) return null;
-  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
-  return `/api/content/${id}/file`;
+function resolveFile(
+  id: string,
+  fileUrl: string | null
+): { url: string | null; ext: string | null } {
+  if (!fileUrl) return { url: null, ext: null };
+
+  const ext = extensionOf(fileUrl);
+  if (/^https?:\/\//i.test(fileUrl)) return { url: fileUrl, ext };
+
+  return { url: `/api/content/${id}/file`, ext };
 }
 
 /**
@@ -98,22 +123,27 @@ async function fetchSyllabus(
       .order("weight", { ascending: true })
       .order("created_at", { ascending: true });
 
-    items = (itemRows ?? []).map((row) => ({
-      id: row.id,
-      topic_id: row.topic_id,
-      type: row.type as ContentItemType,
-      title: row.title,
-      description: row.description,
-      file_url: resolveFileUrl(row.id, row.file_url),
-      video_id: row.video_id,
-      duration_seconds: row.duration_seconds,
-      is_paid: row.is_paid,
-      is_downloadable: row.is_downloadable,
-      is_printable: row.is_printable,
-      play_limit: row.play_limit,
-      weight: row.weight,
-      progress: null,
-    }));
+    items = (itemRows ?? []).map((row) => {
+      const file = resolveFile(row.id, row.file_url);
+
+      return {
+        id: row.id,
+        topic_id: row.topic_id,
+        type: row.type as ContentItemType,
+        title: row.title,
+        description: row.description,
+        file_url: file.url,
+        file_ext: file.ext,
+        video_id: row.video_id,
+        duration_seconds: row.duration_seconds,
+        is_paid: row.is_paid,
+        is_downloadable: row.is_downloadable,
+        is_printable: row.is_printable,
+        play_limit: row.play_limit,
+        weight: row.weight,
+        progress: null,
+      };
+    });
   }
 
   const progressById = await fetchProgress(
