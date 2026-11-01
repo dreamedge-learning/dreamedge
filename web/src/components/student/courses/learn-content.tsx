@@ -57,19 +57,29 @@ export interface ContentProgress {
   lastPositionSeconds: number;
 }
 
+export interface ContentAttachment {
+  id: string;
+  name: string;
+  /** Lowercased, no dot. Decides whether the player can embed the file. */
+  ext: string | null;
+  sizeBytes: number;
+  /** Always our own route -- the bucket itself is unreachable. */
+  url: string;
+}
+
 export interface SyllabusContentItem {
   id: string;
   topic_id: string;
   type: ContentItemType;
   title: string;
   description: string | null;
+  /** A link to media hosted elsewhere. Our own uploads live in `files`. */
   file_url: string | null;
   /**
-   * Extension of the underlying file, without the dot. A bucket-hosted file is
-   * served through /api/content/[id]/file, whose URL carries no extension, so
-   * the kind of file has to be stated rather than parsed out of `file_url`.
+   * Everything uploaded against this item, in the order the admin arranged
+   * them. The first is what the player shows; the rest are offered below it.
    */
-  file_ext: string | null;
+  files: ContentAttachment[];
   video_id: string | null;
   duration_seconds: number | null;
   is_paid: boolean;
@@ -546,13 +556,56 @@ function VideoViewer({
  * someone else's to serve and are left alone.
  */
 function downloadHref(url: string): string {
-  return url.startsWith("/api/content/") ? `${url}?download=1` : url;
+  return url.includes("?") ? `${url}&download=1` : `${url}?download=1`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes <= 0) return "";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Everything attached to the lesson beyond the one on screen. Each opens
+ * through the content route, so entitlement is rechecked on every click.
+ */
+function AttachmentList({ files }: { files: ContentAttachment[] }) {
+  if (files.length === 0) return null;
+
+  return (
+    <div className="mt-6 border-t border-border pt-5">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Attachments
+      </h3>
+      <ul className="mt-3 space-y-2">
+        {files.map((file) => (
+          <li key={file.id}>
+            <a
+              href={downloadHref(file.url)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2.5 transition-colors hover:border-brand-orange/50 hover:bg-muted/40"
+            >
+              <FileText className="h-4 w-4 shrink-0 text-brand-orange" />
+              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                {file.name}
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                {formatFileSize(file.sizeBytes)}
+              </span>
+              <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function DocumentViewer({ item }: { item: SyllabusContentItem }) {
-  const url = item.file_url?.trim();
+  const primary = item.files[0];
 
-  if (!url) {
+  if (!primary) {
     return (
       <EmptyFrame
         icon={FileText}
@@ -564,7 +617,7 @@ function DocumentViewer({ item }: { item: SyllabusContentItem }) {
 
   // Only PDFs render reliably in a browser frame. Anything else (epub, docx)
   // gets an honest hand-off instead of a blank embed.
-  if (item.file_ext !== "pdf") {
+  if (primary.ext !== "pdf") {
     return (
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start gap-3">
@@ -573,7 +626,7 @@ function DocumentViewer({ item }: { item: SyllabusContentItem }) {
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-foreground">
-              {item.title}
+              {primary.name}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               This file opens outside the player.
@@ -583,7 +636,7 @@ function DocumentViewer({ item }: { item: SyllabusContentItem }) {
               className="mt-4 bg-brand-orange text-white hover:bg-brand-orange-dark"
               render={
                 <a
-                  href={downloadHref(url)}
+                  href={downloadHref(primary.url)}
                   target="_blank"
                   rel="noopener noreferrer"
                 />
@@ -599,7 +652,9 @@ function DocumentViewer({ item }: { item: SyllabusContentItem }) {
 
   // `#toolbar=0` asks the browser's built-in PDF viewer to hide its save and
   // print controls. It is a courtesy to the publishing rules, not real DRM.
-  const src = item.is_downloadable ? url : `${url}#toolbar=0&navpanes=0`;
+  const src = item.is_downloadable
+    ? primary.url
+    : `${primary.url}#toolbar=0&navpanes=0`;
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-muted/30">
@@ -620,9 +675,7 @@ function DocumentViewer({ item }: { item: SyllabusContentItem }) {
 }
 
 function NoteViewer({ item }: { item: SyllabusContentItem }) {
-  const url = item.file_url?.trim();
-
-  if (url) return <DocumentViewer item={item} />;
+  if (item.files.length > 0) return <DocumentViewer item={item} />;
 
   if (!item.description) {
     return (
@@ -989,13 +1042,13 @@ export function LearnContent({ course, subjects }: LearnContentProps) {
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  {currentItem.is_downloadable && currentItem.file_url && (
+                  {currentItem.is_downloadable && currentItem.files[0] && (
                     <Button
                       variant="outline"
                       size="sm"
                       render={
                         <a
-                          href={downloadHref(currentItem.file_url)}
+                          href={downloadHref(currentItem.files[0].url)}
                           download
                           target="_blank"
                           rel="noopener noreferrer"
@@ -1040,13 +1093,23 @@ export function LearnContent({ course, subjects }: LearnContentProps) {
               )}
 
               {!currentItem.is_downloadable &&
-                currentItem.file_url &&
+                currentItem.files.length > 0 &&
                 currentItem.type !== "video" && (
                   <p className="mt-3 text-xs text-muted-foreground">
                     This material is view-only
                     {currentItem.is_printable ? " but may be printed" : ""}.
                   </p>
                 )}
+
+              {/* Everything after the one the player is showing. A video
+                  lesson shows all of them, since none is embedded. */}
+              <AttachmentList
+                files={
+                  currentItem.type === "video"
+                    ? currentItem.files
+                    : currentItem.files.slice(1)
+                }
+              />
 
               {/* Prev / next */}
               <div className="mt-8 flex items-center justify-between gap-3 border-t border-border pt-5">

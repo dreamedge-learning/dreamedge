@@ -430,60 +430,6 @@ export async function reorderItems(
   }
 }
 
-// ─── Upload ───
-
-export async function uploadContentFile(
-  contentId: string,
-  formData: FormData
-) {
-  try {
-    await assertAdmin(["super_admin", "content_creator"]);
-    const supabase = await createClient();
-
-    const parsedId = uuid("Content item").safeParse(contentId);
-    if (!parsedId.success) {
-      return { error: firstIssue(parsedId.error) };
-    }
-
-    const file = formData.get("file");
-    if (!(file instanceof File) || file.size === 0) {
-      return { error: "No file provided" };
-    }
-    if (file.size > 50 * 1024 * 1024) return { error: "File must be under 50MB" };
-
-    const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-    const path = `content/${parsedId.data}/file.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("content-files")
-      .upload(path, file, { upsert: true });
-
-    if (uploadError) {
-      console.error("uploadContentFile failed:", uploadError);
-      return { error: "Something went wrong. Please try again." };
-    }
-
-    // `content-files` is private. Storing the object path rather than a URL
-    // keeps the file reachable only through /api/content/[id]/file, which
-    // checks enrolment before signing.
-    const { error: updateError } = await supabase
-      .from("content_items")
-      .update({ file_url: path })
-      .eq("id", parsedId.data);
-
-    if (updateError) {
-      console.error("uploadContentFile failed:", updateError);
-      return { error: "Something went wrong. Please try again." };
-    }
-
-    revalidatePath("/admin/content/manager");
-    return { success: true, path };
-  } catch (err) {
-    console.error("uploadContentFile failed:", err);
-    return { error: describeFailure(err) };
-  }
-}
-
 // ─── Fetch tree ───
 
 export async function fetchCourseTree(courseId: string) {

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,17 +17,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-import {
-  updateContentItem,
-  uploadContentFile,
-} from "@/app/admin/(panel)/content/manager/actions";
+import { updateContentItem } from "@/app/admin/(panel)/content/manager/actions";
+import { ContentFilesPanel } from "@/components/admin/content-manager/content-files-panel";
 import { useContentTree } from "@/stores/content-tree";
 import type { ContentItem } from "@/types/database";
 
 export function ContentItemForm({ item }: { item: ContentItem }) {
   const [isPending, startTransition] = useTransition();
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
   const updateContentInTree = useContentTree((s) => s.updateContentItem);
 
   function handleSave(e: React.FormEvent<HTMLFormElement>) {
@@ -70,27 +66,11 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
     });
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    const formData = new FormData();
-    formData.set("file", file);
-
-    const result = await uploadContentFile(item.id, formData);
-    setUploading(false);
-
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-
-    toast.success("File uploaded");
-  }
-
   const isVideo = item.type === "video";
-  const isFile = ["pdf", "note", "ebook", "pyp"].includes(item.type);
+  // Everything but a quiz can carry files. A video lesson routinely ships with
+  // the worked examples as a PDF alongside it.
+  const showFiles = item.type !== "quiz";
+  const hasReadingControls = ["pdf", "pyp", "note", "ebook"].includes(item.type);
 
   return (
     <form onSubmit={handleSave} className="space-y-5">
@@ -174,44 +154,13 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
         </div>
       )}
 
-      {/* File upload for PDF/Notes/Ebook/PYP */}
-      {isFile && (
-        <div className="space-y-4 rounded-lg border border-border p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            File
-          </p>
-          {item.file_url && (
-            <p className="text-xs text-muted-foreground truncate">
-              Current: {item.file_url.split("/").pop()}
-            </p>
-          )}
-          <div className="flex items-center gap-3">
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.epub"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={uploading}
-              onClick={() => fileRef.current?.click()}
-            >
-              {uploading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Upload className="mr-2 h-4 w-4" />
-              )}
-              {uploading ? "Uploading..." : "Upload File"}
-            </Button>
-            <p className="text-xs text-muted-foreground">Max 50MB</p>
-          </div>
+      {/* Files */}
+      {showFiles && (
+        <div className="space-y-4">
+          <ContentFilesPanel contentId={item.id} />
 
-          {(item.type === "pdf" || item.type === "pyp") && (
-            <div className="flex gap-6">
+          {hasReadingControls && (
+            <div className="flex gap-6 rounded-lg border border-border p-4">
               <div className="flex items-center gap-2">
                 <Switch
                   id="ci-downloadable"

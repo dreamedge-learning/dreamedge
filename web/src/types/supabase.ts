@@ -289,6 +289,50 @@ export type Database = {
           },
         ]
       }
+      content_files: {
+        Row: {
+          content_item_id: string
+          created_at: string
+          display_name: string
+          id: string
+          mime_type: string | null
+          size_bytes: number
+          storage_path: string
+          uploaded_by: string | null
+          weight: number
+        }
+        Insert: {
+          content_item_id: string
+          created_at?: string
+          display_name: string
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number
+          storage_path: string
+          uploaded_by?: string | null
+          weight?: number
+        }
+        Update: {
+          content_item_id?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number
+          storage_path?: string
+          uploaded_by?: string | null
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_files_content_item_id_fkey"
+            columns: ["content_item_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_items: {
         Row: {
           created_at: string

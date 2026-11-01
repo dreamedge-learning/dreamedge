@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { Course } from "@/types/course";
 import { LearnContent } from "@/components/student/courses/learn-content";
 import type {
+  ContentAttachment,
   ContentItemType,
   ContentProgress,
   SyllabusContentItem,
@@ -34,10 +35,7 @@ export async function generateMetadata({
   };
 }
 
-/**
- * Last extension on a path or URL, lowercased and without the dot. Returns
- * null for a name that carries none.
- */
+/** Last extension on a path, lowercased and without the dot. */
 function extensionOf(value: string): string | null {
   const path = value.split(/[?#]/)[0];
   const name = path.slice(path.lastIndexOf("/") + 1);
@@ -48,29 +46,44 @@ function extensionOf(value: string): string | null {
 }
 
 /**
- * Resolves what the player should request for a content item, and what kind of
- * file it should expect back.
+ * Loads every file attached to the given items, grouped by item and left in
+ * the order the admin arranged them.
  *
- * `file_url` holds one of two things: a real URL for externally hosted media
- * (Bunny.net), or an object path inside the private `content-files` bucket.
- * The bucket cannot be read directly, so a path is rewritten to the route that
- * checks entitlement and signs a short-lived URL.
- *
- * That rewrite costs the extension -- `/api/content/<id>/file` says nothing
- * about what it serves -- so the extension travels separately, read off the
- * stored value before it is rewritten. The player needs it to decide whether a
- * document can render in a browser frame.
+ * The objects live in a private bucket, so what the player gets is never a
+ * storage URL: each file is addressed through the content route, which
+ * rechecks enrolment and signs a short-lived link at the moment it is opened.
+ * The extension is read off the stored path, since the route's own URL carries
+ * none and the player needs to know what it is about to embed.
  */
-function resolveFile(
-  id: string,
-  fileUrl: string | null
-): { url: string | null; ext: string | null } {
-  if (!fileUrl) return { url: null, ext: null };
+async function fetchFiles(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  itemIds: string[]
+): Promise<Map<string, ContentAttachment[]>> {
+  const byItem = new Map<string, ContentAttachment[]>();
+  if (itemIds.length === 0) return byItem;
 
-  const ext = extensionOf(fileUrl);
-  if (/^https?:\/\//i.test(fileUrl)) return { url: fileUrl, ext };
+  const { data } = await supabase
+    .from("content_files")
+    .select("id, content_item_id, display_name, size_bytes, storage_path")
+    .in("content_item_id", itemIds)
+    .order("weight", { ascending: true })
+    .order("created_at", { ascending: true });
 
-  return { url: `/api/content/${id}/file`, ext };
+  for (const row of data ?? []) {
+    const list = byItem.get(row.content_item_id) ?? [];
+
+    list.push({
+      id: row.id,
+      name: row.display_name,
+      ext: extensionOf(row.storage_path),
+      sizeBytes: row.size_bytes,
+      url: `/api/content/${row.content_item_id}/file?f=${row.id}`,
+    });
+
+    byItem.set(row.content_item_id, list);
+  }
+
+  return byItem;
 }
 
 /**
@@ -123,17 +136,20 @@ async function fetchSyllabus(
       .order("weight", { ascending: true })
       .order("created_at", { ascending: true });
 
-    items = (itemRows ?? []).map((row) => {
-      const file = resolveFile(row.id, row.file_url);
+    const filesByItem = await fetchFiles(
+      supabase,
+      (itemRows ?? []).map((row) => row.id)
+    );
 
+    items = (itemRows ?? []).map((row) => {
       return {
         id: row.id,
         topic_id: row.topic_id,
         type: row.type as ContentItemType,
         title: row.title,
         description: row.description,
-        file_url: file.url,
-        file_ext: file.ext,
+        file_url: row.file_url,
+        files: filesByItem.get(row.id) ?? [],
         video_id: row.video_id,
         duration_seconds: row.duration_seconds,
         is_paid: row.is_paid,
