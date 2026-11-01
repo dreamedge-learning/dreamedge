@@ -134,7 +134,7 @@ export function BannerFormDialog({
                     id="b-action"
                     name="action_url"
                     type="url"
-                    placeholder="https://dreamedge.online/courses/..."
+                    placeholder="https://dreamedgelearning.com/courses/..."
                     defaultValue={editData?.action_url ?? ""}
                   />
                 </div>
