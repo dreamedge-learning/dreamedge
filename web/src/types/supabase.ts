@@ -1359,10 +1359,11 @@ export type Database = {
       students: {
         Row: {
           avatar_url: string | null
+          board: string | null
           city: string | null
           class: string | null
           created_at: string | null
-          email: string
+          email: string | null
           free_trial_expires_at: string | null
           full_name: string
           id: string
@@ -1374,14 +1375,16 @@ export type Database = {
           state: string | null
           status: Database["public"]["Enums"]["student_status"]
           updated_at: string | null
-          user_id: string
+          user_id: string | null
+          wallet_balance: number
         }
         Insert: {
           avatar_url?: string | null
+          board?: string | null
           city?: string | null
           class?: string | null
           created_at?: string | null
-          email: string
+          email?: string | null
           free_trial_expires_at?: string | null
           full_name: string
           id?: string
@@ -1393,14 +1396,16 @@ export type Database = {
           state?: string | null
           status?: Database["public"]["Enums"]["student_status"]
           updated_at?: string | null
-          user_id: string
+          user_id?: string | null
+          wallet_balance?: number
         }
         Update: {
           avatar_url?: string | null
+          board?: string | null
           city?: string | null
           class?: string | null
           created_at?: string | null
-          email?: string
+          email?: string | null
           free_trial_expires_at?: string | null
           full_name?: string
           id?: string
@@ -1412,7 +1417,8 @@ export type Database = {
           state?: string | null
           status?: Database["public"]["Enums"]["student_status"]
           updated_at?: string | null
-          user_id?: string
+          user_id?: string | null
+          wallet_balance?: number
         }
         Relationships: []
       }

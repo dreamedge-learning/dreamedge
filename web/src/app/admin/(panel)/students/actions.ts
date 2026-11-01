@@ -261,12 +261,18 @@ export async function fetchStudentDetail(studentId: string) {
         .select("*, course:courses(title)")
         .eq("student_id", parsedId.data)
         .order("created_at", { ascending: false }),
-      supabase
-        .from("audit_log")
-        .select("id, action, entity_type, entity_id, created_at")
-        .eq("user_id", student.user_id)
-        .order("created_at", { ascending: false })
-        .limit(30),
+      // user_id is NOT NULL again as of 20261101260000, but the generated
+      // types are only as current as the last regeneration -- and a row
+      // created while the constraint was briefly off would still be here.
+      // Narrowing rather than asserting keeps this correct either way.
+      student.user_id
+        ? supabase
+            .from("audit_log")
+            .select("id, action, entity_type, entity_id, created_at")
+            .eq("user_id", student.user_id)
+            .order("created_at", { ascending: false })
+            .limit(30)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     // Map course.title → course.name for component compatibility
