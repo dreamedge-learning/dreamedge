@@ -90,6 +90,17 @@ export interface ContentItem {
   status: string;
   weight: number;
   metadata: unknown;
+
+  // Where the video lives. `file_url` carries an external link and nothing
+  // else; a video we host is identified by its Bunny GUID and its playable
+  // URL is signed per request, so there is no URL worth storing here.
+  video_provider: string;
+  bunny_video_guid: string | null;
+  video_status: string;
+  video_thumbnail_url: string | null;
+  video_resolutions: string[];
+  video_size_bytes: number | null;
+  offline_license_days: number;
 }
 
 export interface Student {

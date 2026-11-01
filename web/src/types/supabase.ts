@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.18"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       admin_login_attempts: {
@@ -289,6 +264,54 @@ export type Database = {
           },
         ]
       }
+      content_downloads: {
+        Row: {
+          bytes: number
+          content_item_id: string
+          device_id: string
+          downloaded_at: string
+          id: string
+          last_verified_at: string
+          quality: string | null
+          student_id: string
+        }
+        Insert: {
+          bytes?: number
+          content_item_id: string
+          device_id: string
+          downloaded_at?: string
+          id?: string
+          last_verified_at?: string
+          quality?: string | null
+          student_id: string
+        }
+        Update: {
+          bytes?: number
+          content_item_id?: string
+          device_id?: string
+          downloaded_at?: string
+          id?: string
+          last_verified_at?: string
+          quality?: string | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_downloads_content_item_id_fkey"
+            columns: ["content_item_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_downloads_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_files: {
         Row: {
           content_item_id: string
@@ -335,6 +358,7 @@ export type Database = {
       }
       content_items: {
         Row: {
+          bunny_video_guid: string | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -345,6 +369,7 @@ export type Database = {
           is_paid: boolean
           is_printable: boolean
           metadata: Json | null
+          offline_license_days: number
           play_limit: number | null
           status: Database["public"]["Enums"]["content_status"]
           title: string
@@ -352,9 +377,15 @@ export type Database = {
           type: Database["public"]["Enums"]["content_type"]
           updated_at: string
           video_id: string | null
+          video_provider: string
+          video_resolutions: string[]
+          video_size_bytes: number | null
+          video_status: string
+          video_thumbnail_url: string | null
           weight: number
         }
         Insert: {
+          bunny_video_guid?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -365,6 +396,7 @@ export type Database = {
           is_paid?: boolean
           is_printable?: boolean
           metadata?: Json | null
+          offline_license_days?: number
           play_limit?: number | null
           status?: Database["public"]["Enums"]["content_status"]
           title: string
@@ -372,9 +404,15 @@ export type Database = {
           type: Database["public"]["Enums"]["content_type"]
           updated_at?: string
           video_id?: string | null
+          video_provider?: string
+          video_resolutions?: string[]
+          video_size_bytes?: number | null
+          video_status?: string
+          video_thumbnail_url?: string | null
           weight?: number
         }
         Update: {
+          bunny_video_guid?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -385,6 +423,7 @@ export type Database = {
           is_paid?: boolean
           is_printable?: boolean
           metadata?: Json | null
+          offline_license_days?: number
           play_limit?: number | null
           status?: Database["public"]["Enums"]["content_status"]
           title?: string
@@ -392,6 +431,11 @@ export type Database = {
           type?: Database["public"]["Enums"]["content_type"]
           updated_at?: string
           video_id?: string | null
+          video_provider?: string
+          video_resolutions?: string[]
+          video_size_bytes?: number | null
+          video_status?: string
+          video_thumbnail_url?: string | null
           weight?: number
         }
         Relationships: [
@@ -1774,6 +1818,17 @@ export type Database = {
         Args: { p_email: string; p_ip?: string }
         Returns: Json
       }
+      check_offline_entitlements: {
+        Args: { p_content_item_id?: string }
+        Returns: {
+          content_item_id: string
+          course_id: string
+          is_downloadable: boolean
+          offline_license_days: number
+          updated_at: string
+          valid_until: string
+        }[]
+      }
       check_rate_limit: {
         Args: {
           p_bucket: string
@@ -2009,9 +2064,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       banner_position: ["home_top", "home_bottom", "course_page", "dashboard"],
