@@ -13,6 +13,8 @@ import {
   ChevronDown,
   ChevronUp,
   Pencil,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { McqSingle } from "./question-types/mcq-single";
 import { McqMultiple } from "./question-types/mcq-multiple";
@@ -21,7 +23,7 @@ import { ShortAnswer } from "./question-types/short-answer";
 import { MatchPair } from "./question-types/match-pair";
 import { Subjective } from "./question-types/subjective";
 import { ImageBased } from "./question-types/image-based";
-import type { QuestionDraft } from "@/stores/test-builder";
+import { QUESTION_TEMPLATES, type QuestionDraft } from "@/stores/test-builder";
 import type { Difficulty } from "@/types/database";
 import type { Json } from "@/types/supabase";
 
@@ -34,6 +36,10 @@ interface QuestionCardProps {
   onUpdate: (updates: Partial<QuestionDraft>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 const typeColors: Record<string, string> = {
@@ -65,8 +71,13 @@ export function QuestionCard({
   onUpdate,
   onDuplicate,
   onDelete,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
 }: QuestionCardProps) {
   const [showHint, setShowHint] = useState(false);
+  const template = QUESTION_TEMPLATES[question.type];
 
   const {
     attributes,
@@ -190,14 +201,37 @@ export function QuestionCard({
       }`}
     >
       <div className="flex items-start gap-3 p-4">
-        <button
-          type="button"
-          className="mt-1 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-5 w-5" />
-        </button>
+        <div className="mt-0.5 flex flex-col items-center">
+          <button
+            type="button"
+            aria-label="Drag to reorder"
+            className="cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+          {/* Dragging is awkward on a long paper and impossible on a phone, so
+              the same move is available one step at a time. */}
+          <button
+            type="button"
+            aria-label="Move question up"
+            disabled={isFirst}
+            onClick={onMoveUp}
+            className="text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            aria-label="Move question down"
+            disabled={isLast}
+            onClick={onMoveDown}
+            className="text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-30"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+          </button>
+        </div>
 
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex items-center gap-2">
@@ -243,13 +277,20 @@ export function QuestionCard({
           </div>
 
           {isEditing ? (
-            <Textarea
-              value={question.content}
-              onChange={(e) => onUpdate({ content: e.target.value })}
-              placeholder="Enter your question..."
-              rows={2}
-              className="resize-none"
-            />
+            <div className="space-y-1.5">
+              <Textarea
+                value={question.content}
+                onChange={(e) => onUpdate({ content: e.target.value })}
+                placeholder={template?.prompt ?? "Enter your question..."}
+                rows={2}
+                className="resize-none"
+              />
+              {template && (
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  {template.guidance}
+                </p>
+              )}
+            </div>
           ) : (
             <p className="text-sm leading-relaxed">
               {question.content || (

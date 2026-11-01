@@ -34,7 +34,11 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useTestBuilder, type QuestionDraft } from "@/stores/test-builder";
+import {
+  useTestBuilder,
+  createQuestionFromTemplate,
+  type QuestionDraft,
+} from "@/stores/test-builder";
 import { useShallow } from "zustand/react/shallow";
 import { TestSettings } from "./test-settings";
 import { QuestionCard } from "./question-card";
@@ -86,47 +90,6 @@ const questionTypeCards: {
 
 function generateId() {
   return `q_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function createBlankQuestion(type: QuestionType): QuestionDraft {
-  const base: QuestionDraft = {
-    id: generateId(),
-    type,
-    content: "",
-    options: null,
-    correct_answer: null,
-    positive_marks: 1,
-    negative_marks: 0,
-    difficulty: "medium",
-    topic_tag: null,
-    image_url: null,
-    hint: null,
-    weight: 0,
-  };
-
-  switch (type) {
-    case "mcq_single":
-      return { ...base, options: { items: ["", ""], correctIndex: 0 } };
-    case "mcq_multiple":
-      return { ...base, options: { items: ["", ""], correctIndices: [] } };
-    case "true_false":
-      return { ...base, correct_answer: "true" };
-    case "short_answer":
-      return { ...base, correct_answer: "" };
-    case "match_pair":
-      return {
-        ...base,
-        options: { pairs: [{ left: "", right: "" }, { left: "", right: "" }] },
-        correct_answer: "pairs",
-      };
-    case "subjective":
-      return { ...base, correct_answer: "" };
-    case "image_based":
-      return {
-        ...base,
-        options: { subType: "mcq_single", answerData: { options: ["", ""], correctIndex: 0 } },
-      };
-  }
 }
 
 export function TestBuilder({ courses, initialTest }: TestBuilderProps) {
@@ -293,7 +256,7 @@ export function TestBuilder({ courses, initialTest }: TestBuilderProps) {
   }
 
   function handleAddQuestion(type: QuestionType) {
-    const q = createBlankQuestion(type);
+    const q = createQuestionFromTemplate(type);
     addQuestion(q);
     setEditingQuestion(q.id);
     setShowTypeSelector(false);
@@ -428,6 +391,10 @@ export function TestBuilder({ courses, initialTest }: TestBuilderProps) {
                     onUpdate={(updates) => updateQuestion(q.id, updates)}
                     onDuplicate={() => duplicateQuestion(q.id)}
                     onDelete={() => removeQuestion(q.id)}
+                    isFirst={i === 0}
+                    isLast={i === questions.length - 1}
+                    onMoveUp={() => moveQuestion(i, i - 1)}
+                    onMoveDown={() => moveQuestion(i, i + 1)}
                   />
                 ))}
               </SortableContext>
