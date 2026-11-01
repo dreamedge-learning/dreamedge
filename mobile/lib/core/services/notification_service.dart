@@ -14,6 +14,18 @@ class NotificationService {
 
   String? _pendingRoute;
 
+  /// Called when the student presses a button on a notification rather than
+  /// the notification itself.
+  ///
+  /// The download notifier registers this. The plugin is one channel to the
+  /// platform however many Dart objects wrap it, so a second `initialize()`
+  /// elsewhere would silently replace the handler installed here and take FCM
+  /// tap routing with it. Sharing the one handler is the way to avoid that.
+  void Function(String actionId, String? payload)? onAction;
+
+  /// The shared plugin, for code that needs to post its own notifications.
+  FlutterLocalNotificationsPlugin get plugin => _localNotifications;
+
   Future<void> initialize() async {
     final settings = await _messaging.requestPermission(
       alert: true,
@@ -107,6 +119,12 @@ class NotificationService {
   }
 
   void _onNotificationTapped(NotificationResponse response) {
+    final actionId = response.actionId;
+    if (actionId != null && actionId.isNotEmpty) {
+      onAction?.call(actionId, response.payload);
+      return;
+    }
+
     final route = response.payload;
     if (route != null && route.isNotEmpty) {
       _pendingRoute = route;

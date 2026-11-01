@@ -181,8 +181,14 @@ class Content {
 
   /// Only a video we host has MP4 renditions, so only it can be saved for
   /// offline use. An external video has neither renditions nor a token.
+  ///
+  /// Quizzes are excluded by both arms and deliberately so: tests are
+  /// online-only. They are scored server-side, so a downloaded one could be
+  /// re-attempted with nothing recording it. Downloaded videos and documents
+  /// are the whole of the offline surface for now.
   bool get canDownload =>
-      isDownloadable && (isReadable || (isVideo && isBunnyVideo && isVideoReady));
+      isDownloadable &&
+      (isReadable || (isVideo && isBunnyVideo && isVideoReady));
 
   int get durationMinutes => durationSeconds ~/ 60;
 

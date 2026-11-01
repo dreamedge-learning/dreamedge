@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/course_provider.dart';
+import '../../core/providers/offline_provider.dart';
+import '../downloads/widgets/offline_content_view.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
 import '../../shared/widgets/shimmer_box.dart';
@@ -47,6 +49,13 @@ class _CoursesScreenState extends ConsumerState<CoursesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // With nothing reachable there is no point drawing a screen whose every
+    // section needs the network. The downloads are what the student can
+    // actually use, so they are what is shown.
+    if (!ref.watch(isOnlineProvider)) {
+      return const OfflineContentView(insteadOf: 'Browsing courses');
+    }
+
     final courses = ref.watch(coursesProvider(_filter));
 
     return Column(

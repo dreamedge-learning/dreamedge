@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/enrollment.dart';
 import '../services/enrollment_service.dart';
+import 'offline_provider.dart';
 import 'supabase_provider.dart';
 
 final enrollmentServiceProvider = Provider<EnrollmentService>((ref) {
@@ -27,17 +28,23 @@ final currentStudentIdProvider = FutureProvider<String?>((ref) async {
   return row?['id'] as String?;
 });
 
-final myEnrollmentsProvider = FutureProvider<List<Enrollment>>((ref) async {
+/// Cached first, because entitlement has to be answerable with the radio off:
+/// a downloaded lesson the app cannot tell apart from one the student never
+/// bought would either lock content they paid for or play content they did not.
+final myEnrollmentsProvider = StreamProvider<List<Enrollment>>((ref) async* {
   final studentId = await ref.watch(currentStudentIdProvider.future);
-  if (studentId == null) return [];
-  return ref.watch(enrollmentServiceProvider).getMyEnrollments(studentId);
+  if (studentId == null) {
+    yield const [];
+    return;
+  }
+  yield* ref.watch(enrollmentRepositoryProvider).watchMine(studentId);
 });
 
-final courseEnrollmentProvider =
-    FutureProvider.family<Enrollment?, String>((ref, courseId) async {
+final courseEnrollmentProvider = FutureProvider.family<Enrollment?, String>((
+  ref,
+  courseId,
+) async {
   final studentId = await ref.watch(currentStudentIdProvider.future);
   if (studentId == null) return null;
-  return ref
-      .watch(enrollmentServiceProvider)
-      .getEnrollment(studentId, courseId);
+  return ref.watch(enrollmentRepositoryProvider).forCourse(studentId, courseId);
 });

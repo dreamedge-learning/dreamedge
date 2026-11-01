@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/offline_provider.dart';
+import 'offline_library.dart';
+
 /// A copy of one content item sitting on this device.
 class LocalCopy {
   /// Absolute path to the file, inside the app's private support directory.
@@ -12,11 +15,7 @@ class LocalCopy {
   /// nothing expires -- a free item with no enrolment behind it.
   final DateTime? licenceExpiresAt;
 
-  const LocalCopy({
-    required this.path,
-    this.quality,
-    this.licenceExpiresAt,
-  });
+  const LocalCopy({required this.path, this.quality, this.licenceExpiresAt});
 
   bool get isLicenceValid =>
       licenceExpiresAt == null || DateTime.now().isBefore(licenceExpiresAt!);
@@ -30,8 +29,9 @@ class LocalCopy {
 /// back to the local file rather than to a spinner.
 ///
 /// It is an interface because the store behind it is the offline database,
-/// which the player has no business knowing about. [EmptyLocalLibrary] is what
-/// it resolves to until downloads exist.
+/// which the player has no business knowing about. [EmptyLocalLibrary] is the
+/// answer for anything constructed without that database -- a test, or a
+/// screen rendered in isolation.
 abstract class LocalLibrary {
   /// The usable copy of [contentItemId], or null if there is none.
   ///
@@ -50,5 +50,5 @@ class EmptyLocalLibrary implements LocalLibrary {
 }
 
 final localLibraryProvider = Provider<LocalLibrary>((ref) {
-  return const EmptyLocalLibrary();
+  return OfflineLibrary(ref.watch(offlineStoreProvider));
 });

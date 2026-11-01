@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
+import '../downloads/widgets/download_button.dart';
 import 'controller/player_controller.dart';
 import 'widgets/content_info_section.dart';
 import 'widgets/player_controls.dart';
@@ -131,7 +132,18 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ContentInfoSection(content: content),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: ContentInfoSection(content: content)),
+              // Right where a student decides they want this lesson on the
+              // train tomorrow. Renders nothing when it is not downloadable.
+              Padding(
+                padding: const EdgeInsets.only(top: 18, right: 12),
+                child: DownloadButton(content: content, size: 44),
+              ),
+            ],
+          ),
           _buildLessonNav(controller),
         ],
       ),

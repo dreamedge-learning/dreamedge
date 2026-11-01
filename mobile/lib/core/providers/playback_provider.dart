@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/playback_service.dart';
 import 'content_provider.dart';
+import 'offline_provider.dart';
 import 'student_provider.dart';
 import 'supabase_provider.dart';
 
@@ -14,10 +15,7 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
 ///
 /// The player should not care whether the write reached the server or went
 /// into a queue to be sent later, so it does not: it hands the position here
-/// and this decides. Until the offline queue exists, that decision is "send
-/// it", and a failure is swallowed -- losing a position is a small annoyance,
-/// and an exception thrown out of a 15-second timer would take the player
-/// down with it.
+/// and this decides.
 abstract class ProgressWriter {
   Future<void> write({
     required String contentItemId,
@@ -26,6 +24,12 @@ abstract class ProgressWriter {
   });
 }
 
+/// Straight to the server, with failures swallowed.
+///
+/// Kept for anything constructed without the offline database -- a test, or a
+/// screen rendered in isolation. A thrown exception here would come out of a
+/// 15-second timer and take the player with it, and losing a position is a
+/// far smaller problem than that.
 class DirectProgressWriter implements ProgressWriter {
   DirectProgressWriter(this._ref);
 
@@ -41,7 +45,9 @@ class DirectProgressWriter implements ProgressWriter {
       final student = await _ref.read(currentStudentProvider.future);
       if (student == null) return;
 
-      await _ref.read(contentServiceProvider).saveProgress(
+      await _ref
+          .read(contentServiceProvider)
+          .saveProgress(
             studentId: student.id,
             contentItemId: contentItemId,
             progressPercentage: progressPercentage,
@@ -54,5 +60,5 @@ class DirectProgressWriter implements ProgressWriter {
 }
 
 final progressWriterProvider = Provider<ProgressWriter>((ref) {
-  return DirectProgressWriter(ref);
+  return ref.watch(queuedProgressWriterProvider);
 });

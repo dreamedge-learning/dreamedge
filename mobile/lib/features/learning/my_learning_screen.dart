@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers/enrollment_provider.dart';
+import '../../core/providers/offline_provider.dart';
+import '../downloads/widgets/offline_content_view.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
 import '../../shared/widgets/shimmer_box.dart';
@@ -14,6 +16,13 @@ class MyLearningScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // With nothing reachable there is no point drawing a screen whose every
+    // section needs the network. The downloads are what the student can
+    // actually use, so they are what is shown.
+    if (!ref.watch(isOnlineProvider)) {
+      return const OfflineContentView(insteadOf: 'My Learning');
+    }
+
     final enrollmentsAsync = ref.watch(myEnrollmentsProvider);
 
     return RefreshIndicator(

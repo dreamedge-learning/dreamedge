@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models/content.dart';
 import '../../../shared/theme/colors.dart';
 import '../../../shared/theme/typography.dart';
+import '../../downloads/widgets/download_button.dart';
 
 class LessonTile extends StatelessWidget {
   final Content content;
@@ -104,7 +105,11 @@ class LessonTile extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 6),
+            // Renders nothing at all unless the admin made this item
+            // available offline, so the row does not grow a button that
+            // refuses when pressed.
+            DownloadButton(content: content),
             Icon(_trailingIcon, size: 24, color: _trailingColour),
           ],
         ),

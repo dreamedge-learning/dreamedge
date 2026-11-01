@@ -62,6 +62,11 @@ class Enrollment {
       'valid_until': validUntil?.toIso8601String(),
       'payment_id': paymentId,
       'status': status,
+      'created_at': createdAt?.toIso8601String(),
+      // The embedded course goes with it. My Learning draws the card from
+      // this object, so a cached enrolment without it would come back as a
+      // row with nothing to show.
+      if (course != null) 'courses': course!.toJson(),
     };
   }
 }
