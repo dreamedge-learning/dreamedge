@@ -6,9 +6,10 @@ import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
- * Light/dark switch. `resolvedTheme` is undefined on the server, so the icon
- * is held back until after mount — rendering it early makes React complain
- * about a hydration mismatch and can flash the wrong icon.
+ * Light/dark switch. `resolvedTheme` is undefined on the server, so both the
+ * icon and the label are held back until after mount — rendering either one
+ * early makes React complain about a hydration mismatch and can flash the
+ * wrong icon.
  */
 export function ThemeToggle({ className }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
@@ -16,14 +17,20 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   useEffect(() => setMounted(true), []);
 
-  const isDark = resolvedTheme === "dark";
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <Button
       variant="ghost"
       size="icon"
       className={className}
-      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+      aria-label={
+        mounted
+          ? isDark
+            ? "Switch to light theme"
+            : "Switch to dark theme"
+          : "Toggle theme"
+      }
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
       {mounted ? (
