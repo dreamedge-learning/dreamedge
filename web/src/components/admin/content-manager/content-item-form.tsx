@@ -27,6 +27,12 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
   const [isPending, startTransition] = useTransition();
   const updateContentInTree = useContentTree((s) => s.updateContentItem);
 
+  // Saving refreshes `item` from the tree, so a Select left uncontrolled would
+  // see its defaultValue change after mount. Base UI warns about that, and the
+  // trigger can fall out of step with the row. Both selects are controlled.
+  const [type, setType] = useState<string>(item.type);
+  const [status, setStatus] = useState<string>(item.status);
+
   // The licence field only means anything while offline is on, so the switch
   // has to be state rather than an uncontrolled input.
   const [downloadable, setDownloadable] = useState(item.is_downloadable);
@@ -100,7 +106,11 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
 
         <div className="space-y-2">
           <Label>Type</Label>
-          <Select name="type" defaultValue={item.type}>
+          <Select
+            name="type"
+            value={type}
+            onValueChange={(v) => setType(v as string)}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -186,7 +196,11 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Status</Label>
-            <Select name="status" defaultValue={item.status}>
+            <Select
+              name="status"
+              value={status}
+              onValueChange={(v) => setStatus(v as string)}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
