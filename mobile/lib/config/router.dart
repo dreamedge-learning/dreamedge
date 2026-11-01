@@ -16,6 +16,7 @@ import '../features/notifications/notification_inbox_screen.dart';
 import '../features/payments/checkout_screen.dart';
 import '../features/payments/payment_history_screen.dart';
 import '../features/player/video_player_screen.dart';
+import '../features/reader/pdf_reader_screen.dart';
 import '../features/shell/app_shell.dart';
 import '../features/splash/splash_screen.dart';
 
@@ -98,6 +99,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/player/:contentId',
         builder: (context, state) => VideoPlayerScreen(
+          contentId: state.pathParameters['contentId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/reader/:contentId',
+        builder: (context, state) => PdfReaderScreen(
           contentId: state.pathParameters['contentId']!,
         ),
       ),

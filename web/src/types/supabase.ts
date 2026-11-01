@@ -1400,6 +1400,7 @@ export type Database = {
           created_at: string
           id: string
           last_position_seconds: number | null
+          play_count: number
           progress_percentage: number
           status: string
           student_id: string
@@ -1411,6 +1412,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_position_seconds?: number | null
+          play_count?: number
           progress_percentage?: number
           status?: string
           student_id: string
@@ -1422,6 +1424,7 @@ export type Database = {
           created_at?: string
           id?: string
           last_position_seconds?: number | null
+          play_count?: number
           progress_percentage?: number
           status?: string
           student_id?: string
@@ -1901,6 +1904,10 @@ export type Database = {
       record_admin_login_attempt: {
         Args: { p_email: string; p_ip?: string; p_succeeded?: boolean }
         Returns: undefined
+      }
+      register_content_play: {
+        Args: { p_content_item_id: string }
+        Returns: Json
       }
       submit_test_attempt: {
         Args: { p_answers: Json; p_started_at?: string; p_test_id: string }

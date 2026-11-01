@@ -78,11 +78,29 @@ class Content {
   final String title;
   final String? description;
 
-  /// Direct asset URL (video file, PDF, note attachment).
+  /// An external link, and nothing else. A video we host has no stored URL:
+  /// its playable address is signed per request and expires.
   final String? fileUrl;
 
   /// Provider-side id for hosted/DRM video, when the video is not a plain URL.
   final String? videoId;
+
+  /// 'none', 'bunny' (hosted on Bunny Stream) or 'external'.
+  final String videoProvider;
+
+  /// Bunny's handle for the video. The playable URL is derived from it.
+  final String? bunnyVideoGuid;
+
+  /// 'none', 'processing', 'ready' or 'failed' -- mirrors Bunny's transcode.
+  final String videoStatus;
+
+  final String? videoThumbnailUrl;
+
+  /// Resolution labels Bunny finished encoding, e.g. ['360p', '720p'].
+  final List<String> videoResolutions;
+
+  /// Days a downloaded copy keeps working before the student must reconnect.
+  final int offlineLicenseDays;
 
   final int durationSeconds;
   final bool isPaid;
@@ -103,6 +121,12 @@ class Content {
     this.description,
     this.fileUrl,
     this.videoId,
+    this.videoProvider = 'none',
+    this.bunnyVideoGuid,
+    this.videoStatus = 'none',
+    this.videoThumbnailUrl,
+    this.videoResolutions = const [],
+    this.offlineLicenseDays = 30,
     required this.durationSeconds,
     required this.isPaid,
     required this.isDownloadable,
@@ -120,7 +144,11 @@ class Content {
   /// Free preview content. The live column is `is_paid`.
   bool get isFree => !isPaid;
 
-  /// Playable URL for the video player, when the asset is a plain network URL.
+  /// The external link on the item, when there is one.
+  ///
+  /// This is never the address of a video we host. Those are served from a
+  /// token-authenticated CDN, so the URL is minted per request by
+  /// `PlaybackService` and is dead within hours -- which is the point.
   String? get videoUrl {
     final url = fileUrl;
     if (url == null || url.isEmpty) return null;
@@ -128,11 +156,33 @@ class Content {
     return url;
   }
 
-  bool get hasVideo => isVideo && videoUrl != null;
+  bool get isBunnyVideo => videoProvider == 'bunny';
+  bool get isExternalVideo => videoProvider == 'external';
 
-  /// A hosted video we have an id for but no direct URL — needs a provider SDK.
-  bool get hasHostedVideo =>
-      isVideo && videoUrl == null && (videoId?.isNotEmpty ?? false);
+  bool get isVideoReady => videoStatus == 'ready';
+  bool get isVideoProcessing => videoStatus == 'processing';
+  bool get isVideoFailed => videoStatus == 'failed';
+
+  /// Whether there is something to play right now.
+  ///
+  /// A video still transcoding is deliberately not playable: Bunny has no
+  /// playlist for it yet, and offering a play button would only produce an
+  /// error the student cannot act on.
+  bool get hasVideo =>
+      isVideo &&
+      ((isBunnyVideo && isVideoReady) || (isExternalVideo && videoUrl != null));
+
+  /// A document the reader can open. Quizzes are not one; everything else is.
+  bool get isReadable =>
+      type == ContentItemType.pdf ||
+      type == ContentItemType.note ||
+      type == ContentItemType.ebook ||
+      type == ContentItemType.pyp;
+
+  /// Only a video we host has MP4 renditions, so only it can be saved for
+  /// offline use. An external video has neither renditions nor a token.
+  bool get canDownload =>
+      isDownloadable && (isReadable || (isVideo && isBunnyVideo && isVideoReady));
 
   int get durationMinutes => durationSeconds ~/ 60;
 
@@ -164,6 +214,13 @@ class Content {
       description: json['description'] as String?,
       fileUrl: json['file_url'] as String?,
       videoId: json['video_id'] as String?,
+      videoProvider: json['video_provider'] as String? ?? 'none',
+      bunnyVideoGuid: json['bunny_video_guid'] as String?,
+      videoStatus: json['video_status'] as String? ?? 'none',
+      videoThumbnailUrl: json['video_thumbnail_url'] as String?,
+      videoResolutions: _stringList(json['video_resolutions']),
+      offlineLicenseDays:
+          (json['offline_license_days'] as num?)?.toInt() ?? 30,
       durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
       isPaid: json['is_paid'] as bool? ?? true,
       isDownloadable: json['is_downloadable'] as bool? ?? false,
@@ -184,6 +241,12 @@ class Content {
       'description': description,
       'file_url': fileUrl,
       'video_id': videoId,
+      'video_provider': videoProvider,
+      'bunny_video_guid': bunnyVideoGuid,
+      'video_status': videoStatus,
+      'video_thumbnail_url': videoThumbnailUrl,
+      'video_resolutions': videoResolutions,
+      'offline_license_days': offlineLicenseDays,
       'duration_seconds': durationSeconds,
       'is_paid': isPaid,
       'is_downloadable': isDownloadable,
@@ -231,6 +294,103 @@ class ContentProgress {
       completedAt: json['completed_at'] != null
           ? DateTime.parse(json['completed_at'] as String)
           : null,
+    );
+  }
+}
+
+/// Postgres hands a `text[]` back as a plain list; anything else is a row we
+/// do not understand and an empty ladder is safer than a half-read one.
+List<String> _stringList(Object? raw) {
+  if (raw is! List) return const [];
+  return raw.map((value) => value.toString()).toList(growable: false);
+}
+
+/// What the server hands back when asked for a playable video.
+///
+/// Comes from the `video-playback-token` Edge Function, which checks the
+/// paywall and then signs URLs that expire. Nothing here is worth storing: by
+/// the time the app is next opened these addresses are refused by the CDN.
+class PlaybackPayload {
+  /// 'bunny' or 'external'.
+  final String provider;
+
+  /// The adaptive stream. Null for a download-only payload.
+  final String? hls;
+
+  /// Per-resolution MP4 URLs, keyed by height as a string: {'480': url}.
+  ///
+  /// This is what the quality menu offers beyond Auto, and what an offline
+  /// download fetches. Empty when the Bunny library has MP4 fallback off, or
+  /// for an external video.
+  final Map<String, String> mp4;
+
+  final String? thumbnail;
+  final int? durationSeconds;
+  final bool isDownloadable;
+  final int offlineLicenseDays;
+
+  /// When the enrolment runs out, or null if it never does. The offline
+  /// licence can never outlive it.
+  final DateTime? validUntil;
+
+  /// When these URLs stop working.
+  final DateTime expiresAt;
+
+  const PlaybackPayload({
+    required this.provider,
+    this.hls,
+    this.mp4 = const {},
+    this.thumbnail,
+    this.durationSeconds,
+    required this.isDownloadable,
+    required this.offlineLicenseDays,
+    this.validUntil,
+    required this.expiresAt,
+  });
+
+  /// Resolution heights, highest first, as the quality menu lists them.
+  List<String> get qualities {
+    final heights = mp4.keys.toList()
+      ..sort((a, b) => (int.tryParse(b) ?? 0).compareTo(int.tryParse(a) ?? 0));
+    return heights;
+  }
+
+  /// Five minutes of headroom, so a payload is never handed out with just
+  /// enough life left to start a request and not finish it.
+  bool get isUsable =>
+      DateTime.now().isBefore(expiresAt.subtract(const Duration(minutes: 5)));
+
+  factory PlaybackPayload.fromJson(Map<String, dynamic> json) {
+    final rawMp4 = json['mp4'];
+    final mp4 = <String, String>{};
+    if (rawMp4 is Map) {
+      for (final entry in rawMp4.entries) {
+        final value = entry.value;
+        if (value is String && value.isNotEmpty) {
+          mp4[entry.key.toString()] = value;
+        }
+      }
+    }
+
+    final expires = json['expiresAt'] as String?;
+
+    return PlaybackPayload(
+      provider: json['provider'] as String? ?? 'none',
+      hls: json['hls'] as String?,
+      mp4: mp4,
+      thumbnail: json['thumbnail'] as String?,
+      durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
+      isDownloadable: json['isDownloadable'] as bool? ?? false,
+      offlineLicenseDays:
+          (json['offlineLicenseDays'] as num?)?.toInt() ?? 30,
+      validUntil: json['validUntil'] != null
+          ? DateTime.tryParse(json['validUntil'] as String)
+          : null,
+      // A payload with no expiry is not a licence to play forever; treat it as
+      // already spent so the next request replaces it.
+      expiresAt: expires != null
+          ? DateTime.tryParse(expires) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 }

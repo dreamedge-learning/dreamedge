@@ -81,6 +81,7 @@ void main() {
             enrollmentCount: 150,
             totalLessons: 24,
             durationMinutes: 720,
+            validityDays: 365,
             createdAt: DateTime(2026, 10, 1),
             updatedAt: DateTime(2026, 10, 1),
           );

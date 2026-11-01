@@ -10,16 +10,17 @@ void main() {
       String title = 'Introduction to Algebra',
       int durationMinutes = 45,
     }) {
+      // The live column names. `is_paid` is the stored flag and `isFree` is
+      // the getter over it, so a free lesson is one that is not paid.
       return Content.fromJson({
         'id': 'ct-001',
         'topic_id': 't-001',
+        'type': 'video',
         'title': title,
-        'duration_minutes': durationMinutes,
-        'sort_order': 1,
-        'is_free': isFree,
-        'content_type': 'video',
-        'created_at': '2025-01-01T00:00:00Z',
-        'updated_at': '2025-01-01T00:00:00Z',
+        'duration_seconds': durationMinutes * 60,
+        'weight': 1,
+        'is_paid': !isFree,
+        'status': 'published',
       });
     }
 

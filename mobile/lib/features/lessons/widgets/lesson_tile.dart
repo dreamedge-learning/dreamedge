@@ -16,6 +16,23 @@ class LessonTile extends StatelessWidget {
     required this.onTap,
   });
 
+  /// What the row promises when tapped.
+  ///
+  /// A padlock on a paid lesson, otherwise the shape of what opens: the player
+  /// for a video, the reader for a booklet. A play triangle on a past paper
+  /// was promising the wrong thing now that documents actually open.
+  IconData get _trailingIcon {
+    if (!content.isFree) return Icons.lock_outline_rounded;
+    if (content.isVideoProcessing) return Icons.hourglass_top_rounded;
+    if (content.isReadable) return Icons.menu_book_rounded;
+    return Icons.play_circle_fill_rounded;
+  }
+
+  Color get _trailingColour =>
+      content.isFree && !content.isVideoProcessing
+          ? AppColors.orange
+          : AppColors.gray;
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -88,13 +105,7 @@ class LessonTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            Icon(
-              content.isFree
-                  ? Icons.play_circle_fill_rounded
-                  : Icons.lock_outline_rounded,
-              size: 24,
-              color: content.isFree ? AppColors.orange : AppColors.gray,
-            ),
+            Icon(_trailingIcon, size: 24, color: _trailingColour),
           ],
         ),
       ),

@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { getStudent } from "@/lib/auth-student";
+import { authenticateStudent, contentEntitlement } from "@/lib/content-access";
 import {
   isBunnyConfigured,
   mp4RenditionUrls,
   signExistingUrl,
   signPlayback,
 } from "@/lib/bunny";
-import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -32,13 +31,13 @@ import { createServiceClient } from "@/lib/supabase/service";
 const PLAYBACK_TTL_SECONDS = 60 * 60 * 6;
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
 
-  const student = await getStudent();
-  if (!student) {
+  const caller = await authenticateStudent(request);
+  if (!caller) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
@@ -59,21 +58,17 @@ export async function GET(
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  const supabase = await createClient();
-  const { data: entitlements, error: entitlementError } = await supabase.rpc(
-    "check_offline_entitlements",
-    { p_content_item_id: id }
-  );
-
-  if (entitlementError) {
-    console.error("[content video] entitlement check failed", entitlementError);
+  let entitlement;
+  try {
+    entitlement = await contentEntitlement(caller, id);
+  } catch (error) {
+    console.error("[content video] entitlement check failed", error);
     return NextResponse.json(
       { error: "This video is temporarily unavailable." },
       { status: 502 }
     );
   }
 
-  const entitlement = entitlements?.[0];
   if (!entitlement) {
     return NextResponse.json(
       { error: "This content requires an active enrolment." },
@@ -91,8 +86,8 @@ export async function GET(
     mp4: {} as Record<string, string>,
     thumbnail: null as string | null,
     durationSeconds: item.duration_seconds,
-    isDownloadable: entitlement.is_downloadable,
-    offlineLicenseDays: entitlement.offline_license_days,
+    isDownloadable: entitlement.isDownloadable,
+    offlineLicenseDays: entitlement.offlineLicenseDays,
     expiresAt,
   };
 

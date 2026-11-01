@@ -1,29 +1,28 @@
 import { NextResponse } from "next/server";
 
-import { getStudent } from "@/lib/auth-student";
-import { createClient } from "@/lib/supabase/server";
+import { authenticateStudent, contentEntitlement } from "@/lib/content-access";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
  * Serves a protected content file.
  *
  * `content-files` is a private bucket, so nothing in it is reachable by URL.
- * This route is the only way in: it checks that the caller is a student with a
- * live enrolment in the course the file belongs to, then mints a signed URL
- * that expires shortly after and redirects to it.
+ * This route is the only way in: it checks that the caller is a student
+ * entitled to the item the file belongs to, then mints a signed URL that
+ * expires shortly after and redirects to it.
  *
  * Doing the check here rather than relying on bucket policy is deliberate.
  * Entitlement lives in `enrollments` -- course, status and expiry -- and
- * storage policies cannot see the content item the object belongs to without
+ * storage policies cannot see the content item an object belongs to without
  * duplicating the whole subject/topic join into a storage policy.
  *
  * An item may carry several files. `?f=<id>` picks one; without it the first
  * by weight is served, which is what the player embeds.
  *
  * The signed URL is deliberately short-lived. It can still be copied out of
- * the browser within its window, which is the normal ceiling for web-delivered
- * content; defeating a determined screen-recorder is a DRM problem and is what
- * the Mux move in Phase 2 is for.
+ * the browser within its window, which is the normal ceiling for
+ * web-delivered content; defeating a determined screen-recorder is a DRM
+ * problem and is what the Mux move in Phase 2 is for.
  */
 
 const SIGNED_URL_TTL_SECONDS = 60 * 10;
@@ -40,65 +39,47 @@ export async function GET(
   const asAttachment = url.searchParams.get("download") === "1";
   const requestedFileId = url.searchParams.get("f");
 
-  const student = await getStudent();
-  if (!student) {
+  const caller = await authenticateStudent(request);
+  if (!caller) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
-  const supabase = await createClient();
-
-  // The item, and the course it hangs off, in one hop:
-  // content_items -> topics -> subjects -> course_id
-  const { data: item } = await supabase
+  // Read the row with the service role, so that "this lesson does not exist"
+  // and "this lesson is not yours" can be told apart. Under RLS a student
+  // simply cannot see a paid item they have not bought, which would turn
+  // every paywall hit into a 404 and leave the caller unable to say why.
+  const service = createServiceClient();
+  const { data: item } = await service
     .from("content_items")
-    .select("id, file_url, is_paid, status, topics!inner(subjects!inner(course_id))")
+    .select("id, status, file_url, is_printable")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (!item || item.status !== "published") {
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  const topic = item.topics as unknown as {
-    subjects: { course_id: string } | null;
-  } | null;
-  const courseId = topic?.subjects?.course_id;
-
-  if (!courseId) {
-    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  let entitlement;
+  try {
+    entitlement = await contentEntitlement(caller, id);
+  } catch (error) {
+    console.error("[content file] entitlement check failed", error);
+    return NextResponse.json(
+      { error: "This file is temporarily unavailable." },
+      { status: 502 }
+    );
   }
 
-  if (item.is_paid) {
-    // A renewal leaves a second active row for the same course, and
-    // `maybeSingle` on two rows is an error, not a row -- which would lock a
-    // paying student out. Take the longest-lived one; a null `valid_until`
-    // never expires and so sorts first.
-    const { data: enrollment } = await supabase
-      .from("enrollments")
-      .select("id, valid_until")
-      .eq("student_id", student.id)
-      .eq("course_id", courseId)
-      .eq("status", "active")
-      .order("valid_until", { ascending: false, nullsFirst: true })
-      .limit(1)
-      .maybeSingle();
-
-    const entitled =
-      !!enrollment &&
-      (!enrollment.valid_until ||
-        new Date(enrollment.valid_until) > new Date());
-
-    if (!entitled) {
-      return NextResponse.json(
-        { error: "This content requires an active enrolment." },
-        { status: 403 }
-      );
-    }
+  if (!entitlement) {
+    return NextResponse.json(
+      { error: "This content requires an active enrolment." },
+      { status: 403 }
+    );
   }
 
   // Scoped to the item either way, so `?f=` cannot reach a file belonging to
   // another lesson.
-  let query = supabase
+  let query = service
     .from("content_files")
     .select("id, storage_path, display_name")
     .eq("content_item_id", id);
@@ -120,9 +101,6 @@ export async function GET(
     return NextResponse.json({ error: "Not found." }, { status: 404 });
   }
 
-  // Signing needs to bypass RLS on the bucket, so it runs with the service
-  // role -- after the entitlement check above, never before it.
-  const service = createServiceClient();
   const { data: signed, error: signError } = await service.storage
     .from("content-files")
     .createSignedUrl(
@@ -138,6 +116,22 @@ export async function GET(
     return NextResponse.json(
       { error: "This file is temporarily unavailable." },
       { status: 502 }
+    );
+  }
+
+  // A redirect is right for the browser, which follows it and streams the
+  // object. It is wrong for the app: Dio would follow it too, but the app
+  // needs the URL itself so a paused download can be resumed against it with
+  // a Range header. `?json=1` asks for the address instead of the content.
+  if (url.searchParams.get("json") === "1") {
+    return NextResponse.json(
+      {
+        url: signed.signedUrl,
+        fileName: file.display_name,
+        isDownloadable: entitlement.isDownloadable,
+        offlineLicenseDays: entitlement.offlineLicenseDays,
+      },
+      { headers: { "Cache-Control": "no-store, private" } }
     );
   }
 

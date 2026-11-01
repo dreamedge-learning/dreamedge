@@ -60,7 +60,7 @@ void main() {
         'created_at': '2026-10-21T10:00:00Z',
         'updated_at': '2026-10-21T10:01:00Z',
         'courses': <String, dynamic>{
-          'name': 'Maths Foundation',
+          'title': 'Maths Foundation',
           'thumbnail_url': 'https://example.com/thumb.jpg',
         },
       };

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/content.dart';
 import '../../core/providers/content_provider.dart';
+import '../reader/pdf_reader_screen.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
 import '../../shared/widgets/shimmer_box.dart';
@@ -116,14 +117,19 @@ class LessonsScreen extends ConsumerWidget {
   }
 
   void _onLessonTap(BuildContext context, Content content) {
-    if (content.hasVideo) {
-      context.push('/player/${content.id}');
+    // A video still transcoding has no playlist to play, and a quiz has no
+    // screen in the app yet. Everything else now has somewhere to go: videos
+    // to the player, documents to the reader.
+    if (content.hasVideo || content.isReadable) {
+      context.push(routeForContent(content));
       return;
     }
 
-    final message = content.isVideo
-        ? 'This video is not ready to stream yet'
-        : '${content.type.label} is not supported in the app yet';
+    final message = content.isVideoProcessing
+        ? 'This video is still being prepared'
+        : content.isVideo
+            ? 'This video is not ready to play yet'
+            : '${content.type.label} is not supported in the app yet';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

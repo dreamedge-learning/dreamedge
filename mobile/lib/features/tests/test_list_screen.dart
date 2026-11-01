@@ -108,7 +108,7 @@ class _TestListScreenState extends ConsumerState<TestListScreen>
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             itemCount: available.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, i) {
               final t = available[i];
               final count = attemptsByTest[t.id]?.length ?? 0;
@@ -151,7 +151,7 @@ class _TestListScreenState extends ConsumerState<TestListScreen>
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             itemCount: attempts.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
             itemBuilder: (context, i) {
               final a = attempts[i];
               return _AttemptCard(
@@ -266,7 +266,7 @@ class _UpcomingTestCard extends ConsumerWidget {
                               height: 14,
                               width: 80,
                               child: ShimmerBox(width: 80, height: 10)),
-                          error: (_, __) => const SizedBox.shrink(),
+                          error: (_, _) => const SizedBox.shrink(),
                         ),
                     ],
                   ),
