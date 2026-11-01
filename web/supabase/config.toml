@@ -48,3 +48,6 @@ verify_jwt = true
 
 [functions.razorpay-webhook]
 verify_jwt = false
+
+[functions.video-playback-token]
+verify_jwt = true
