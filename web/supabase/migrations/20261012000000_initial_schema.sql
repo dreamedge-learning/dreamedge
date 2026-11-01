@@ -4,7 +4,8 @@
 -- ============================================
 -- EXTENSIONS
 -- ============================================
-create extension if not exists "uuid-ossp";
+create extension if not exists "uuid-ossp" with schema extensions;
+set local search_path to public, extensions;
 
 -- ============================================
 -- ENUMS

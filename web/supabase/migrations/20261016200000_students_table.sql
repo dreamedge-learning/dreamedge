@@ -1,3 +1,6 @@
+-- Pure Option C: drop any legacy students from initial_schema before recreating with new design
+DROP TABLE IF EXISTS students CASCADE;
+
 -- Students table for student auth and profile data
 CREATE TABLE IF NOT EXISTS students (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

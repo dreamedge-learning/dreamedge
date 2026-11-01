@@ -1,3 +1,6 @@
+-- Pure Option C: drop any legacy courses from initial_schema before recreating with new design
+DROP TABLE IF EXISTS courses CASCADE;
+
 CREATE TABLE IF NOT EXISTS courses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,

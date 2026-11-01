@@ -1,3 +1,6 @@
+-- Pure Option C: drop any legacy student_progress from initial_schema before recreating with new design
+DROP TABLE IF EXISTS student_progress CASCADE;
+
 -- Lessons table
 CREATE TABLE IF NOT EXISTS lessons (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

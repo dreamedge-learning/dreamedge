@@ -1,3 +1,6 @@
+-- Pure Option C: drop any legacy enrollments from initial_schema before recreating with new design
+DROP TABLE IF EXISTS enrollments CASCADE;
+
 CREATE TABLE IF NOT EXISTS enrollments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,

@@ -7,7 +7,7 @@ create policy "courses_public_read_published"
   on public.courses
   for select
   to anon, authenticated
-  using (status = 'published');
+  using (is_published = true);
 
 -- Students can read their own student profile (the mobile app's /me lookup).
 alter table public.students enable row level security;

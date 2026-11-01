@@ -48,7 +48,7 @@ as $$
    limit 1;
 $$;
 
-create or replace function public.has_admin_role(p_roles user_role[])
+create or replace function public.has_admin_role(allowed_roles user_role[])
 returns boolean
 language sql
 security definer
@@ -61,7 +61,7 @@ as $$
       join public.roles r on r.id = au.role_id
      where au.user_id = auth.uid()
        and coalesce(au.is_active, true) = true
-       and r.name = any(p_roles)
+       and r.name = any(allowed_roles)
   );
 $$;
 

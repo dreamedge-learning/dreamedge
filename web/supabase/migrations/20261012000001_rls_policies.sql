@@ -123,7 +123,7 @@ create policy "Admins can view all courses"
 
 create policy "Content admins can manage courses"
   on courses for insert
-  using (public.has_admin_role(array['super_admin', 'content_creator']::user_role[]));
+  with check (public.has_admin_role(array['super_admin', 'content_creator']::user_role[]));
 
 create policy "Content admins can update courses"
   on courses for update
@@ -195,7 +195,7 @@ create policy "Admins can view all content"
 
 create policy "Content admins can manage content"
   on content_items for insert
-  using (public.has_admin_role(array['super_admin', 'content_creator']::user_role[]));
+  with check (public.has_admin_role(array['super_admin', 'content_creator']::user_role[]));
 
 create policy "Content admins can update content"
   on content_items for update
