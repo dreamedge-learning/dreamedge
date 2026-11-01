@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/sheet";
 import type { Course } from "@/types/course";
 import { getYouTubeId, isVideoFile } from "@/lib/video";
+import { HostedVideoPlayer } from "@/components/student/courses/hosted-video-player";
 import {
   markContentComplete,
   updateContentProgress,
@@ -75,6 +76,10 @@ export interface SyllabusContentItem {
   description: string | null;
   /** A link to media hosted elsewhere. Our own uploads live in `files`. */
   file_url: string | null;
+  /** 'none', 'bunny' (hosted by us) or 'external'. */
+  video_provider: string;
+  /** Bunny's transcode state: 'none', 'processing', 'ready' or 'failed'. */
+  video_status: string;
   /**
    * Everything uploaded against this item, in the order the admin arranged
    * them. The first is what the player shows; the rest are offered below it.
@@ -166,9 +171,13 @@ type VideoSource =
   | { kind: "none" };
 
 /**
- * Admin saves a playable URL into `file_url`; `video_id` is reserved for a
- * hosted-video provider that is not wired up yet, so it is only used as a
- * fallback when it looks like a URL or a bare YouTube id.
+ * Where a video that is not hosted by us comes from.
+ *
+ * A video on Bunny never reaches here: it has no stored URL at all, because
+ * its address is signed per request and expires. `HostedVideoPlayer` asks the
+ * API for one. This covers what is left -- a YouTube link, a direct file, an
+ * embed -- and `video_id` stays a fallback for the days before the provider
+ * column existed.
  */
 function resolveVideoSource(item: SyllabusContentItem): VideoSource {
   const url = item.file_url?.trim();
@@ -472,12 +481,41 @@ function VideoViewer({
   // who has deliberately scrubbed back.
   const seekedForRef = useRef<string | null>(null);
 
+
   const readProgress = useCallback((el: HTMLVideoElement) => {
     const duration = Number.isFinite(el.duration) ? el.duration : 0;
     const position = el.currentTime;
     const pct = duration > 0 ? (position / duration) * 100 : 0;
     return { pct, position };
   }, []);
+
+  // A video we host goes through the signed-URL player, which is also where
+  // the five-second step, the speed menu and the quality menu live. Nothing
+  // about it can be derived from the row: the row has no URL.
+  if (item.video_provider === "bunny") {
+    if (item.video_status !== "ready") {
+      return (
+        <EmptyFrame
+          icon={Clock}
+          title="This video is still being prepared"
+          body="Transcoding usually takes a few minutes. Please check back shortly."
+        />
+      );
+    }
+
+    return (
+      <HostedVideoPlayer
+        key={item.id}
+        contentItemId={item.id}
+        title={item.title}
+        startAt={startAt}
+        allowDownload={item.is_downloadable}
+        onTick={onTick}
+        onFlush={onFlush}
+        onEnded={onEnded}
+      />
+    );
+  }
 
   if (source.kind === "file") {
     return (

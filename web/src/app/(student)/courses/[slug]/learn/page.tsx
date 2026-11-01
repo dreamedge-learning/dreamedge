@@ -126,7 +126,7 @@ async function fetchSyllabus(
     const { data: itemRows } = await supabase
       .from("content_items")
       .select(
-        "id, topic_id, type, title, description, file_url, video_id, duration_seconds, is_paid, is_downloadable, is_printable, play_limit, weight"
+        "id, topic_id, type, title, description, file_url, video_id, video_provider, video_status, duration_seconds, is_paid, is_downloadable, is_printable, play_limit, weight"
       )
       .in(
         "topic_id",
@@ -151,6 +151,8 @@ async function fetchSyllabus(
         file_url: row.file_url,
         files: filesByItem.get(row.id) ?? [],
         video_id: row.video_id,
+        video_provider: row.video_provider,
+        video_status: row.video_status,
         duration_seconds: row.duration_seconds,
         is_paid: row.is_paid,
         is_downloadable: row.is_downloadable,
