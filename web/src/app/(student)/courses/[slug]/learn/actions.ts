@@ -163,7 +163,7 @@ async function writeProgress(
     { onConflict: "student_id,content_item_id" }
   );
 
-  if (error) return { error: "Failed to save your progress" };
+  if (error) { console.error("[writeProgress] upsert failed:", JSON.stringify(error)); return { error: "Failed to save your progress" }; }
 
   return {
     data: { status, progressPct: nextPct, lastPositionSeconds: position },
