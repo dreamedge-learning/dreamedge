@@ -23,6 +23,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trophy, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { TestimonialCard } from "./testimonial-card";
+import { ExportButton } from "@/components/admin/export-button";
 import { TestimonialFormDialog } from "./testimonial-form";
 import {
   fetchTestimonials,
@@ -134,7 +135,8 @@ export function TestimonialsClient({ initialData }: { initialData: Testimonial[]
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <ExportButton dataset="testimonials" size="default" />
         <Button
           className="bg-brand-orange hover:bg-brand-orange-dark text-white"
           onClick={() => {

@@ -31,6 +31,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ExportButton } from "@/components/admin/export-button";
 import { LeadFormDialog } from "./lead-form";
 import {
   fetchLeads,
@@ -203,6 +204,12 @@ export function LeadTable({ initialData }: LeadTableProps) {
               <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
+
+          <ExportButton
+            dataset="leads"
+            filters={{ search, status: statusFilter, source: sourceFilter }}
+            size="default"
+          />
 
           <Button
             className="bg-brand-orange hover:bg-brand-orange-dark text-white"

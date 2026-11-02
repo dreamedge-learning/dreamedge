@@ -23,6 +23,7 @@ import {
 } from "@/app/admin/(panel)/revenue/actions";
 import { formatINR } from "@/lib/format";
 import { ReferralCodeForm } from "./referral-code-form";
+import { ExportButton } from "@/components/admin/export-button";
 
 interface ReferralCodesTableProps {
   initialData: ReferralCodeRow[];
@@ -139,6 +140,13 @@ export function ReferralCodesTable({ initialData, initialCount }: ReferralCodesT
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
+        <ExportButton
+          dataset="referral-codes"
+          filters={{
+            active: statusFilter === "all" ? "all" : String(statusFilter === "active"),
+          }}
+          size="default"
+        />
         <Button size="sm" className="h-9" onClick={() => { setEditingCode(null); setShowForm(true); }}>
           <Plus className="mr-1.5 h-4 w-4" />
           New Code

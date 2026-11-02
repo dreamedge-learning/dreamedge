@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/lib/auth-guard";
+import { sanitizeSearch } from "@/lib/search";
+import { rangeEnd, rangeStart } from "@/lib/date-range";
 import { describeFailure, firstIssue, uuid } from "@/lib/validations/form";
 import {
   manualPaymentInput,
@@ -18,10 +20,6 @@ import {
   refundProcessSchema,
   topCoursesLimitSchema,
 } from "@/lib/validations/revenue";
-
-function sanitizeSearch(input: string): string {
-  return input.replace(/[,().%_*]/g, "");
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -215,11 +213,11 @@ export async function fetchOrders(filters: OrderFilters = {}) {
     }
 
     if (filters.dateFrom) {
-      query = query.gte("created_at", filters.dateFrom);
+      query = query.gte("created_at", rangeStart(filters.dateFrom));
     }
 
     if (filters.dateTo) {
-      query = query.lte("created_at", filters.dateTo);
+      query = query.lte("created_at", rangeEnd(filters.dateTo));
     }
 
     const { data, count, error } = await query.range(from, to);
@@ -319,63 +317,6 @@ export async function getOrderDetail(orderId: string) {
     return { data: detail, error: null };
   } catch (err) {
     console.error("getOrderDetail failed:", err);
-    return { data: null, error: describeFailure(err) };
-  }
-}
-
-export async function exportOrdersCsv(filters: OrderFilters = {}) {
-  try {
-    await assertAdmin(["super_admin", "accountant"]);
-    const supabase = await createClient();
-
-    let query = supabase
-      .from("orders")
-      .select(
-        `id, amount, discount_amount, final_amount, payment_method,
-         razorpay_payment_id, status, invoice_number, created_at,
-         student:students(full_name, phone, email),
-         course:courses(title)`
-      )
-      .order("created_at", { ascending: false });
-
-    const parsedFilters = orderFilterSchema.safeParse({
-      status: filters.status,
-      paymentMethod: filters.paymentMethod,
-      courseId: filters.courseId,
-    });
-
-    if (!parsedFilters.success) {
-      return { data: null, error: firstIssue(parsedFilters.error) };
-    }
-
-    const status = parsedFilters.data.status;
-    if (status && status !== "all") {
-      query = query.eq("status", status);
-    }
-    const paymentMethod = parsedFilters.data.paymentMethod;
-    if (paymentMethod && paymentMethod !== "all") {
-      query = query.eq("payment_method", paymentMethod);
-    }
-    const courseId = parsedFilters.data.courseId;
-    if (courseId && courseId !== "all") {
-      query = query.eq("course_id", courseId);
-    }
-    if (filters.dateFrom) {
-      query = query.gte("created_at", filters.dateFrom);
-    }
-    if (filters.dateTo) {
-      query = query.lte("created_at", filters.dateTo);
-    }
-
-    const { data, error } = await query.limit(10000);
-
-    if (error) {
-      return { data: null, error: error.message };
-    }
-
-    return { data: data ?? [], error: null };
-  } catch (err) {
-    console.error("exportOrdersCsv failed:", err);
     return { data: null, error: describeFailure(err) };
   }
 }
@@ -565,10 +506,10 @@ export async function fetchRefunds(filters: RefundFilters = {}) {
       query = query.eq("status", status);
     }
     if (filters.dateFrom) {
-      query = query.gte("created_at", filters.dateFrom);
+      query = query.gte("created_at", rangeStart(filters.dateFrom));
     }
     if (filters.dateTo) {
-      query = query.lte("created_at", filters.dateTo);
+      query = query.lte("created_at", rangeEnd(filters.dateTo));
     }
 
     const { data, count, error } = await query.range(from, to);
@@ -805,10 +746,10 @@ export async function fetchInvoices(filters: {
     }
 
     if (filters.dateFrom) {
-      query = query.gte("created_at", filters.dateFrom);
+      query = query.gte("created_at", rangeStart(filters.dateFrom));
     }
     if (filters.dateTo) {
-      query = query.lte("created_at", filters.dateTo);
+      query = query.lte("created_at", rangeEnd(filters.dateTo));
     }
 
     const { data, count, error } = await query.range(from, to);

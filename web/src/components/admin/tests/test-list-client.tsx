@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ExportButton } from "@/components/admin/export-button";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -99,13 +100,20 @@ export function TestListClient({ tests, courses }: TestListClientProps) {
             Create and manage tests for your courses
           </p>
         </div>
-        <Button
-          render={<Link href="/admin/content/tests/new" />}
-          className="bg-brand-orange hover:bg-brand-orange-dark text-white"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Create Test
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            dataset="tests"
+            filters={{ courseId: courseFilter, status: statusFilter }}
+            size="default"
+          />
+          <Button
+            render={<Link href="/admin/content/tests/new" />}
+            className="bg-brand-orange hover:bg-brand-orange-dark text-white"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Create Test
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">

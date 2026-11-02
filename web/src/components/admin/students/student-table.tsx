@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/select";
 import {
   Search,
-  Download,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -29,6 +28,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ExportButton } from "@/components/admin/export-button";
 import { StudentDetail } from "./student-detail";
 import { fetchStudents, bulkUpdateStudentStatus } from "@/app/admin/(panel)/students/actions";
 import type { StudentWithEnrollments } from "@/types/database";
@@ -88,6 +88,13 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
     },
     [search, statusFilter, cityFilter, courseFilter, page]
   );
+
+  const exportFilters = {
+    search,
+    status: statusFilter,
+    city: cityFilter,
+    courseId: courseFilter,
+  };
 
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -159,67 +166,6 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
     });
   };
 
-  const handleExportCsv = async () => {
-    function escapeCSV(value: unknown): string {
-      if (value == null) return "";
-      let str = String(value);
-      if (/^[=+\-@\t\r]/.test(str)) {
-        str = `'${str}`;
-      }
-      if (/[",\n\r]/.test(str)) {
-        str = `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    }
-
-    try {
-      const result = await fetchStudents({
-        search,
-        status: statusFilter,
-        city: cityFilter,
-        courseId: courseFilter === "all" ? undefined : courseFilter,
-        page: 1,
-        pageSize: 10000,
-      });
-
-      if (result.error || !result.data) {
-        toast.error("Failed to export data");
-        return;
-      }
-
-      const allStudents = result.data as unknown as StudentWithEnrollments[];
-      const rows = selectedRows.size > 0
-        ? allStudents.filter((s) => selectedRows.has(s.id))
-        : allStudents;
-
-      const headers = ["Name", "Phone", "Email", "City", "Status", "Enrolled Courses", "Joined"];
-      const csvRows = rows.map((s) =>
-        [
-          escapeCSV(s.full_name),
-          escapeCSV(s.phone),
-          escapeCSV(s.email),
-          escapeCSV(s.city),
-          escapeCSV(s.status),
-          escapeCSV(s.enrollment_count),
-          escapeCSV(s.created_at ? new Date(s.created_at).toLocaleDateString("en-IN") : ""),
-        ].join(",")
-      );
-
-      const csv = [headers.join(","), ...csvRows].join("\n");
-      const BOM = "﻿";
-      const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `students-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-      toast.success("CSV exported");
-    } catch {
-      toast.error("Failed to export data");
-    }
-  };
-
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("en-IN", {
       day: "numeric",
@@ -250,10 +196,12 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
             <Filter className="h-4 w-4 mr-1.5" />
             Filters
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCsv} aria-label="Export students as CSV">
-            <Download className="h-4 w-4 mr-1.5" />
-            Export CSV
-          </Button>
+          <ExportButton dataset="students" filters={exportFilters} />
+          <ExportButton
+            dataset="students-full"
+            filters={exportFilters}
+            label="Full export"
+          />
         </div>
       </div>
 

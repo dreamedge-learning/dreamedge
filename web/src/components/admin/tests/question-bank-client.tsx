@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { ExportButton } from "@/components/admin/export-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -157,13 +158,20 @@ export function QuestionBankClient({ questions }: QuestionBankClientProps) {
             Central repository of reusable questions
           </p>
         </div>
-        <Button
-          onClick={openCreate}
-          className="bg-brand-orange hover:bg-brand-orange-dark text-white"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Question
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportButton
+            dataset="question-bank"
+            filters={{ search, type: typeFilter, difficulty: diffFilter }}
+            size="default"
+          />
+          <Button
+            onClick={openCreate}
+            className="bg-brand-orange hover:bg-brand-orange-dark text-white"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Question
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">

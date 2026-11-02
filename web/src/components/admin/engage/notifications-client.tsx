@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ExportButton } from "@/components/admin/export-button";
 import { NotificationFormDialog } from "./notification-form";
 import { deleteNotification } from "@/app/admin/(panel)/engage/actions";
 
@@ -100,13 +101,16 @@ export function NotificationsClient({
             Send announcements to every student, one course, or one person.
           </p>
         </div>
-        <Button
-          onClick={() => setFormOpen(true)}
-          className="bg-brand-orange hover:bg-brand-orange-dark text-white"
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          New Notification
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportButton dataset="notifications" label="Export send log" size="default" />
+          <Button
+            onClick={() => setFormOpen(true)}
+            className="bg-brand-orange hover:bg-brand-orange-dark text-white"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            New Notification
+          </Button>
+        </div>
       </div>
 
       {items.length === 0 ? (

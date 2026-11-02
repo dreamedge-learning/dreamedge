@@ -4,11 +4,9 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { assertAdmin } from "@/lib/auth-guard";
+import { sanitizeSearch } from "@/lib/search";
+import { rangeEnd, rangeStart } from "@/lib/date-range";
 import type { Json } from "@/types/supabase";
-
-function sanitizeSearch(input: string): string {
-  return input.replace(/[,().%_*]/g, "");
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -513,11 +511,11 @@ export async function getAuditLog(filters: {
     }
 
     if (filters.dateFrom) {
-      query = query.gte("created_at", filters.dateFrom);
+      query = query.gte("created_at", rangeStart(filters.dateFrom));
     }
 
     if (filters.dateTo) {
-      query = query.lte("created_at", `${filters.dateTo}T23:59:59`);
+      query = query.lte("created_at", rangeEnd(filters.dateTo));
     }
 
     if (filters.userId && filters.userId !== "all") {
@@ -546,61 +544,6 @@ export async function getAuditLog(filters: {
     return { data: rows, count: count ?? 0, error: null };
   } catch {
     return { data: null, count: 0, error: "You don't have permission to perform this action." };
-  }
-}
-
-export async function exportAuditLog(filters: {
-  search?: string;
-  entityType?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  userId?: string;
-} = {}) {
-  try {
-    await assertAdmin(["super_admin", "technical"]);
-    const supabase = await createClient();
-
-    let query = supabase
-      .from("audit_log")
-      .select(
-        "id, user_id, action, entity_type, entity_id, ip_address, created_at"
-      )
-      .order("created_at", { ascending: false });
-
-    if (filters.search) {
-      const safe = sanitizeSearch(filters.search);
-      if (safe) {
-        query = query.or(
-          `action.ilike.%${safe}%,entity_type.ilike.%${safe}%,entity_id.ilike.%${safe}%`
-        );
-      }
-    }
-
-    if (filters.entityType && filters.entityType !== "all") {
-      query = query.eq("entity_type", filters.entityType);
-    }
-
-    if (filters.dateFrom) {
-      query = query.gte("created_at", filters.dateFrom);
-    }
-
-    if (filters.dateTo) {
-      query = query.lte("created_at", `${filters.dateTo}T23:59:59`);
-    }
-
-    if (filters.userId && filters.userId !== "all") {
-      query = query.eq("user_id", filters.userId);
-    }
-
-    const { data, error } = await query.limit(10000);
-
-    if (error) {
-      return { data: null, error: error.message };
-    }
-
-    return { data: data ?? [], error: null };
-  } catch {
-    return { data: null, error: "You don't have permission to perform this action." };
   }
 }
 

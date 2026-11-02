@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { ExportButton } from "@/components/admin/export-button";
 import { DateRangeFilter } from "./date-range-filter";
 import { RevenueStatsCards, RevenueStatsCardsSkeleton } from "./revenue-stats-cards";
 import {
@@ -87,13 +88,21 @@ export function AnalyticsTab() {
 
   return (
     <div className="space-y-6">
-      <DateRangeFilter
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onDateFromChange={setDateFrom}
-        onDateToChange={setDateTo}
-        presets
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <DateRangeFilter
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onDateFromChange={setDateFrom}
+          onDateToChange={setDateTo}
+          presets
+        />
+        <ExportButton
+          dataset="revenue-analytics"
+          filters={{ dateFrom, dateTo }}
+          label="Download this view"
+          size="default"
+        />
+      </div>
 
       {isPending || !stats ? (
         <>

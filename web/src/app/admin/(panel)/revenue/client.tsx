@@ -5,6 +5,7 @@ import {
   BarChart3, ShoppingCart, HandCoins, RotateCcw,
   FileText, Ticket,
 } from "lucide-react";
+import { ExportButton } from "@/components/admin/export-button";
 import { AnalyticsTab } from "@/components/admin/revenue/analytics-tab";
 import { OrdersTable } from "@/components/admin/revenue/orders-table";
 import { ManualPaymentForm } from "@/components/admin/revenue/manual-payment-form";
@@ -90,7 +91,19 @@ export function RevenuePageClient({
           />
         </TabsContent>
 
-        <TabsContent value="manual" className="mt-6">
+        <TabsContent value="manual" className="mt-6 space-y-4">
+          {/* The tab is a form, so the export covers what has already been
+              recorded by hand — the cash book, in other words. */}
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Record a payment collected at the centre.
+            </p>
+            <ExportButton
+              dataset="manual-payments"
+              label="Export recorded payments"
+              size="default"
+            />
+          </div>
           <ManualPaymentForm />
         </TabsContent>
 

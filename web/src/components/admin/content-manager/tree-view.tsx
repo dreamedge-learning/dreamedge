@@ -42,6 +42,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { ExportButton } from "@/components/admin/export-button";
 import { TreeNodeRow } from "./tree-node";
 import { useContentTree, type NodeKind, type TreeNode } from "@/stores/content-tree";
 import { useShallow } from "zustand/react/shallow";
@@ -433,6 +434,19 @@ export function TreeView({ courses }: TreeViewProps) {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* The tree is a shape nobody can filter in a spreadsheet, so the
+                export flattens it: one row per content item, carrying the
+                course / subject / topic path it sits under. */}
+            <ExportButton
+              dataset="content-items"
+              label="Export this course"
+              filters={{
+                courseId: store.courseId,
+                type: store.typeFilter,
+                status: store.statusFilter,
+              }}
+            />
           </>
         )}
       </div>

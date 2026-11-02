@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/lib/auth-guard";
+import { sanitizeSearch } from "@/lib/search";
+import { rangeEnd, rangeStart } from "@/lib/date-range";
 import { describeFailure, firstIssue } from "@/lib/validations/form";
 import {
   bulkStudentStatusUpdateSchema,
@@ -19,10 +21,6 @@ import {
   testimonialOrderSchema,
   testimonialSchema,
 } from "@/lib/validations/student";
-
-function sanitizeSearch(input: string): string {
-  return input.replace(/[,().%_*]/g, "");
-}
 
 interface StudentFilters {
   search?: string;
@@ -82,11 +80,11 @@ export async function fetchStudents(filters: StudentFilters = {}) {
     }
 
     if (filters.dateFrom) {
-      query = query.gte("created_at", filters.dateFrom);
+      query = query.gte("created_at", rangeStart(filters.dateFrom));
     }
 
     if (filters.dateTo) {
-      query = query.lte("created_at", filters.dateTo);
+      query = query.lte("created_at", rangeEnd(filters.dateTo));
     }
 
     const courseFilter = parsedFilters.data.courseId;

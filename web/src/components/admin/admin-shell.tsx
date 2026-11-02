@@ -28,6 +28,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
+import { AdminRoleProvider } from "@/components/admin/admin-role-context";
 import type { AdminSession } from "@/lib/admin";
 import type { UserRole } from "@/types/database";
 import { getInitials } from "@/lib/format";
@@ -286,7 +287,9 @@ export function AdminShell({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+          <AdminRoleProvider role={admin.role_name}>{children}</AdminRoleProvider>
+        </main>
       </div>
     </div>
   );

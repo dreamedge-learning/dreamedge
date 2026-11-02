@@ -27,6 +27,7 @@ import {
   getAdminTeam, toggleAdminActive, deleteAdmin,
 } from "@/app/admin/(panel)/settings/actions";
 import type { AdminTeamRow, RoleRow } from "@/app/admin/(panel)/settings/actions";
+import { ExportButton } from "@/components/admin/export-button";
 import { InviteAdminDialog } from "./invite-admin-dialog";
 import { EditAdminDialog } from "./edit-admin-dialog";
 
@@ -149,10 +150,13 @@ export function AdminTeamTable({ initialData, initialCount, roles }: AdminTeamTa
             className="pl-9 h-9"
           />
         </div>
-        <Button size="sm" onClick={() => setInviteOpen(true)}>
-          <UserPlus className="mr-1.5 h-4 w-4" />
-          Invite Admin
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportButton dataset="admin-team" filters={{ search }} />
+          <Button size="sm" onClick={() => setInviteOpen(true)}>
+            <UserPlus className="mr-1.5 h-4 w-4" />
+            Invite Admin
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border overflow-x-auto">

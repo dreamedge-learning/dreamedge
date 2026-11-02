@@ -13,6 +13,7 @@ import {
   CoursePerformanceSkeleton,
 } from "@/components/admin/dashboard/course-performance";
 import { RestrictedState } from "@/components/admin/dashboard/empty-state";
+import { ExportButton } from "@/components/admin/export-button";
 import { getAdminSession, type AdminSession } from "@/lib/admin";
 import {
   AUDIT_ROLES,
@@ -54,7 +55,10 @@ async function Dashboard() {
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="mt-1 text-muted-foreground">Welcome back, {firstName}.</p>
         </div>
-        <p className="text-sm text-muted-foreground">{today}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-sm text-muted-foreground">{today}</p>
+          <ExportButton dataset="dashboard" label="Download this view" />
+        </div>
       </div>
 
       <ErrorBoundary>

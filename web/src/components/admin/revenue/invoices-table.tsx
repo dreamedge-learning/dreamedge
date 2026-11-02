@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { fetchInvoices, type InvoiceRow } from "@/app/admin/(panel)/revenue/actions";
 import { formatINR } from "@/lib/format";
 import { DateRangeFilter } from "./date-range-filter";
+import { ExportButton } from "@/components/admin/export-button";
 
 interface InvoicesTableProps {
   initialData: InvoiceRow[];
@@ -98,6 +99,11 @@ export function InvoicesTable({ initialData, initialCount }: InvoicesTableProps)
           onDateFromChange={setDateFrom}
           onDateToChange={setDateTo}
           presets={false}
+        />
+        <ExportButton
+          dataset="invoices"
+          filters={{ search, dateFrom, dateTo }}
+          size="default"
         />
       </div>
 

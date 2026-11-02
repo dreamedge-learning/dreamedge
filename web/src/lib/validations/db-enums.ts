@@ -82,6 +82,8 @@ export const enrollmentStatusSchema = z.enum(["active", "expired", "cancelled"])
 
 export const notificationChannelSchema = z.enum(["push", "in_app", "email", "sms"]);
 
+export const liveClassStatusSchema = z.enum(["scheduled", "live", "ended", "cancelled"]);
+
 export const bannerPositionSchema = z.enum([
   "home_top",
   "home_bottom",
@@ -117,6 +119,10 @@ export const enumsMatchDatabase = {
   notification_channel: true as Exact<
     z.infer<typeof notificationChannelSchema>,
     Enums["notification_channel"]
+  >,
+  live_class_status: true as Exact<
+    z.infer<typeof liveClassStatusSchema>,
+    Enums["live_class_status"]
   >,
   banner_position: true as Exact<
     z.infer<typeof bannerPositionSchema>,

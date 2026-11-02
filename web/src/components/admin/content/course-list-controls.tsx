@@ -3,6 +3,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useEffect } from "react";
 import { Search } from "lucide-react";
+import { ExportButton } from "@/components/admin/export-button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -104,6 +105,20 @@ export function CourseListControls({
           className="pl-9 sm:w-56"
         />
       </div>
+
+      {/* The list filters on `is_published`, so anything that is not
+          "published" is an unpublished course as far as the query goes. */}
+      <ExportButton
+        dataset="courses"
+        filters={{
+          search: currentSearch,
+          published:
+            !currentStatus || currentStatus === "all"
+              ? "all"
+              : String(currentStatus === "published"),
+        }}
+        size="default"
+      />
     </div>
   );
 }

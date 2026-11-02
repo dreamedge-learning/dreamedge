@@ -9,10 +9,11 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Search, Download, ChevronLeft, ChevronRight, Loader2, Eye } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Loader2, Eye } from "lucide-react";
 import { toast } from "sonner";
-import { fetchOrders, exportOrdersCsv, type OrderRow, type OrderFilters } from "@/app/admin/(panel)/revenue/actions";
+import { fetchOrders, type OrderRow, type OrderFilters } from "@/app/admin/(panel)/revenue/actions";
 import { formatINR } from "@/lib/format";
+import { ExportButton } from "@/components/admin/export-button";
 import { OrderDetailDrawer } from "./order-detail-drawer";
 import { DateRangeFilter } from "./date-range-filter";
 
@@ -37,14 +38,6 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
 };
 
 const PAGE_SIZE = 20;
-
-function escapeCSV(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const str = String(value);
-  if (/^[=+\-@\t\r]/.test(str)) return `'${str}`;
-  if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
-  return str;
-}
 
 export function OrdersTable({ initialData, initialCount, courses }: OrdersTableProps) {
   const [data, setData] = useState(initialData);
@@ -109,41 +102,14 @@ export function OrdersTable({ initialData, initialCount, courses }: OrdersTableP
     loadData(buildFilters({ page: newPage }));
   }
 
-  async function handleExport() {
-    const result = await exportOrdersCsv(buildFilters({ page: 1 }));
-    if (result.error || !result.data) {
-      toast.error(result.error ?? "Export failed");
-      return;
-    }
-
-    const headers = ["Order ID", "Student", "Course", "Amount (₹)", "Discount (₹)", "Final (₹)", "Method", "Razorpay ID", "Status", "Date"];
-    const rows = result.data.map((r: Record<string, unknown>) => {
-      const student = r.student as { full_name: string } | null;
-      const course = r.course as { title: string } | null;
-      return [
-        escapeCSV((r.id as string).slice(0, 8)),
-        escapeCSV(student?.full_name),
-        escapeCSV(course?.title),
-        escapeCSV(r.amount),
-        escapeCSV(r.discount_amount),
-        escapeCSV(r.final_amount),
-        escapeCSV(PAYMENT_METHOD_LABELS[r.payment_method as string] ?? r.payment_method),
-        escapeCSV(r.razorpay_payment_id),
-        escapeCSV(r.status),
-        escapeCSV(new Date(r.created_at as string).toLocaleDateString("en-IN")),
-      ].join(",");
-    });
-
-    const csv = "﻿" + [headers.join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("CSV exported successfully");
-  }
+  const exportFilters = {
+    search,
+    status,
+    paymentMethod,
+    courseId,
+    dateFrom,
+    dateTo,
+  };
 
   const totalPages = Math.ceil(count / PAGE_SIZE);
   const showFrom = count === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
@@ -205,10 +171,7 @@ export function OrdersTable({ initialData, initialCount, courses }: OrdersTableP
             </SelectContent>
           </Select>
         )}
-        <Button variant="outline" size="sm" className="h-9" onClick={handleExport}>
-          <Download className="mr-1.5 h-4 w-4" />
-          Export CSV
-        </Button>
+        <ExportButton dataset="orders" filters={exportFilters} />
       </div>
 
       <DateRangeFilter

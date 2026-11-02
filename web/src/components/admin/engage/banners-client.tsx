@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ExportButton } from "@/components/admin/export-button";
 import { BannerFormDialog } from "./banner-form";
 import { deleteBanner, toggleBannerActive } from "@/app/admin/(panel)/engage/actions";
 
@@ -106,13 +107,16 @@ export function BannersClient({ initialData }: { initialData: BannerRow[] }) {
             Promotional artwork shown on the website and in the app.
           </p>
         </div>
-        <Button
-          onClick={openNew}
-          className="bg-brand-orange hover:bg-brand-orange-dark text-white"
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Banner
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportButton dataset="banners" size="default" />
+          <Button
+            onClick={openNew}
+            className="bg-brand-orange hover:bg-brand-orange-dark text-white"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Banner
+          </Button>
+        </div>
       </div>
 
       {banners.length === 0 ? (

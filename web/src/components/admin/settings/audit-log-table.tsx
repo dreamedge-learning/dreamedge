@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useTransition, useEffect, useMemo } from "react";
 import {
-  Search, ChevronLeft, ChevronRight, Download, ChevronDown,
+  Search, ChevronLeft, ChevronRight, ChevronDown,
   ChevronRight as ChevronRightIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -17,10 +17,9 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DateRangeFilter } from "@/components/admin/revenue/date-range-filter";
+import { ExportButton } from "@/components/admin/export-button";
 import { formatRelativeTime } from "@/lib/format";
-import {
-  getAuditLog, exportAuditLog,
-} from "@/app/admin/(panel)/settings/actions";
+import { getAuditLog } from "@/app/admin/(panel)/settings/actions";
 import type { AuditLogRow, AdminUserLite } from "@/app/admin/(panel)/settings/actions";
 
 const PAGE_SIZE = 20;
@@ -36,14 +35,6 @@ interface AuditLogTableProps {
   adminUsers: AdminUserLite[];
 }
 
-function escapeCSV(val: string): string {
-  const dangerous = /^[=+\-@\t\r]/;
-  const escaped = dangerous.test(val) ? `'${val}` : val;
-  return escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")
-    ? `"${escaped.replace(/"/g, '""')}"`
-    : escaped;
-}
-
 export function AuditLogTable({ initialData, initialCount, adminUsers }: AuditLogTableProps) {
   const [data, setData] = useState(initialData);
   const [count, setCount] = useState(initialCount);
@@ -55,7 +46,6 @@ export function AuditLogTable({ initialData, initialCount, adminUsers }: AuditLo
   const [userId, setUserId] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [isExporting, startExportTransition] = useTransition();
 
   const requestIdRef = useRef(0);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -111,39 +101,7 @@ export function AuditLogTable({ initialData, initialCount, adminUsers }: AuditLo
     loadData({ page: newPage, search, entityType, dateFrom, dateTo, userId });
   }
 
-  function handleExport() {
-    startExportTransition(async () => {
-      const result = await exportAuditLog({
-        search, entityType, dateFrom, dateTo, userId,
-      });
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-
-      const rows = result.data ?? [];
-      const header = ["Timestamp", "User", "Action", "Entity Type", "Entity ID", "IP Address"];
-      const csvRows = rows.map((r) => [
-        escapeCSV(new Date(r.created_at).toISOString()),
-        escapeCSV(userMap[r.user_id ?? ""] ?? r.user_id ?? "System"),
-        escapeCSV(r.action),
-        escapeCSV(r.entity_type),
-        escapeCSV(r.entity_id ?? ""),
-        escapeCSV(r.ip_address ?? ""),
-      ]);
-
-      const bom = "﻿";
-      const csv = bom + [header.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success(`Exported ${rows.length} records`);
-    });
-  }
+  const exportFilters = { search, entityType, userId, dateFrom, dateTo };
 
   const totalPages = Math.ceil(count / PAGE_SIZE);
 
@@ -195,10 +153,7 @@ export function AuditLogTable({ initialData, initialCount, adminUsers }: AuditLo
           presets={false}
         />
 
-        <Button variant="outline" size="sm" className="h-9" onClick={handleExport} disabled={isExporting}>
-          <Download className="mr-1.5 h-4 w-4" />
-          {isExporting ? "Exporting..." : "Export CSV"}
-        </Button>
+        <ExportButton dataset="audit-log" filters={exportFilters} size="default" />
       </div>
 
       <div className="rounded-lg border overflow-x-auto">

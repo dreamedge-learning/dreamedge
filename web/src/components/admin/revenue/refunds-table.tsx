@@ -14,6 +14,7 @@ import { fetchRefunds, type RefundRow, type RefundFilters } from "@/app/admin/(p
 import { formatINR } from "@/lib/format";
 import { RefundProcessDialog } from "./refund-action-dialog";
 import { DateRangeFilter } from "./date-range-filter";
+import { ExportButton } from "@/components/admin/export-button";
 
 interface RefundsTableProps {
   initialData: RefundRow[];
@@ -102,6 +103,9 @@ export function RefundsTable({ initialData, initialCount }: RefundsTableProps) {
           onDateToChange={setDateTo}
           presets={false}
         />
+        <div className="sm:ml-auto">
+          <ExportButton dataset="refunds" filters={{ status, dateFrom, dateTo }} size="default" />
+        </div>
       </div>
 
       <div className="rounded-lg border overflow-x-auto">

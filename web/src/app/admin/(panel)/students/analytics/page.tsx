@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { ExportButton } from "@/components/admin/export-button";
 import { StudentAnalytics } from "@/components/admin/students/student-analytics";
 import { fetchStudentAnalytics } from "../actions";
 
@@ -44,6 +45,9 @@ export default function StudentAnalyticsPage() {
           <p className="text-muted-foreground mt-1">
             Student growth, engagement, and geographic distribution.
           </p>
+        </div>
+        <div className="ml-auto">
+          <ExportButton dataset="student-progress" label="Export progress" />
         </div>
       </div>
 

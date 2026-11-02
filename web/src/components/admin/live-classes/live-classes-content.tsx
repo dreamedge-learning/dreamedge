@@ -20,6 +20,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
+import { ExportButton } from "@/components/admin/export-button";
 import { ScheduleClassDialog } from "./schedule-class-dialog";
 import { AttachRewatchDialog } from "./attach-rewatch-dialog";
 import type { LiveClassRow } from "@/app/admin/(panel)/live-classes/actions";
@@ -97,13 +98,17 @@ export function LiveClassesContent({
             Schedule, run, and publish rewatch recordings in one place.
           </p>
         </div>
-        <Button
-          onClick={() => setScheduleOpen(true)}
-          className="bg-brand-orange text-white hover:bg-brand-orange-dark"
-        >
-          <Plus className="mr-1.5 h-4 w-4" />
-          Schedule class
-        </Button>
+        <div className="flex items-center gap-2">
+          <ExportButton dataset="live-classes" label="Export schedule" size="default" />
+          <ExportButton dataset="recordings" label="Export recordings" size="default" />
+          <Button
+            onClick={() => setScheduleOpen(true)}
+            className="bg-brand-orange text-white hover:bg-brand-orange-dark"
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Schedule class
+          </Button>
+        </div>
       </div>
 
       {/* Stat row */}
