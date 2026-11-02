@@ -27,21 +27,49 @@ final storageServiceProvider = Provider<StorageService>((ref) {
   throw UnimplementedError('StorageService must be overridden at startup');
 });
 
-final routerProvider = Provider<GoRouter>((ref) {
-  final session = ref.watch(currentSessionProvider);
-  final storage = ref.read(storageServiceProvider);
+/// Bridges Riverpod state changes into `GoRouter.refreshListenable`.
+///
+/// Watching a provider inside the `routerProvider` body meant that every
+/// state change rebuilt a fresh `GoRouter`, which `MaterialApp.router` then
+/// re-read for `initialLocation` ('/splash') -- the stack was discarded on
+/// every profile change. The profile-setup screen set a flag to show the
+/// "you're all set, here is your student code" view at exactly the moment
+/// the tree underneath it was being torn down, so the student never saw
+/// their code. Same shape for edit-profile and for every launch after the
+/// first (the student provider resolving triggered the rebuild).
+///
+/// A single `ChangeNotifier` on the two providers that matter tells the one
+/// router to re-run its redirect without replacing itself, which is what
+/// `refreshListenable` is for.
+class _AuthGateRefresh extends ChangeNotifier {
+  _AuthGateRefresh(Ref ref) {
+    ref.listen<Object?>(currentSessionProvider, (_, __) => notifyListeners());
+    ref.listen<Object?>(currentStudentProvider, (_, __) => notifyListeners());
+  }
+}
 
-  // The profile gate reads this. It is an AsyncValue, so while it is loading
-  // the redirect has nothing to decide on and lets the student through; the
-  // provider resolving rebuilds the router and the redirect runs again.
-  // Erring that way is deliberate: holding every route until a network call
-  // finishes would turn a slow connection into a locked app.
-  final student = ref.watch(currentStudentProvider).valueOrNull;
+final routerProvider = Provider<GoRouter>((ref) {
+  final refresh = _AuthGateRefresh(ref);
+  ref.onDispose(refresh.dispose);
+
+  final storage = ref.read(storageServiceProvider);
 
   return GoRouter(
     initialLocation: '/splash',
     debugLogDiagnostics: false,
+    refreshListenable: refresh,
     redirect: (context, state) {
+      // Read inside the callback, not above the builder: watching here is
+      // what tore the router down. The listenable above makes sure the
+      // redirect runs again whenever either value changes.
+      //
+      // currentStudentProvider is an AsyncValue, so while it is loading the
+      // redirect has nothing to decide on and lets the student through; the
+      // provider resolving fires the listenable and the redirect runs again.
+      // Erring that way is deliberate: holding every route until a network
+      // call finishes would turn a slow connection into a locked app.
+      final session = ref.read(currentSessionProvider);
+      final student = ref.read(currentStudentProvider).valueOrNull;
       final isAuthenticated = session != null;
       final isSplash = state.matchedLocation == '/splash';
       final isAuth = state.matchedLocation == '/login' ||
