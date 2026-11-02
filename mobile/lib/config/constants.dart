@@ -30,4 +30,56 @@ class AppConstants {
   static const splashDuration = Duration(seconds: 2);
 
   static const classes = ['6', '7', '8', '9', '10'];
+
+  static const boards = ['CBSE', 'State', 'ICSE', 'Other'];
+
+  /// Value and label, because the column stores the code and the form shows
+  /// the words.
+  static const genders = <String, String>{
+    'male': 'Male',
+    'female': 'Female',
+    'other': 'Other',
+    'prefer_not_to_say': 'Prefer not to say',
+  };
+
+  /// States and union territories, in the same order as the website's list so
+  /// the two dropdowns read identically.
+  static const indianStates = [
+    'Andhra Pradesh',
+    'Arunachal Pradesh',
+    'Assam',
+    'Bihar',
+    'Chhattisgarh',
+    'Goa',
+    'Gujarat',
+    'Haryana',
+    'Himachal Pradesh',
+    'Jharkhand',
+    'Karnataka',
+    'Kerala',
+    'Madhya Pradesh',
+    'Maharashtra',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Odisha',
+    'Punjab',
+    'Rajasthan',
+    'Sikkim',
+    'Tamil Nadu',
+    'Telangana',
+    'Tripura',
+    'Uttar Pradesh',
+    'Uttarakhand',
+    'West Bengal',
+    'Andaman and Nicobar Islands',
+    'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi',
+    'Jammu and Kashmir',
+    'Ladakh',
+    'Lakshadweep',
+    'Puducherry',
+  ];
 }

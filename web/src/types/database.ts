@@ -267,6 +267,10 @@ export interface Enrollment {
 
 export interface StudentWithEnrollments extends Student {
   enrollment_count: number;
+  /** Assigned by trigger on insert, so null only on a row written before it. */
+  student_code: string | null;
+  registration_source: string;
+  profile_completed: boolean;
 }
 
 export interface AuditLogEntry {

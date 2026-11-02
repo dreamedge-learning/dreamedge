@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { requireStudent } from "@/lib/auth-student";
 import { ProfileContent } from "@/components/student/profile/profile-content";
+import { requireCompleteStudentProfile } from "@/lib/auth-student";
+import { createClient } from "@/lib/supabase/server";
 
 
 export const metadata: Metadata = {
@@ -8,7 +9,12 @@ export const metadata: Metadata = {
 };
 
 export default async function ProfilePage() {
-  const student = await requireStudent();
+  const student = await requireCompleteStudentProfile("/dashboard/profile");
 
-  return <ProfileContent student={student} />;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return <ProfileContent student={student} signInEmail={user?.email ?? null} />;
 }

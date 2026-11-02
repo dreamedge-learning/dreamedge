@@ -10,55 +10,87 @@
 //     redirect URL added to the GCP OAuth client's authorized redirect URIs).
 
 import { NextResponse } from "next/server";
+
+import {
+  createStudentProfile,
+  findStudentByEmail,
+  findStudentByUserId,
+} from "@/lib/students/create-student";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
-function randomReferralCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "DE";
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
+interface ResolvedStudent {
+  profileCompleted: boolean;
 }
 
-async function ensureStudentRow(userId: string, user: {
+/**
+ * Finds or creates the student behind a freshly signed-in auth user.
+ *
+ * Looked up by auth user first, then by email. The second lookup is what
+ * stops the duplicate that matters here: a student registered at the
+ * Kalmeshwar centre, or by email months ago, who now signs in with Google.
+ * Supabase hands that a different auth user id, and inserting on that alone
+ * would leave them with two profiles — enrolments on the old one, progress on
+ * the new one, and a support call nobody can unpick. Re-pointing the existing
+ * row at the new auth user keeps one student to one record.
+ */
+async function resolveStudent(user: {
+  id: string;
   email?: string | null;
   phone?: string | null;
   user_metadata?: Record<string, unknown> | null;
-}): Promise<void> {
-  const service = createServiceClient();
+}): Promise<ResolvedStudent> {
+  const existing = await findStudentByUserId(user.id);
+  if (existing) {
+    return { profileCompleted: existing.profile_completed };
+  }
 
-  const { data: existing } = await service
-    .from("students")
-    .select("id")
-    .eq("user_id", userId)
-    .maybeSingle();
+  if (user.email) {
+    const byEmail = await findStudentByEmail(user.email);
 
-  if (existing) return;
+    if (byEmail) {
+      // Only when the row is not already bound to a different live account.
+      // If it is, the two really are different people sharing an address and
+      // a new profile is the honest outcome — the insert's unique constraint
+      // on email will then say so rather than merging them silently.
+      if (byEmail.user_id === user.id) {
+        return { profileCompleted: byEmail.profile_completed };
+      }
+
+      const service = createServiceClient();
+      const { data: boundTo } = await service.auth.admin.getUserById(byEmail.user_id);
+
+      if (!boundTo?.user) {
+        await service.from("students").update({ user_id: user.id }).eq("id", byEmail.id);
+        return { profileCompleted: byEmail.profile_completed };
+      }
+    }
+  }
 
   const meta = user.user_metadata ?? {};
   const fullName =
     (typeof meta.full_name === "string" && meta.full_name.trim()) ||
     (typeof meta.name === "string" && meta.name.trim()) ||
-    "Student";
+    null;
 
-  const email =
-    (user.email && user.email.toLowerCase().trim()) ||
-    (user.phone
-      ? `${user.phone.replace(/[^0-9]/g, "")}@phone.dreamedge.local`
-      : `${userId}@user.dreamedge.local`);
-
-  // NOTE: `free_trial_expires_at` isn't in the live `students` schema yet.
-  // When we add it in a future migration, re-introduce the trial-days lookup
-  // from site_settings and populate the column here.
-  await service.from("students").insert({
-    user_id: userId,
-    full_name: fullName,
-    email,
-    phone: user.phone || null,
-    referral_code: randomReferralCode(),
+  const created = await createStudentProfile({
+    userId: user.id,
+    source: "self_online",
+    authEmail: user.email,
+    authPhone: user.phone,
+    fields: {
+      full_name: fullName,
+      phone: user.phone,
+      avatar_url: typeof meta.avatar_url === "string" ? meta.avatar_url : null,
+    },
   });
+
+  if (created.error) throw new Error(created.error);
+
+  // Google gives a name and an email and nothing else — no class, no board,
+  // no parent contact. The profile is deliberately incomplete here so the
+  // gate sends them to the form.
+  return { profileCompleted: false };
 }
 
 export async function GET(request: Request) {
@@ -79,14 +111,27 @@ export async function GET(request: Request) {
     );
   }
 
+  let profileCompleted = false;
+
   try {
-    await ensureStudentRow(data.user.id, {
+    const student = await resolveStudent({
+      id: data.user.id,
       email: data.user.email,
       phone: data.user.phone,
       user_metadata: data.user.user_metadata,
     });
+    profileCompleted = student.profileCompleted;
   } catch (err) {
-    console.error("[auth/callback] failed to upsert student row", err);
+    console.error("[auth/callback] failed to resolve student row", err);
+  }
+
+  // A student with an unfinished profile goes to the form, carrying the
+  // destination they were originally headed for so the form can return them
+  // to it rather than dropping everyone on the dashboard.
+  if (!profileCompleted) {
+    const onboarding = new URL("/onboarding", origin);
+    if (next !== "/dashboard") onboarding.searchParams.set("next", next);
+    return NextResponse.redirect(onboarding);
   }
 
   return NextResponse.redirect(`${origin}${next}`);

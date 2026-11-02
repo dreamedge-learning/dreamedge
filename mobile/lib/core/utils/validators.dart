@@ -61,4 +61,51 @@ class Validators {
     }
     return null;
   }
+
+  /// A mobile number that must be there.
+  ///
+  /// The parent's or guardian's number, chiefly: plenty of Class 6 students
+  /// have no phone of their own, so it is the one number the centre can
+  /// actually reach a family on. Deliberately not compared against the
+  /// student's own number -- in many families they are the same.
+  static String? requiredPhone(String? value, [String fieldName = 'Mobile number']) {
+    if (value == null || value.trim().isEmpty) {
+      return '$fieldName is required';
+    }
+    return phone(value);
+  }
+
+  /// Six digits, never starting at zero: the shape India Post uses.
+  static String? pincode(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
+    if (!RegExp(r'^[1-9][0-9]{5}$').hasMatch(value.trim())) {
+      return 'A PIN code is six digits and does not start with zero';
+    }
+    return null;
+  }
+
+  /// A date of birth that could belong to a school student.
+  ///
+  /// The window is wide on purpose -- a repeating Class 10 student and an
+  /// exceptionally young Class 6 student both have to get through -- but a
+  /// fat-fingered year is worth catching here rather than on a certificate
+  /// three months later.
+  static String? dateOfBirth(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
+
+    final parsed = DateTime.tryParse(value.trim());
+    if (parsed == null) {
+      return 'Enter the date as YYYY-MM-DD';
+    }
+
+    final years = DateTime.now().difference(parsed).inDays / 365.25;
+    if (years < 5 || years > 30) {
+      return 'Enter a date of birth between 5 and 30 years ago';
+    }
+    return null;
+  }
 }

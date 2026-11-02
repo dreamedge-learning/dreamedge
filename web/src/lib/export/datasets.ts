@@ -9,6 +9,10 @@ import {
   getTopCourses,
 } from "@/lib/dashboard";
 import { sanitizeSearch } from "@/lib/search";
+import {
+  isSyntheticEmail,
+  registrationSourceLabel,
+} from "@/lib/students/identity";
 import type { createClient } from "@/lib/supabase/server";
 import {
   contentStatusSchema,
@@ -254,33 +258,64 @@ const studentExportFilters = studentListFilterSchema
 type StudentExportFilters = z.output<typeof studentExportFilters>;
 
 const STUDENT_COLUMNS: ExportColumn[] = [
+  { key: "student_code", header: "Student code" },
   { key: "full_name", header: "Name" },
   { key: "email", header: "Email" },
   { key: "phone", header: "Phone" },
+  { key: "date_of_birth", header: "Date of birth", format: "date" },
+  { key: "gender", header: "Gender" },
   { key: "class", header: "Class" },
   { key: "board", header: "Board" },
   { key: "school_name", header: "School" },
+  { key: "parent_name", header: "Parent or guardian" },
+  { key: "parent_phone", header: "Parent phone" },
   { key: "city", header: "City" },
   { key: "state", header: "State" },
+  { key: "pincode", header: "PIN code" },
+  { key: "address_line", header: "Address" },
   { key: "status", header: "Status" },
+  { key: "registered_via", header: "Registered via" },
+  { key: "profile_completed", header: "Profile complete", format: "boolean" },
   { key: "enrollment_count", header: "Courses", format: "number" },
   { key: "referral_code", header: "Referral code" },
   { key: "created_at", header: "Joined", format: "date" },
 ];
 
-const STUDENT_SENSITIVE_KEYS = ["email", "phone"];
+/*
+ * Personal details about a minor, dropped for any role but super admin and
+ * support staff. The parent's name and number are in here for the same reason
+ * the student's are: between them they identify a child and say where to
+ * reach them.
+ */
+const STUDENT_SENSITIVE_KEYS = [
+  "email",
+  "phone",
+  "parent_name",
+  "parent_phone",
+  "date_of_birth",
+  "address_line",
+];
 
 interface StudentQueryRow {
   id: string;
+  student_code: string | null;
   full_name: string | null;
   email: string | null;
   phone: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
   class: string | null;
   board: string | null;
   school_name: string | null;
+  parent_name: string | null;
+  parent_phone: string | null;
   city: string | null;
   state: string | null;
+  pincode: string | null;
+  address_line: string | null;
   status: string;
+  registration_source: string;
+  profile_completed: boolean;
   referral_code: string | null;
   created_at: string | null;
   enrollments: { id: string }[] | null;
@@ -316,8 +351,10 @@ async function fetchStudentRows(
     let query = supabase
       .from("students")
       .select(
-        `id, full_name, email, phone, class, board, school_name, city, state,
-         status, referral_code, created_at, enrollments(id)`,
+        `id, student_code, full_name, email, phone, date_of_birth, gender, class,
+         board, school_name, parent_name, parent_phone, city, state, pincode,
+         address_line, status, registration_source, profile_completed,
+         referral_code, created_at, enrollments(id)`,
         { count: "exact" }
       );
 
@@ -332,6 +369,10 @@ async function fetchStudentRows(
 
     if (isApplied(filters.status)) {
       query = query.eq("status", filters.status as "active" | "inactive" | "blocked");
+    }
+
+    if (isApplied(filters.source)) {
+      query = query.eq("registration_source", filters.source as string);
     }
 
     if (filters.city) {
@@ -350,15 +391,26 @@ async function fetchStudentRows(
 function toStudentExportRow(row: StudentQueryRow): ExportRow {
   return {
     id: row.id,
+    student_code: row.student_code,
     full_name: row.full_name,
-    email: row.email,
+    // A synthetic address is one we invented for a student who has none; it
+    // would read as a real contact in a spreadsheet nobody can interrogate.
+    email: isSyntheticEmail(row.email) ? null : row.email,
     phone: row.phone,
+    date_of_birth: row.date_of_birth,
+    gender: row.gender,
     class: row.class,
-    board: row.board,
+    board: row.board === "State" ? "State Board" : row.board,
     school_name: row.school_name,
+    parent_name: row.parent_name,
+    parent_phone: row.parent_phone,
     city: row.city,
     state: row.state,
+    pincode: row.pincode,
+    address_line: row.address_line,
     status: row.status,
+    registered_via: registrationSourceLabel(row.registration_source),
+    profile_completed: row.profile_completed,
     enrollment_count: count(row.enrollments),
     referral_code: row.referral_code,
     created_at: row.created_at,
@@ -372,6 +424,7 @@ async function describeStudentFilters(
   return describeParts([
     ["search", filters.search],
     ["status", filters.status],
+    ["registered via", isApplied(filters.source) ? registrationSourceLabel(filters.source) : undefined],
     ["city", filters.city],
     ["course", await courseLabel(supabase, filters.courseId)],
     ...describeDates(filters),
@@ -423,11 +476,25 @@ const studentsDataset = defineDataset({
   },
   summary(rows) {
     const byStatus = (status: string) => rows.filter((row) => row.status === status).length;
+    const byVia = (label: string) =>
+      rows.filter((row) => row.registered_via === label).length;
+
     return [
       { label: "Students", value: rows.length, format: "number" },
       { label: "Active", value: byStatus("active"), format: "number" },
       { label: "Inactive", value: byStatus("inactive"), format: "number" },
       { label: "Blocked", value: byStatus("blocked"), format: "number" },
+      { label: "Registered online", value: byVia("Online"), format: "number" },
+      {
+        label: "Registered at the centre",
+        value: byVia("Offline centre"),
+        format: "number",
+      },
+      {
+        label: "Profile not finished",
+        value: rows.filter((row) => row.profile_completed === false).length,
+        format: "number",
+      },
     ];
   },
 });
@@ -437,6 +504,7 @@ const studentsDataset = defineDataset({
 // ---------------------------------------------------------------------------
 
 const ENROLLMENT_SHEET_COLUMNS: ExportColumn[] = [
+  { key: "student_code", header: "Student code" },
   { key: "student_name", header: "Student" },
   { key: "email", header: "Email" },
   { key: "course", header: "Course" },
@@ -448,6 +516,7 @@ const ENROLLMENT_SHEET_COLUMNS: ExportColumn[] = [
 ];
 
 const PAYMENT_SHEET_COLUMNS: ExportColumn[] = [
+  { key: "student_code", header: "Student code" },
   { key: "student_name", header: "Student" },
   { key: "email", header: "Email" },
   { key: "course", header: "Course" },
@@ -459,6 +528,7 @@ const PAYMENT_SHEET_COLUMNS: ExportColumn[] = [
 ];
 
 const PROGRESS_SHEET_COLUMNS: ExportColumn[] = [
+  { key: "student_code", header: "Student code" },
   { key: "student_name", header: "Student" },
   { key: "email", header: "Email" },
   { key: "course", header: "Course" },
@@ -648,6 +718,9 @@ const studentsFullDataset = defineDataset({
     const emailById = new Map(
       rows.map((row) => [String(row.id), row.email === undefined ? null : row.email])
     );
+    const codeById = new Map(
+      rows.map((row) => [String(row.id), row.student_code ?? null])
+    );
 
     return [
       {
@@ -655,6 +728,7 @@ const studentsFullDataset = defineDataset({
         title: "Enrollments",
         columns: visible(ENROLLMENT_SHEET_COLUMNS),
         rows: enrollments.map((row) => ({
+          student_code: codeById.get(row.student_id) ?? null,
           student_name: nameById.get(row.student_id) ?? null,
           email: emailById.get(row.student_id) ?? null,
           course: one(row.course)?.title ?? null,
@@ -670,6 +744,7 @@ const studentsFullDataset = defineDataset({
         title: "Payments",
         columns: visible(PAYMENT_SHEET_COLUMNS),
         rows: orders.map((row) => ({
+          student_code: codeById.get(row.student_id) ?? null,
           student_name: one(row.student)?.full_name ?? nameById.get(row.student_id) ?? null,
           email: emailById.get(row.student_id) ?? null,
           course: one(row.course)?.title ?? null,
@@ -684,7 +759,10 @@ const studentsFullDataset = defineDataset({
         sheetName: "Progress",
         title: "Progress",
         columns: visible(PROGRESS_SHEET_COLUMNS),
-        rows: progress.map(toProgressExportRow),
+        rows: progress.map((row) => ({
+          ...toProgressExportRow(row),
+          student_code: codeById.get(row.student_id) ?? null,
+        })),
       },
     ];
   },

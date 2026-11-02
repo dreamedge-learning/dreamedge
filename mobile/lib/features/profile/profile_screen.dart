@@ -8,6 +8,8 @@ import '../../core/offline/byte_format.dart';
 import '../../core/offline/download_settings.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/offline_provider.dart';
+import '../../core/models/student.dart';
+import '../../core/providers/student_provider.dart';
 import '../../core/providers/supabase_provider.dart';
 import '../../core/utils/extensions.dart';
 import '../../shared/theme/colors.dart';
@@ -19,9 +21,17 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
-    final fullName =
-        user?.userMetadata?['full_name'] as String? ?? 'Student';
-    final email = user?.email ?? '';
+    final student = ref.watch(currentStudentProvider).valueOrNull;
+
+    // The student row is the record the centre works from; the auth metadata
+    // is only what the identity provider happened to hand back, and for a
+    // phone sign-in it holds neither a name nor an address.
+    final fullName = student?.fullName ??
+        user?.userMetadata?['full_name'] as String? ??
+        'Student';
+    final email = student != null && student.hasRealEmail
+        ? student.email
+        : user?.email ?? '';
     final initials = fullName.initials;
 
     return ListView(
@@ -44,19 +54,44 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 4),
           Center(
             child: Text(
-              email,
+              email.isEmpty ? 'No email on file' : email,
               style:
                   AppTypography.bodySmall.copyWith(color: AppColors.textSecondary),
             ),
           ),
-          const SizedBox(height: 32),
+          if (student?.studentCode != null) ...[
+            const SizedBox(height: 10),
+            Center(
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Text(
+                  student!.studentCode!,
+                  style: AppTypography.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (student != null) ...[
+            const SizedBox(height: 20),
+            _ProfileFacts(student: student),
+          ],
+          const SizedBox(height: 24),
           const Divider(height: 1),
           const _DownloadsSection(),
           const Divider(height: 1),
           _MenuItem(
             icon: Icons.person_outline,
             title: 'Edit Profile',
-            onTap: () {},
+            onTap: () => context.push('/profile/edit'),
           ),
           _MenuItem(
             icon: Icons.receipt_long_outlined,
@@ -122,6 +157,79 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 32),
         ],
       );
+  }
+}
+
+/// What the centre has on file, at a glance.
+///
+/// Shown because a student who can see their own class, board and parent
+/// contact is a student who notices when one of them is wrong -- which is
+/// cheaper to fix here than at the counter during an admission rush.
+class _ProfileFacts extends StatelessWidget {
+  final Student student;
+
+  const _ProfileFacts({required this.student});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <(String, String?)>[
+      (
+        'Class',
+        student.studentClass == null ? null : 'Class ${student.studentClass}'
+      ),
+      ('Board', student.board == 'State' ? 'State Board' : student.board),
+      ('School', student.schoolName),
+      ('Parent or guardian', student.parentName),
+      ('Parent phone', student.parentPhone),
+      ('City', student.city),
+    ].where((row) => row.$2 != null && row.$2!.isNotEmpty).toList();
+
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            for (var index = 0; index < rows.length; index++)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  border: index == 0
+                      ? null
+                      : const Border(top: BorderSide(color: AppColors.border)),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 140,
+                      child: Text(
+                        rows[index].$1,
+                        style: AppTypography.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        rows[index].$2!,
+                        style: AppTypography.bodySmall.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

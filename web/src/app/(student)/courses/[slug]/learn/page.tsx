@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
-import { requireStudent } from "@/lib/auth-student";
+import { requireCompleteStudentProfile } from "@/lib/auth-student";
 import { createClient } from "@/lib/supabase/server";
 import type { Course } from "@/types/course";
 import { LearnContent } from "@/components/student/courses/learn-content";
@@ -242,7 +242,7 @@ export default async function LearnPage({ params }: PageProps) {
 
   if (!course) notFound();
 
-  const student = await requireStudent();
+  const student = await requireCompleteStudentProfile(`/courses/${slug}/learn`);
 
   const { data: enrollment } = await supabase
     .from("enrollments")

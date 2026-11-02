@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { requireStudent } from "@/lib/auth-student";
+import { requireCompleteStudentProfile } from "@/lib/auth-student";
 import { createClient } from "@/lib/supabase/server";
 import type { EnrollmentWithCourse } from "@/types/enrollment";
 import { MyCoursesContent } from "@/components/student/dashboard/my-courses-content";
@@ -141,7 +141,7 @@ async function fetchCourseProgress(
 }
 
 export default async function MyCoursesPage() {
-  const student = await requireStudent();
+  const student = await requireCompleteStudentProfile("/dashboard/my-courses");
   const enrollments = await fetchEnrollments(student.id);
 
   const courseIds = enrollments

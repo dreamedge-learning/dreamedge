@@ -1,58 +1,70 @@
 "use server";
 
+import { requireStudent } from "@/lib/auth-student";
+import {
+  profileColumns,
+  resolveContactEmail,
+} from "@/lib/students/profile-columns";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { firstIssue } from "@/lib/validations/form";
+import {
+  studentProfileInput,
+  studentProfileSchema,
+} from "@/lib/validations/onboarding";
 
 interface ActionResult<T = Record<string, unknown>> {
   data?: T;
   error?: string;
 }
 
+/**
+ * The profile editor on the dashboard.
+ *
+ * Validated with the same schema as the onboarding form, because it is the
+ * same profile: a student moving up from Class 7 to Class 8, a family
+ * changing their number, or a parent correcting a school name all come
+ * through here, and a field the onboarding form insisted on must not become
+ * blankable afterwards.
+ *
+ * The managed columns -- `profile_completed`, `student_code`, the
+ * registration provenance -- are untouched and unreachable: a trigger rejects
+ * them for anyone but an admin.
+ */
 export async function updateProfile(
   formData: FormData
 ): Promise<ActionResult<{ updated: boolean }>> {
-  const fullName = formData.get("full_name") as string;
-  const phone = (formData.get("phone") as string) || null;
-  const city = (formData.get("city") as string) || null;
-  const state = (formData.get("state") as string) || null;
+  try {
+    const student = await requireStudent();
 
-  if (!fullName || fullName.trim().length < 2) {
-    return { error: "Full name must be at least 2 characters." };
-  }
+    const parsed = studentProfileSchema.safeParse(studentProfileInput(formData));
+    if (!parsed.success) {
+      return { error: firstIssue(parsed.error) };
+    }
 
-  if (fullName.trim().length > 100) {
-    return { error: "Full name must be under 100 characters." };
-  }
+    const values = parsed.data as Record<string, unknown>;
+    const columns = profileColumns(values);
 
-  if (phone && !/^\d{10}$/.test(phone)) {
-    return { error: "Phone number must be 10 digits." };
-  }
+    const contactEmail = await resolveContactEmail(values, student.email, student.id);
+    if (contactEmail.error) return { error: contactEmail.error };
+    if (contactEmail.column) Object.assign(columns, contactEmail.column);
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const service = createServiceClient();
+    const { error } = await service
+      .from("students")
+      .update(columns)
+      .eq("id", student.id);
 
-  if (!user) {
-    return { error: "You must be logged in." };
-  }
+    if (error) {
+      console.error("updateProfile failed:", error);
+      return { error: "Failed to update profile. Please try again." };
+    }
 
-  const service = createServiceClient();
-  const { error } = await service
-    .from("students")
-    .update({
-      full_name: fullName.trim(),
-      phone,
-      city: city?.trim() || null,
-      state: state || null,
-    })
-    .eq("user_id", user.id);
-
-  if (error) {
+    return { data: { updated: true } };
+  } catch (err) {
+    console.error("updateProfile failed:", err);
     return { error: "Failed to update profile. Please try again." };
   }
-
-  return { data: { updated: true } };
 }
 
 export async function updateAvatar(

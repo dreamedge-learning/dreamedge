@@ -1944,6 +1944,7 @@ export type Database = {
         }
         Returns: Json
       }
+      complete_student_profile: { Args: { p_profile: Json }; Returns: string }
       current_live_class_title: { Args: never; Returns: string }
       current_student_id: { Args: never; Returns: string }
       enroll_free_course: { Args: { p_course_id: string }; Returns: Json }

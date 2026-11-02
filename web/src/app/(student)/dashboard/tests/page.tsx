@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireStudent } from "@/lib/auth-student";
+import { requireCompleteStudentProfile } from "@/lib/auth-student";
 import { createClient } from "@/lib/supabase/server";
 import { TestsContent } from "@/components/student/dashboard/tests-content";
 
@@ -127,7 +127,7 @@ async function fetchUpcoming(studentId: string): Promise<UpcomingTestRow[]> {
 }
 
 export default async function TestsPage() {
-  const student = await requireStudent();
+  const student = await requireCompleteStudentProfile("/dashboard/tests");
   const [attempts, upcoming] = await Promise.all([
     fetchAttempts(student.id),
     fetchUpcoming(student.id),

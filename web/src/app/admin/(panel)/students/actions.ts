@@ -25,6 +25,7 @@ import {
 interface StudentFilters {
   search?: string;
   status?: string;
+  source?: string;
   city?: string;
   courseId?: string;
   dateFrom?: string;
@@ -40,6 +41,7 @@ export async function fetchStudents(filters: StudentFilters = {}) {
 
     const parsedFilters = studentListFilterSchema.safeParse({
       status: filters.status,
+      source: filters.source,
       courseId: filters.courseId,
       page: filters.page,
       pageSize: filters.pageSize,
@@ -56,7 +58,11 @@ export async function fetchStudents(filters: StudentFilters = {}) {
 
     let query = supabase
       .from("students")
-      .select("id, full_name, email, phone, avatar_url, class, city, status, created_at, enrollments(id)", { count: "exact" });
+      .select(
+        `id, full_name, email, phone, avatar_url, class, city, status, created_at,
+         student_code, registration_source, profile_completed, enrollments(id)`,
+        { count: "exact" }
+      );
 
     if (filters.search) {
       const safe = sanitizeSearch(filters.search);
@@ -70,6 +76,11 @@ export async function fetchStudents(filters: StudentFilters = {}) {
     const statusFilter = parsedFilters.data.status;
     if (statusFilter && statusFilter !== "all") {
       query = query.eq("status", statusFilter);
+    }
+
+    const sourceFilter = parsedFilters.data.source;
+    if (sourceFilter && sourceFilter !== "all") {
+      query = query.eq("registration_source", sourceFilter);
     }
 
     if (filters.city) {
@@ -120,6 +131,9 @@ export async function fetchStudents(filters: StudentFilters = {}) {
       city: s.city,
       status: s.status,
       created_at: s.created_at,
+      student_code: s.student_code,
+      registration_source: s.registration_source,
+      profile_completed: s.profile_completed,
       enrollment_count: Array.isArray(s.enrollments) ? s.enrollments.length : 0,
     }));
 
@@ -231,7 +245,13 @@ export async function fetchStudentDetail(studentId: string) {
 
     const { data: student, error } = await supabase
       .from("students")
-      .select("id, user_id, full_name, email, phone, avatar_url, class, city, state, status, board, school_name, referral_code, wallet_balance, created_at, updated_at")
+      .select(
+        `id, user_id, full_name, email, phone, avatar_url, class, city, state, status,
+         board, school_name, referral_code, wallet_balance, created_at, updated_at,
+         student_code, registration_source, registered_by, profile_completed,
+         profile_completed_at, parent_name, parent_phone, date_of_birth, gender,
+         address_line, pincode, admin_notes`
+      )
       .eq("id", parsedId.data)
       .single();
 

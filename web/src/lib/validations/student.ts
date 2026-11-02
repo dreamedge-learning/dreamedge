@@ -36,8 +36,21 @@ export const studentStatusFilterSchema = z
   .union([z.literal("all"), studentStatusSchema])
   .optional();
 
+/**
+ * The student list's source dropdown. Online sign-ups and records typed in at
+ * the Kalmeshwar counter are worth telling apart: the second kind arrives
+ * with cash already collected and often without a real email.
+ */
+export const studentSourceFilterSchema = z
+  .union([
+    z.literal("all"),
+    z.enum(["self_online", "admin_offline", "admin_import"]),
+  ])
+  .optional();
+
 export const studentListFilterSchema = z.object({
   status: studentStatusFilterSchema,
+  source: studentSourceFilterSchema,
   courseId: uuid("Course filter").optional(),
   page: optionalNumber("Page").refine(
     (value) => value === undefined || (Number.isInteger(value) && value >= 1),

@@ -30,6 +30,8 @@ import {
   FileText,
   CreditCard,
   Activity,
+  Cake,
+  Users,
   ShieldBan,
   ShieldCheck,
   Loader2,
@@ -37,6 +39,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { isSyntheticEmail, registrationSourceLabel } from "@/lib/students/identity";
+import { GENDER_OPTIONS } from "@/lib/validations/onboarding";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -156,6 +160,14 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
     });
   };
 
+  // Display forms for the three coded fields, resolved once rather than
+  // inline in the markup three times over.
+  const classLabel = student?.class ? `Class ${student.class as string}` : null;
+  const boardLabel =
+    student?.board === "State" ? "State Board" : ((student?.board as string) ?? null);
+  const genderLabel =
+    GENDER_OPTIONS.find((option) => option.value === student?.gender)?.label ?? null;
+
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("en-IN", {
       day: "numeric",
@@ -267,14 +279,100 @@ export function StudentDetail({ studentId, onClose, onStatusChange }: StudentDet
 
               {/* Profile Tab */}
               <TabsContent value="profile" className="mt-4 space-y-3">
-                <InfoRow icon={Phone} label="Phone" value={student.phone as string} />
-                <InfoRow icon={Mail} label="Email" value={student.email as string} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="font-mono">
+                    {(student.student_code as string) ?? "No code"}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className={
+                      student.registration_source === "self_online"
+                        ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                        : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    }
+                  >
+                    {registrationSourceLabel(student.registration_source as string)}
+                  </Badge>
+                  {student.profile_completed === true ? (
+                    <Badge
+                      variant="secondary"
+                      className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    >
+                      Profile complete
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="secondary"
+                      className="bg-red-500/10 text-red-600 dark:text-red-400"
+                    >
+                      Profile incomplete
+                    </Badge>
+                  )}
+                </div>
+
+                <InfoRow icon={Calendar} label="Class" value={classLabel} />
+                <InfoRow icon={BookOpen} label="Board" value={boardLabel} />
+                <InfoRow icon={BookOpen} label="School" value={student.school_name as string} />
+                <InfoRow
+                  icon={Cake}
+                  label="Date of birth"
+                  value={
+                    student.date_of_birth
+                      ? formatDate(student.date_of_birth as string)
+                      : null
+                  }
+                />
+                <InfoRow icon={User} label="Gender" value={genderLabel} />
+
+                <InfoRow icon={Phone} label="Student phone" value={student.phone as string} />
+                <InfoRow
+                  icon={Mail}
+                  label="Contact email"
+                  value={
+                    isSyntheticEmail(student.email as string)
+                      ? "No real email on file yet"
+                      : (student.email as string)
+                  }
+                />
+                <InfoRow
+                  icon={Users}
+                  label="Parent or guardian"
+                  value={student.parent_name as string}
+                />
+                <InfoRow
+                  icon={Phone}
+                  label="Parent phone"
+                  value={student.parent_phone as string}
+                />
+
                 <InfoRow icon={MapPin} label="City" value={student.city as string} />
                 <InfoRow icon={MapPin} label="State" value={student.state as string} />
-                <InfoRow icon={Calendar} label="Class" value={student.class as string} />
-                <InfoRow icon={BookOpen} label="Board" value={student.board as string} />
-                <InfoRow icon={BookOpen} label="School" value={student.school_name as string} />
-                <InfoRow icon={User} label="Referral Code" value={student.referral_code as string} />
+                <InfoRow icon={MapPin} label="PIN code" value={student.pincode as string} />
+                <InfoRow icon={MapPin} label="Address" value={student.address_line as string} />
+
+                <InfoRow
+                  icon={User}
+                  label="Referral code"
+                  value={student.referral_code as string}
+                />
+                <InfoRow
+                  icon={Calendar}
+                  label="Profile completed"
+                  value={
+                    student.profile_completed_at
+                      ? formatDate(student.profile_completed_at as string)
+                      : null
+                  }
+                />
+
+                {typeof student.admin_notes === "string" && student.admin_notes.length > 0 && (
+                  <div className="rounded-lg border border-border p-3">
+                    <p className="text-xs text-muted-foreground">Admin notes</p>
+                    <p className="mt-1 text-sm whitespace-pre-wrap">
+                      {student.admin_notes}
+                    </p>
+                  </div>
+                )}
               </TabsContent>
 
               {/* Courses Tab */}

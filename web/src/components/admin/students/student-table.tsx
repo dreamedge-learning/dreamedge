@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ExportButton } from "@/components/admin/export-button";
+import { registrationSourceLabel } from "@/lib/students/identity";
 import { StudentDetail } from "./student-detail";
 import { fetchStudents, bulkUpdateStudentStatus } from "@/app/admin/(panel)/students/actions";
 import type { StudentWithEnrollments } from "@/types/database";
@@ -38,6 +39,12 @@ interface StudentTableProps {
   initialCount: number;
   courses: { id: string; name: string }[];
 }
+
+const sourceColors: Record<string, string> = {
+  self_online: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+  admin_offline: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  admin_import: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+};
 
 const statusColors: Record<string, string> = {
   active: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
@@ -51,6 +58,7 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [cityFilter, setCityFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("all");
   const [showFilters, setShowFilters] = useState(false);
@@ -70,6 +78,7 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
         const result = await fetchStudents({
           search: (overrides.search as string) ?? search,
           status: (overrides.status as string) ?? statusFilter,
+          source: (overrides.source as string) ?? sourceFilter,
           city: (overrides.city as string) ?? cityFilter,
           courseId: ((overrides.courseId as string) ?? courseFilter) === "all"
             ? undefined
@@ -86,12 +95,13 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
         setTotalCount(result.count ?? 0);
       });
     },
-    [search, statusFilter, cityFilter, courseFilter, page]
+    [search, statusFilter, sourceFilter, cityFilter, courseFilter, page]
   );
 
   const exportFilters = {
     search,
     status: statusFilter,
+    source: sourceFilter,
     city: cityFilter,
     courseId: courseFilter,
   };
@@ -119,6 +129,7 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
   const handleFilterChange = useCallback(
     (key: string, value: string) => {
       if (key === "status") setStatusFilter(value);
+      if (key === "source") setSourceFilter(value);
       if (key === "city") setCityFilter(value);
       if (key === "courseId") setCourseFilter(value);
       setPage(1);
@@ -244,6 +255,18 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
             </SelectContent>
           </Select>
 
+          <Select value={sourceFilter} onValueChange={(v) => v && handleFilterChange("source", v)}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Registered via" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="self_online">Online</SelectItem>
+              <SelectItem value="admin_offline">Offline centre</SelectItem>
+              <SelectItem value="admin_import">Imported</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Input
             placeholder="Filter by city..."
             value={cityFilter}
@@ -270,10 +293,17 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
             size="sm"
             onClick={() => {
               setStatusFilter("all");
+              setSourceFilter("all");
               setCityFilter("");
               setCourseFilter("all");
               setPage(1);
-              loadData({ status: "all", city: "", courseId: "all", page: 1 });
+              loadData({
+                status: "all",
+                source: "all",
+                city: "",
+                courseId: "all",
+                page: 1,
+              });
             }}
           >
             Clear filters
@@ -298,6 +328,7 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
               <TableHead>Name</TableHead>
               <TableHead className="hidden md:table-cell">Phone</TableHead>
               <TableHead className="hidden lg:table-cell">City</TableHead>
+              <TableHead>Registered via</TableHead>
               <TableHead>Courses</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="hidden sm:table-cell">Joined</TableHead>
@@ -306,13 +337,13 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
           <TableBody>
             {isPending ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center">
+                <TableCell colSpan={8} className="h-32 text-center">
                   <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   No students found
                 </TableCell>
               </TableRow>
@@ -344,7 +375,9 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
                       <div className="min-w-0">
                         <p className="font-medium truncate">{student.full_name}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {student.email || "No email"}
+                          {student.student_code
+                            ? `${student.student_code} · ${student.email || "No email"}`
+                            : student.email || "No email"}
                         </p>
                       </div>
                     </div>
@@ -354,6 +387,25 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-sm">
                     {student.city || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge
+                        variant="secondary"
+                        className={sourceColors[student.registration_source] ?? ""}
+                      >
+                        {registrationSourceLabel(student.registration_source)}
+                      </Badge>
+                      {!student.profile_completed && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-red-500/10 text-red-600 dark:text-red-400"
+                          title="This student has not finished the profile form yet"
+                        >
+                          Incomplete
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">{student.enrollment_count}</Badge>

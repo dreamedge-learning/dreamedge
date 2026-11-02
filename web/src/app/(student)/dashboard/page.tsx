@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { requireStudent } from "@/lib/auth-student";
+import { requireCompleteStudentProfile } from "@/lib/auth-student";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardContent } from "@/components/student/dashboard/dashboard-content";
 
@@ -228,7 +228,7 @@ async function fetchUpcomingLiveClasses(studentId: string) {
 }
 
 export default async function DashboardPage() {
-  const student = await requireStudent();
+  const student = await requireCompleteStudentProfile("/dashboard");
 
   const [enrollments, upcomingClasses] = await Promise.all([
     fetchActiveEnrollments(student.id),

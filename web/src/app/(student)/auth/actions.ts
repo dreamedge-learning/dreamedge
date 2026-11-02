@@ -1,35 +1,18 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { createServiceClient } from "@/lib/supabase/service";
+import { normalizeIndianPhone } from "@/lib/phone";
 import { RATE_LIMITS, describeRetryAfter, rateLimit } from "@/lib/rate-limit";
 import { SITE_URL } from "@/lib/site";
+import {
+  createStudentProfile,
+  findStudentByUserId,
+} from "@/lib/students/create-student";
+import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 interface ActionResult<T = Record<string, unknown>> {
   data?: T;
   error?: string;
-}
-
-async function generateReferralCode(): Promise<string> {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const service = createServiceClient();
-
-  for (let attempt = 0; attempt < 5; attempt++) {
-    let code = "DE";
-    for (let i = 0; i < 6; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)];
-    }
-
-    const { data } = await service
-      .from("students")
-      .select("id")
-      .eq("referral_code", code)
-      .single();
-
-    if (!data) return code;
-  }
-
-  return "DE" + Date.now().toString(36).toUpperCase().slice(-6);
 }
 
 export async function registerStudent(
@@ -87,24 +70,24 @@ export async function registerStudent(
     return { error: "Registration failed. Please try again." };
   }
 
-  const referralCode = await generateReferralCode();
-  const service = createServiceClient();
-
-  // NOTE: the live `students` table has no `free_trial_expires_at` column, so
-  // the `free_trial_days` site setting is deliberately not read or written on
-  // the signup path. Same as auth/callback/route.ts.
-  const { error: insertError } = await service.from("students").insert({
-    user_id: userId,
-    full_name: fullName.trim(),
-    email: email.toLowerCase().trim(),
-    phone,
-    class: studentClass,
-    referral_code: referralCode,
-    referred_by: referredBy?.trim() || null,
+  const created = await createStudentProfile({
+    userId,
+    source: "self_online",
+    authEmail: email,
+    fields: {
+      full_name: fullName,
+      email,
+      phone,
+      class: studentClass,
+      referred_by: referredBy,
+    },
   });
 
-  if (insertError) {
-    await service.auth.admin.deleteUser(userId);
+  if (created.error) {
+    // An auth user with no student row can never sign in past the profile
+    // gate and cannot register again with the same address, so roll it back
+    // rather than leaving the student locked out of their own email.
+    await createServiceClient().auth.admin.deleteUser(userId);
     return { error: "Registration failed. Please try again." };
   }
 
@@ -226,21 +209,6 @@ export async function resetPassword(
 // (or similar), the fix is in the Supabase dashboard, not this code.
 // -----------------------------------------------------------------------------
 
-const INDIAN_PHONE_RE = /^[6-9]\d{9}$/;
-
-/** Normalize a raw user-entered Indian phone number to E.164 (+91XXXXXXXXXX). */
-function normalizeIndianPhone(raw: string): string | null {
-  if (!raw) return null;
-  const digits = raw.replace(/\D/g, "");
-  const ten = digits.startsWith("91") && digits.length === 12
-    ? digits.slice(2)
-    : digits.length === 10
-      ? digits
-      : null;
-  if (!ten || !INDIAN_PHONE_RE.test(ten)) return null;
-  return `+91${ten}`;
-}
-
 function isProviderDisabledError(message: string): boolean {
   const m = message.toLowerCase();
   return (
@@ -342,31 +310,21 @@ export async function verifyPhoneOtp(
     return { error: "Verification failed. Please try again." };
   }
 
-  const service = createServiceClient();
-  const { data: existing } = await service
-    .from("students")
-    .select("id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
+  const existing = await findStudentByUserId(userId);
   if (existing) {
     return { data: { userId, isNew: false } };
   }
 
-  const referralCode = await generateReferralCode();
-
-  // No `free_trial_expires_at` on the live `students` table — see registerStudent.
-  const syntheticEmail = `${normalized.replace(/[^0-9]/g, "")}@phone.dreamedge.local`;
-
-  const { error: insertError } = await service.from("students").insert({
-    user_id: userId,
-    full_name: "Student",
-    email: syntheticEmail,
-    phone: normalized,
-    referral_code: referralCode,
+  // No name, no email: a phone sign-in gives us neither. The onboarding form
+  // collects both, which is why the profile gate exists.
+  const created = await createStudentProfile({
+    userId,
+    source: "self_online",
+    authPhone: normalized,
+    fields: { phone: normalized },
   });
 
-  if (insertError) {
+  if (created.error) {
     return { error: "Could not create your student profile. Please try again." };
   }
 

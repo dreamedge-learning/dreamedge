@@ -12,6 +12,7 @@ import {
   Copy,
   Check,
   Calendar,
+  IdCard,
   Shield,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -19,6 +20,13 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/student/auth/password-input";
 import { INDIAN_STATES } from "@/lib/constants/indian-states";
+import { indianPhoneDigits } from "@/lib/phone";
+import { isSyntheticEmail } from "@/lib/students/identity";
+import {
+  GENDER_OPTIONS,
+  STUDENT_BOARDS,
+  STUDENT_CLASSES,
+} from "@/lib/validations/onboarding";
 import type { Database } from "@/types/supabase";
 import {
   updateProfile,
@@ -34,6 +42,12 @@ import { getInitials } from "@/lib/format";
  */
 type Student = Database["public"]["Tables"]["students"]["Row"];
 
+/** Matches the Input height and border so the native selects do not stand out. */
+const SELECT_CLASS =
+  "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm " +
+  "outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 " +
+  "focus-visible:ring-ring/50 disabled:opacity-50";
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-IN", {
     day: "numeric",
@@ -42,7 +56,17 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function ProfileContent({ student }: { student: Student }) {
+export function ProfileContent({
+  student,
+  signInEmail,
+}: {
+  student: Student;
+  /**
+   * The address the student signs in with. Editing the contact email below
+   * never changes it, and the hint under that field says so.
+   */
+  signInEmail: string | null;
+}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -69,6 +93,18 @@ export function ProfileContent({ student }: { student: Student }) {
       : newPassword.length < 12
         ? "bg-yellow-500"
         : "bg-green-500";
+
+  // A phone-OTP student's stored address is one this platform invented; it
+  // should read as "not provided" rather than as something they chose.
+  const isPlaceholderEmail = isSyntheticEmail(student.email);
+
+  function copyStudentCode() {
+    if (!student.student_code) return;
+    navigator.clipboard.writeText(student.student_code).then(
+      () => toast.success("Student code copied!"),
+      () => toast.error("Failed to copy")
+    );
+  }
 
   function copyReferralCode() {
     if (!student.referral_code) return;
@@ -255,52 +291,146 @@ export function ProfileContent({ student }: { student: Student }) {
                   defaultValue={student.full_name}
                   required
                   minLength={2}
-                  maxLength={100}
+                  maxLength={120}
                   disabled={savePending}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <div className="relative">
-                  <Input
-                    id="email"
-                    value={student.email ?? ""}
-                    disabled
-                    className="pr-8 opacity-60"
-                  />
-                  <Lock className="absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                </div>
+                <Label htmlFor="date_of_birth">Date of Birth</Label>
+                <Input
+                  id="date_of_birth"
+                  name="date_of_birth"
+                  type="date"
+                  defaultValue={student.date_of_birth ?? ""}
+                  disabled={savePending}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="gender">Gender</Label>
+                <select
+                  id="gender"
+                  name="gender"
+                  defaultValue={student.gender ?? ""}
+                  disabled={savePending}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">Prefer not to say</option>
+                  {GENDER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="class">Class</Label>
+                <select
+                  id="class"
+                  name="class"
+                  defaultValue={student.class ?? ""}
+                  disabled={savePending}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">Select class</option>
+                  {STUDENT_CLASSES.map((option) => (
+                    <option key={option} value={option}>
+                      Class {option}
+                    </option>
+                  ))}
+                </select>
                 <p className="text-xs text-muted-foreground">
-                  Contact support to change email
+                  Update this when you move up a class.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="board">Board</Label>
+                <select
+                  id="board"
+                  name="board"
+                  defaultValue={student.board ?? ""}
+                  disabled={savePending}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">Select board</option>
+                  {STUDENT_BOARDS.map((option) => (
+                    <option key={option} value={option}>
+                      {option === "State" ? "State Board" : option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="school_name">School Name</Label>
+                <Input
+                  id="school_name"
+                  name="school_name"
+                  defaultValue={student.school_name ?? ""}
+                  maxLength={160}
+                  disabled={savePending}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">Your Phone</Label>
                 <Input
                   id="phone"
                   name="phone"
                   type="tel"
-                  defaultValue={student.phone ?? ""}
+                  inputMode="numeric"
+                  defaultValue={indianPhoneDigits(student.phone) ?? ""}
                   placeholder="9876543210"
-                  pattern="\d{10}"
-                  title="10-digit phone number"
                   disabled={savePending}
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="class_display">Class</Label>
+                <Label htmlFor="email">Contact Email</Label>
                 <Input
-                  id="class_display"
-                  value={student.class ?? "—"}
-                  disabled
-                  className="opacity-60"
+                  id="email"
+                  name="email"
+                  type="email"
+                  inputMode="email"
+                  defaultValue={isPlaceholderEmail ? "" : (student.email ?? "")}
+                  placeholder="you@example.com"
+                  disabled={savePending}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Cannot be changed after registration
+                  {signInEmail
+                    ? `Receipts and class updates go here. Sign-in stays on ${signInEmail}.`
+                    : "Receipts and class updates go here. Changing it does not change how you sign in."}
                 </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="parent_name">Parent or Guardian Name</Label>
+                <Input
+                  id="parent_name"
+                  name="parent_name"
+                  defaultValue={student.parent_name ?? ""}
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  disabled={savePending}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="parent_phone">Parent or Guardian Phone</Label>
+                <Input
+                  id="parent_phone"
+                  name="parent_phone"
+                  type="tel"
+                  inputMode="numeric"
+                  defaultValue={indianPhoneDigits(student.parent_phone) ?? ""}
+                  placeholder="9876543210"
+                  required
+                  disabled={savePending}
+                />
               </div>
 
               <div className="space-y-2">
@@ -310,6 +440,7 @@ export function ProfileContent({ student }: { student: Student }) {
                   name="city"
                   defaultValue={student.city ?? ""}
                   placeholder="Your city"
+                  required
                   disabled={savePending}
                 />
               </div>
@@ -321,7 +452,7 @@ export function ProfileContent({ student }: { student: Student }) {
                   name="state"
                   defaultValue={student.state ?? ""}
                   disabled={savePending}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
+                  className={SELECT_CLASS}
                 >
                   <option value="">Select state</option>
                   {INDIAN_STATES.map((s) => (
@@ -330,6 +461,30 @@ export function ProfileContent({ student }: { student: Student }) {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pincode">PIN Code</Label>
+                <Input
+                  id="pincode"
+                  name="pincode"
+                  inputMode="numeric"
+                  maxLength={6}
+                  defaultValue={student.pincode ?? ""}
+                  placeholder="441501"
+                  disabled={savePending}
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="address_line">Address</Label>
+                <Input
+                  id="address_line"
+                  name="address_line"
+                  defaultValue={student.address_line ?? ""}
+                  maxLength={300}
+                  disabled={savePending}
+                />
               </div>
             </div>
 
@@ -361,11 +516,30 @@ export function ProfileContent({ student }: { student: Student }) {
         ) : (
           <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
             <InfoRow label="Full Name" value={student.full_name} />
-            <InfoRow label="Email" value={student.email ?? "—"} badge="Verified" />
-            <InfoRow label="Phone" value={student.phone ?? "—"} />
-            <InfoRow label="Class" value={student.class ?? "—"} />
+            <InfoRow
+              label="Date of Birth"
+              value={student.date_of_birth ? formatDate(student.date_of_birth) : "—"}
+            />
+            <InfoRow label="Class" value={student.class ? `Class ${student.class}` : "—"} />
+            <InfoRow
+              label="Board"
+              value={student.board === "State" ? "State Board" : (student.board ?? "—")}
+            />
+            <InfoRow label="School" value={student.school_name ?? "—"} />
+            <InfoRow
+              label="Contact Email"
+              value={isPlaceholderEmail ? "Not provided" : (student.email ?? "—")}
+            />
+            <InfoRow label="Your Phone" value={indianPhoneDigits(student.phone) ?? "—"} />
+            <InfoRow label="Parent or Guardian" value={student.parent_name ?? "—"} />
+            <InfoRow
+              label="Parent Phone"
+              value={indianPhoneDigits(student.parent_phone) ?? "—"}
+            />
             <InfoRow label="City" value={student.city ?? "—"} />
             <InfoRow label="State" value={student.state ?? "—"} />
+            <InfoRow label="PIN Code" value={student.pincode ?? "—"} />
+            <InfoRow label="Address" value={student.address_line ?? "—"} />
           </div>
         )}
       </div>
@@ -464,6 +638,20 @@ export function ProfileContent({ student }: { student: Student }) {
               {student.created_at ? formatDate(student.created_at) : "—"}
             </span>
           </div>
+
+          {student.student_code && (
+            <div className="flex items-center gap-2 text-sm">
+              <IdCard className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Student Code</span>
+              <button
+                type="button"
+                onClick={copyStudentCode}
+                className="font-mono font-medium text-foreground transition-colors hover:text-brand-orange"
+              >
+                {student.student_code}
+              </button>
+            </div>
+          )}
 
           {student.referral_code && (
             <div className="flex items-center gap-2 text-sm">
