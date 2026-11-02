@@ -60,6 +60,17 @@ export const manualPaymentSchema = z.object({
   reference: z.string().max(120, "Reference is too long.").optional(),
   remarks: z.string().max(1000, "Remarks are too long.").optional(),
   payment_date: dateText("Payment date").optional(),
+  /**
+   * Overrides the course's own `validity_days`.
+   *
+   * Needed at the counter, where a student joining mid-session is sometimes
+   * given access to the end of the academic year rather than a full term.
+   */
+  validity_days: optionalNumber("Validity").refine(
+    (value) =>
+      value === undefined || (Number.isInteger(value) && value >= 1 && value <= 3650),
+    "Validity must be between 1 and 3650 days."
+  ),
 });
 
 export function manualPaymentInput(formData: FormData) {
@@ -71,6 +82,7 @@ export function manualPaymentInput(formData: FormData) {
     reference: formText(formData, "reference"),
     remarks: formText(formData, "remarks"),
     payment_date: formText(formData, "payment_date"),
+    validity_days: formText(formData, "validity_days"),
   };
 }
 

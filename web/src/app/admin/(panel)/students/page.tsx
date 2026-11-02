@@ -1,6 +1,10 @@
 import { Suspense } from "react";
+import Link from "next/link";
+import { Printer, UserPlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StudentTable } from "@/components/admin/students/student-table";
+import { getAdminSession } from "@/lib/admin";
 import { fetchStudents, fetchCoursesList } from "./actions";
 
 function TableSkeleton() {
@@ -41,14 +45,46 @@ async function StudentTableLoader() {
   );
 }
 
-export default function StudentsPage() {
+export default async function StudentsPage() {
+  const admin = await getAdminSession();
+
+  // Counter registration belongs to whoever is behind the counter. A content
+  // creator or a teacher has no business creating student accounts, and the
+  // page itself redirects them, so hiding the buttons is just the courtesy of
+  // not offering a door that is locked.
+  const canRegister =
+    admin?.role_name === "super_admin" || admin?.role_name === "support_staff";
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Students</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage student profiles, track enrollments, and monitor progress.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Students</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage student profiles, track enrollments, and monitor progress.
+          </p>
+        </div>
+
+        {canRegister && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/admin/students/registration-form" />}
+            >
+              <Printer className="mr-1.5 h-4 w-4" />
+              Printable form
+            </Button>
+            <Button
+              size="sm"
+              className="bg-brand-orange text-white hover:bg-brand-orange-dark"
+              render={<Link href="/admin/students/new" />}
+            >
+              <UserPlus className="mr-1.5 h-4 w-4" />
+              Register student
+            </Button>
+          </div>
+        )}
       </div>
 
       <Suspense fallback={<TableSkeleton />}>

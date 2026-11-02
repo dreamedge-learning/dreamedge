@@ -384,6 +384,7 @@ export async function recordManualPayment(formData: FormData) {
       payment_method: paymentMethod,
       reference,
       remarks,
+      validity_days: validityOverride,
     } = parsed.data;
     const paymentDate = parsed.data.payment_date ?? new Date().toISOString();
 
@@ -403,7 +404,7 @@ export async function recordManualPayment(formData: FormData) {
     // Get course details
     const { data: course, error: courseError } = await supabase
       .from("courses")
-      .select("price")
+      .select("price, validity_days")
       .eq("id", courseId)
       .single();
 
@@ -412,9 +413,14 @@ export async function recordManualPayment(formData: FormData) {
     }
 
     const discountAmount = Math.max(0, Number(course.price) - amount);
+
+    // The course's own validity, overridable per payment. An earlier note
+    // here claimed `courses` no longer carried a validity column and hard-wired
+    // a year; it does carry one, and a course sold as a six-month package was
+    // quietly granting twelve.
+    const validityDays = validityOverride ?? course.validity_days ?? 365;
     const validUntil = new Date(paymentDate);
-    // Default validity: 365 days (course table no longer carries a validity column)
-    validUntil.setDate(validUntil.getDate() + 365);
+    validUntil.setDate(validUntil.getDate() + validityDays);
 
     // Create order
     const { data: order, error: orderError } = await supabase
@@ -462,7 +468,12 @@ export async function recordManualPayment(formData: FormData) {
       action: "manual_payment_recorded",
       entity_type: "order",
       entity_id: order.id,
-      new_data: { student_id: studentId, course_id: courseId, amount },
+      new_data: {
+        student_id: studentId,
+        course_id: courseId,
+        amount,
+        validity_days: validityDays,
+      },
     });
 
     revalidatePath("/admin/revenue");

@@ -22,6 +22,7 @@ import {
   FileText,
   Library,
   UserSearch,
+  UserPlus,
   BarChart3,
   Target,
   Award,
@@ -84,6 +85,7 @@ const navItems: NavItem[] = [
     roles: ["super_admin", "teacher", "support_staff"],
     children: [
       { label: "All Students", href: "/admin/students", icon: UserSearch },
+      { label: "Register Student", href: "/admin/students/new", icon: UserPlus },
       { label: "Analytics", href: "/admin/students/analytics", icon: BarChart3 },
       { label: "Leads", href: "/admin/students/leads", icon: Target },
       { label: "Testimonials", href: "/admin/students/testimonials", icon: Award },
