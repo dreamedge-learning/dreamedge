@@ -23,7 +23,20 @@ api_url = "http://127.0.0.1"
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["https://dreamedge.online"]
+# Where Supabase Auth is allowed to send a student back after a Google sign-in
+# or a password-reset link. `dreamedge.online` was the only entry and is now a
+# parked domain, so every production redirect was pointing somewhere dead.
+#
+# `site_url` stays on localhost because this file also configures the local
+# stack. Note that editing this changes nothing on the live project by itself:
+# the hosted Site URL and Redirect URLs live in the Supabase dashboard unless
+# somebody runs `supabase config push`.
+additional_redirect_urls = [
+  "http://localhost:3000/**",
+  "https://www.dreamedgelearning.com/**",
+  "https://dreamedgelearning.com/**",
+  "https://dreamedge-sand.vercel.app/**",
+]
 jwt_expiry = 3600
 enable_signup = true
 

@@ -8,7 +8,7 @@ create table if not exists site_settings (
 insert into site_settings (key, value) values
   ('platform_name', '"Dream Edge Online"'),
   ('tagline', '"Foundation Courses for Classes 6-10"'),
-  ('support_email', '"support@dreamedge.online"'),
+  ('support_email', '"supportteam@dreamedgelearning.com"'),
   ('support_phone', '"+91-XXXXXXXXXX"'),
   ('social_links', '{"youtube":"","instagram":"","telegram":"","whatsapp":""}'),
   ('maintenance_mode', 'false'),

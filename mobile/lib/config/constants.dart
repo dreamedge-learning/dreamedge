@@ -8,8 +8,21 @@ class AppConstants {
   static const onboardingSeenKey = 'onboarding_seen';
   static const authTokenKey = 'auth_token';
 
-  static const supportEmail = 'support@dreamedge.online';
-  static const websiteUrl = 'https://dreamedge.online';
+  /// The address the Help & Support link opens a mail draft to.
+  ///
+  /// `site_settings.support_email` is the real source of truth -- an admin
+  /// edits it under Settings > Platform -- so this copy has to be changed with
+  /// it. It is held here rather than fetched because a mail link should not
+  /// wait on a request, and the previous value,
+  /// `support@dreamedge.online`, had quietly stopped working: that domain has
+  /// no MX record at all, so every support mail a student sent bounced.
+  static const supportEmail = 'supportteam@dreamedgelearning.com';
+
+  /// Shown to students and opened in a browser, so the apex is right here even
+  /// though it redirects to `www`. Requests the app makes go to
+  /// [AppConfig.apiBaseUrl], which names the canonical host so that no
+  /// document fetch depends on following a redirect.
+  static const websiteUrl = 'https://dreamedgelearning.com';
 
   static const minPasswordLength = 6;
   static const otpLength = 6;
