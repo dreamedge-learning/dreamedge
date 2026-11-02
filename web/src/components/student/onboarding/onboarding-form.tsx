@@ -276,6 +276,25 @@ export function OnboardingForm({
     [reviewing, stepIndex]
   );
 
+  // The outer element is a real <form>: a four-step form filled mostly on
+  // phones needs the mobile keyboard's Go key and desktop Enter to advance,
+  // and neither fires without one. Buttons inside stay `type="button"` so
+  // only the explicit submit handler drives Continue/Finish -- it dispatches
+  // to goNext or submit by current state. Enter inside a textarea is
+  // deliberately left alone; the form has no textareas today.
+  //
+  // Declared before the completion-panel early return so React's hook rules
+  // see this `useCallback` on every render.
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (saving || submitting) return;
+      if (reviewing) void submit();
+      else void goNext();
+    },
+    [goNext, reviewing, saving, submit, submitting]
+  );
+
   if (studentCode !== null) {
     return (
       <CompletionPanel
@@ -289,7 +308,11 @@ export function OnboardingForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[560px] px-4 py-8 sm:py-12">
+    <form
+      onSubmit={handleSubmit}
+      className="mx-auto w-full max-w-[560px] px-4 py-8 sm:py-12"
+      noValidate
+    >
       <header className="mb-6 text-center">
         <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-brand-orange">
           <span className="text-lg font-bold tracking-tight text-white">DE</span>
@@ -446,7 +469,7 @@ export function OnboardingForm({
         Fields marked with an asterisk are required. Your answers are saved as
         you go.
       </p>
-    </div>
+    </form>
   );
 }
 
@@ -643,6 +666,12 @@ function ContactStep({
 }: StepProps & { signInEmail: string | null; emailIsPlaceholder: boolean }) {
   return (
     <>
+      {/*
+        Order matches the printed sheet and the admin's counter entry
+        form: phone, email, parent name, parent phone. Three places asking
+        for the same fields in the same order means an admin typing from
+        a paper form can go top-to-bottom without look-ups.
+      */}
       <Field
         field="phone"
         errors={errors}
@@ -661,6 +690,31 @@ function ContactStep({
           aria-describedby={describedBy("phone", errors, true)}
           onChange={(event) => setValue("phone", event.target.value)}
           onBlur={() => onBlur("phone")}
+        />
+      </Field>
+
+      <Field
+        field="email"
+        errors={errors}
+        hint={
+          signInEmail
+            ? `Changing this does not change how you sign in — that stays ${signInEmail}.`
+            : "We will use this for receipts and class updates."
+        }
+      >
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          className={CONTROL}
+          placeholder={emailIsPlaceholder ? "you@example.com" : undefined}
+          value={values.email}
+          aria-invalid={Boolean(errors.email)}
+          aria-describedby={describedBy("email", errors, true)}
+          onChange={(event) => setValue("email", event.target.value)}
+          onBlur={() => onBlur("email")}
         />
       </Field>
 
@@ -695,31 +749,6 @@ function ContactStep({
           aria-describedby={describedBy("parent_phone", errors, true)}
           onChange={(event) => setValue("parent_phone", event.target.value)}
           onBlur={() => onBlur("parent_phone")}
-        />
-      </Field>
-
-      <Field
-        field="email"
-        errors={errors}
-        hint={
-          signInEmail
-            ? `Changing this does not change how you sign in — that stays ${signInEmail}.`
-            : "We will use this for receipts and class updates."
-        }
-      >
-        <Input
-          id="email"
-          name="email"
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          className={CONTROL}
-          placeholder={emailIsPlaceholder ? "you@example.com" : undefined}
-          value={values.email}
-          aria-invalid={Boolean(errors.email)}
-          aria-describedby={describedBy("email", errors, true)}
-          onChange={(event) => setValue("email", event.target.value)}
-          onBlur={() => onBlur("email")}
         />
       </Field>
     </>

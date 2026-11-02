@@ -1282,9 +1282,15 @@ const referralCodesDataset = defineDataset({
     { key: "valid_until", header: "Valid until", format: "date" },
     { key: "created_at", header: "Created", format: "date" },
   ],
-  filters: z.object({ active: allOr(z.enum(["true", "false"])) }),
+  filters: z.object({
+    search: searchFilter,
+    active: allOr(z.enum(["true", "false"])),
+  }),
   async describe(filters) {
-    return describeParts([["active", filters.active]]);
+    return describeParts([
+      ["search", filters.search],
+      ["active", filters.active],
+    ]);
   },
   async fetcher(filters, supabase) {
     interface ReferralQueryRow {
@@ -1309,6 +1315,18 @@ const referralCodesDataset = defineDataset({
         )
         .order("created_at", { ascending: false })
         .order("id", { ascending: true });
+
+      if (filters.search) {
+        // The list's search box reads from code, so the export honours the
+        // same column -- zod used to drop the field on the way in because
+        // the schema did not list it, and the download then ignored what
+        // the admin typed. Codes do not contain `%` or `_` under the
+        // minting alphabet, but `sanitizeSearch` is cheap defence.
+        const safe = sanitizeSearch(filters.search);
+        if (safe.length > 0) {
+          query = query.ilike("code", `%${safe}%`);
+        }
+      }
 
       if (isApplied(filters.active)) {
         query = query.eq("is_active", filters.active === "true");

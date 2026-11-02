@@ -143,6 +143,7 @@ export function ReferralCodesTable({ initialData, initialCount }: ReferralCodesT
         <ExportButton
           dataset="referral-codes"
           filters={{
+            search,
             active: statusFilter === "all" ? "all" : String(statusFilter === "active"),
           }}
           size="default"

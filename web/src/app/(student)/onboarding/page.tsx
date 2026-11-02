@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { OnboardingForm } from "@/components/student/onboarding/onboarding-form";
 import { requireStudent } from "@/lib/auth-student";
@@ -22,6 +23,17 @@ export default async function OnboardingPage({
 }) {
   const student = await requireStudent();
   const { next } = await searchParams;
+
+  // A student who has already completed onboarding and types /onboarding
+  // (or follows a stale link) is not here to re-answer the form -- the
+  // whole gate's point was to collect this once. Send them on. Same
+  // `next` safety check as below, so a `?next=` cannot turn this into an
+  // open redirect.
+  if ((student as Record<string, unknown>).profile_completed === true) {
+    const safeNext =
+      next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+    redirect(safeNext);
+  }
 
   const supabase = await createClient();
   const {

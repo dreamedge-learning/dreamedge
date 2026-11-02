@@ -248,13 +248,29 @@ class LicenceSweeper {
 
       final rawValidUntil = row['valid_until'] as String?;
 
+      // Every other missing field in this function throws rather than
+      // guesses -- the point of `_fetch` is that an answer we cannot read
+      // becomes a visible failure instead of the empty map that used to
+      // mean "revoke everything" to the loop above. `is_downloadable`
+      // used to be `row['is_downloadable'] == true`, which read `false`
+      // on a missing or non-boolean key, and because that path is also
+      // what feeds the revoke-and-delete step at :174 a wrong answer
+      // here would silently take the file off the disk. The column is
+      // not nullable today, but match the function's own rule.
+      final rawDownloadable = row['is_downloadable'];
+      if (rawDownloadable is! bool) {
+        throw const LicenceCheckFailed(
+          'an entitlement did not say whether it was downloadable',
+        );
+      }
+
       entitlements[id] = _Entitlement(
         validUntil: rawValidUntil == null
             ? null
             : DateTime.tryParse(rawValidUntil),
         offlineLicenseDays:
             (row['offline_license_days'] as num?)?.toInt() ?? 30,
-        isDownloadable: row['is_downloadable'] == true,
+        isDownloadable: rawDownloadable,
       );
     }
 

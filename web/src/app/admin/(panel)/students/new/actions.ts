@@ -49,7 +49,15 @@ import { recordManualPayment } from "../../revenue/actions";
  * same person cannot be created there.
  */
 
-const REGISTER_ROLES = ["super_admin", "support_staff"] as const;
+// Super admin and support staff own student records; accountant owns the
+// cash drawer and the manual-payment path this form reuses. The offline
+// registration form is where a walk-in's registration and their first
+// payment are both entered in one go, so an accountant has to be able to
+// reach it -- otherwise the person collecting the money at the counter
+// cannot record it against a student without walking the sheet to someone
+// else first. The spec in CLAUDE.md §5 ("Accountant: Orders, payments,
+// refunds, invoices") covers this reading.
+const REGISTER_ROLES = ["super_admin", "support_staff", "accountant"] as const;
 
 interface ActionResult<T> {
   data?: T;

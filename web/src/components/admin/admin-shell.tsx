@@ -38,6 +38,8 @@ interface NavChild {
   label: string;
   href: string;
   icon: React.ElementType;
+  /** When set, overrides the group's role list for this one child. */
+  roles?: UserRole[];
 }
 
 interface NavItem {
@@ -81,14 +83,46 @@ const navItems: NavItem[] = [
   {
     label: "Students",
     href: "/admin/students",
+    // Group visibility is the union of its children. Accountant is here
+    // only because the counter-registration child is theirs; the other
+    // children filter accountant out individually below.
+    roles: ["super_admin", "teacher", "support_staff", "accountant"],
     icon: Users,
-    roles: ["super_admin", "teacher", "support_staff"],
     children: [
-      { label: "All Students", href: "/admin/students", icon: UserSearch },
-      { label: "Register Student", href: "/admin/students/new", icon: UserPlus },
-      { label: "Analytics", href: "/admin/students/analytics", icon: BarChart3 },
-      { label: "Leads", href: "/admin/students/leads", icon: Target },
-      { label: "Testimonials", href: "/admin/students/testimonials", icon: Award },
+      {
+        label: "All Students",
+        href: "/admin/students",
+        icon: UserSearch,
+        roles: ["super_admin", "teacher", "support_staff"],
+      },
+      {
+        label: "Register Student",
+        href: "/admin/students/new",
+        icon: UserPlus,
+        // Teachers must not see this: the action refuses the role (REGISTER_ROLES
+        // in students/new/actions.ts) and a visible-but-locked door was the
+        // actual complaint from the audit. Accountant is here because the
+        // counter-registration flow is also where the cash gets recorded.
+        roles: ["super_admin", "support_staff", "accountant"],
+      },
+      {
+        label: "Analytics",
+        href: "/admin/students/analytics",
+        icon: BarChart3,
+        roles: ["super_admin", "teacher", "support_staff"],
+      },
+      {
+        label: "Leads",
+        href: "/admin/students/leads",
+        icon: Target,
+        roles: ["super_admin", "support_staff"],
+      },
+      {
+        label: "Testimonials",
+        href: "/admin/students/testimonials",
+        icon: Award,
+        roles: ["super_admin", "support_staff"],
+      },
     ],
   },
   {
@@ -173,25 +207,30 @@ export function AdminShell({
               </Link>
               {item.children && active && (
                 <div className="ml-7 mt-1 space-y-0.5 border-l border-border pl-3">
-                  {item.children.map((child) => {
-                    const ChildIcon = child.icon;
-                    const childActive = pathname === child.href;
-                    return (
-                      <Link
-                        key={child.href}
-                        href={child.href}
-                        onClick={() => setSidebarOpen(false)}
-                        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
-                          childActive
-                            ? "text-brand-orange"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        <ChildIcon className="h-3.5 w-3.5 shrink-0" />
-                        {child.label}
-                      </Link>
-                    );
-                  })}
+                  {item.children
+                    .filter(
+                      (child) =>
+                        !child.roles || child.roles.includes(admin.role_name)
+                    )
+                    .map((child) => {
+                      const ChildIcon = child.icon;
+                      const childActive = pathname === child.href;
+                      return (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={() => setSidebarOpen(false)}
+                          className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+                            childActive
+                              ? "text-brand-orange"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          <ChildIcon className="h-3.5 w-3.5 shrink-0" />
+                          {child.label}
+                        </Link>
+                      );
+                    })}
                 </div>
               )}
             </div>

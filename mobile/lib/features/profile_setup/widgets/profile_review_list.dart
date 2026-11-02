@@ -61,9 +61,9 @@ class ProfileReviewList extends StatelessWidget {
           ],
         ProfileStep.contact => [
             ('Your mobile number', draft.phone),
+            ('Contact email', draft.email),
             ('Parent or guardian name', draft.parentName),
             ('Parent or guardian mobile number', draft.parentPhone),
-            ('Contact email', draft.email),
           ],
         ProfileStep.location => [
             ('City', draft.city),

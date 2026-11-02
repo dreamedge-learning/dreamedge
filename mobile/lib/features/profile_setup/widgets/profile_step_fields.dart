@@ -131,6 +131,10 @@ class ProfileStepFields extends StatelessWidget {
         ),
       ];
 
+  // Field order matches the printed registration sheet and the admin's
+  // counter entry form: phone, email, parent name, parent phone. All four
+  // asking for the same fields in the same order means an admin typing
+  // from a paper form can go top-to-bottom without look-ups.
   List<Widget> _contactFields() => [
         _Text(
           label: 'Your mobile number',
@@ -143,6 +147,20 @@ class ProfileStepFields extends StatelessWidget {
           autofill: const [AutofillHints.telephoneNumber],
           validator: Validators.phone,
           onChanged: (value) => draft.phone = value,
+        ),
+        _Text(
+          label: 'Contact email',
+          hint: 'you@example.com',
+          helper: signInEmail == null
+              ? 'We will use this for receipts and class updates.'
+              : 'Changing this does not change how you sign in — that stays '
+                  '$signInEmail.',
+          initial: draft.email,
+          keyboard: TextInputType.emailAddress,
+          autofill: const [AutofillHints.email],
+          validator: (value) =>
+              (value == null || value.trim().isEmpty) ? null : Validators.email(value),
+          onChanged: (value) => draft.email = value,
         ),
         _Text(
           label: 'Parent or guardian name *',
@@ -165,20 +183,6 @@ class ProfileStepFields extends StatelessWidget {
             'Parent or guardian mobile number',
           ),
           onChanged: (value) => draft.parentPhone = value,
-        ),
-        _Text(
-          label: 'Contact email',
-          hint: 'you@example.com',
-          helper: signInEmail == null
-              ? 'We will use this for receipts and class updates.'
-              : 'Changing this does not change how you sign in — that stays '
-                  '$signInEmail.',
-          initial: draft.email,
-          keyboard: TextInputType.emailAddress,
-          autofill: const [AutofillHints.email],
-          validator: (value) =>
-              (value == null || value.trim().isEmpty) ? null : Validators.email(value),
-          onChanged: (value) => draft.email = value,
         ),
       ];
 

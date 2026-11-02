@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -39,6 +40,40 @@ enum PlayerPhase {
 
 /// The auto-quality option, which is the HLS ladder doing the choosing.
 const String kAutoQuality = 'auto';
+
+/// The inputs `_attach` needs when the student picks a different quality.
+///
+/// Carrying the three fields as one value makes `planQualitySwap` a pure
+/// function that a test can call without a VideoPlayerController -- the
+/// capture is the whole thing that proves a swap preserves position.
+class QualitySwap {
+  /// The quality label (height, or `kAutoQuality`) to attach next.
+  final String nextQuality;
+
+  /// Where the student was when they picked a new quality, so `_attach`
+  /// starts the new controller from the same place.
+  final Duration resumeAt;
+
+  /// Whether the video was playing at the moment of the capture, so the
+  /// new controller honours autoPlay.
+  final bool wasPlaying;
+
+  const QualitySwap({
+    required this.nextQuality,
+    required this.resumeAt,
+    required this.wasPlaying,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is QualitySwap &&
+      other.nextQuality == nextQuality &&
+      other.resumeAt == resumeAt &&
+      other.wasPlaying == wasPlaying;
+
+  @override
+  int get hashCode => Object.hash(nextQuality, resumeAt, wasPlaying);
+}
 
 /// Owns the video for one lesson: the controller, the control state, the
 /// gestures' side effects and the progress write-back.
@@ -340,15 +375,53 @@ class PlayerController extends ChangeNotifier {
   /// that is the same play having another go at reaching the student.
   ///
   /// The count lives on `student_progress` server-side, because counting on
-  /// the device would hand every replay back on a reinstall.
+  /// the device would hand every replay back on a reinstall. Each intent
+  /// carries a UUID so a timeout AFTER the server incremented does not burn
+  /// a second replay on retry -- the server reads the key, finds the earlier
+  /// decision, and hands back the same `allowed/plays/limit` without
+  /// touching the counter again.
+  /// Whether a claim RPC call is still needed, given the current state.
+  ///
+  /// Pulled out of `_ensurePlayClaimed` so the decision can be tested
+  /// without standing a VideoPlayerController up. The scenarios that
+  /// matter: a lesson with no limit is a free pass, a flag already set
+  /// means the server has recorded the play in this session, and a
+  /// positive limit with the flag unset is the one case where the RPC
+  /// has to run.
+  static bool shouldClaimPlay({
+    required int playLimit,
+    required bool playClaimed,
+  }) {
+    return playLimit > 0 && !playClaimed;
+  }
+
+  /// What the claim flag should be, given a server response.
+  ///
+  /// `allowed: true` means the server counted it and the next retry on this
+  /// controller must not count again. `allowed: false` leaves the flag off
+  /// so the player's refusal path runs, and anything other than a Map
+  /// leaves the flag off too -- the idempotency key stays set either way,
+  /// so a timed-out response followed by a retry hits the same decision
+  /// on the server rather than a second increment. The exception path
+  /// (handled by the caller) also leaves this flag off, by design.
+  static bool claimedFromResponse(Object? response) {
+    if (response is! Map) return false;
+    return response['allowed'] == true;
+  }
+
   Future<bool> _ensurePlayClaimed() async {
-    if (_playLimit <= 0 || _playClaimed) return true;
+    if (!shouldClaimPlay(playLimit: _playLimit, playClaimed: _playClaimed)) {
+      return true;
+    }
+
+    final key = _playClaimKey ??= _newUuidV4();
 
     try {
       final result = await _ref
           .read(supabaseClientProvider)
           .rpc('register_content_play', params: {
             'p_content_item_id': contentId,
+            'p_idempotency_key': key,
           });
 
       if (result is! Map) return true;
@@ -357,7 +430,7 @@ class PlayerController extends ChangeNotifier {
       final limit = (result['limit'] as num?)?.toInt() ?? 0;
       if (limit > 0) _playLimit = limit;
 
-      if (result['allowed'] == true) {
+      if (claimedFromResponse(result)) {
         _playClaimed = true;
         return true;
       }
@@ -374,9 +447,42 @@ class PlayerController extends ChangeNotifier {
       // a lesson they are entitled to. This is also the offline case: the
       // limit is enforced server-side and a downloaded lesson has no server to
       // ask.
+      //
+      // The idempotency key is preserved on `_playClaimKey` across retries,
+      // so if the server did increment and the response dropped on the way
+      // back, the next retry sees the same decision rather than a second
+      // increment.
       _log('play count unavailable: $err');
       return true;
     }
+  }
+
+  /// Idempotency key for the current play intent. Null until the first
+  /// claim; set once and reused across retries, cleared when the controller
+  /// is torn down.
+  String? _playClaimKey;
+
+  /// A UUID v4 string, generated without pulling in a package. Suitable only
+  /// for identifying a request -- not for anything that needs cryptographic
+  /// unpredictability. The RPC rejects stale keys past 24 hours, so a
+  /// collision across devices is a non-issue in practice.
+  static String _newUuidV4() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+
+    // Set the version to 4 and the variant to the RFC 4122 form.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    String hex(int offset, int length) {
+      final buffer = StringBuffer();
+      for (var i = 0; i < length; i++) {
+        buffer.write(bytes[offset + i].toRadixString(16).padLeft(2, '0'));
+      }
+      return buffer.toString();
+    }
+
+    return '${hex(0, 4)}-${hex(4, 2)}-${hex(6, 2)}-${hex(8, 2)}-${hex(10, 6)}';
   }
 
   /// Why the server refused the play, when it did. Null for a genuine limit.
@@ -644,17 +750,46 @@ class PlayerController extends ChangeNotifier {
   /// replaced. The position and whether it was playing are captured first and
   /// restored after, which is the whole trick.
   Future<void> setQuality(String value) async {
-    if (value == _quality || _playingLocalCopy) return;
-
-    final resumeAt = position;
-    final wasPlaying = isPlaying;
+    final plan = planQualitySwap(
+      currentQuality: _quality,
+      requestedQuality: value,
+      playingLocalCopy: _playingLocalCopy,
+      currentPosition: position,
+      isPlaying: isPlaying,
+    );
+    if (plan == null) return;
 
     _set(() {
-      _quality = value;
+      _quality = plan.nextQuality;
       _phase = PlayerPhase.loading;
     });
 
-    await _attach(resumeAt, autoPlay: wasPlaying);
+    await _attach(plan.resumeAt, autoPlay: plan.wasPlaying);
+  }
+
+  /// What a quality switch should hand `_attach`, or null if it is a no-op.
+  ///
+  /// Pulled out of `setQuality` so the capture itself can be tested without
+  /// a platform. The two no-op cases (asking for the quality we are already
+  /// on; a local copy, which has only one rendition) return null; otherwise
+  /// the current position and `isPlaying` are the inputs to the next
+  /// `_attach`. The whole point of the function is that the position and
+  /// playing-state read happen before `_set` changes `_phase`, so a tested
+  /// capture is enough to prove the student does not lose their place.
+  static QualitySwap? planQualitySwap({
+    required String currentQuality,
+    required String requestedQuality,
+    required bool playingLocalCopy,
+    required Duration currentPosition,
+    required bool isPlaying,
+  }) {
+    if (requestedQuality == currentQuality) return null;
+    if (playingLocalCopy) return null;
+    return QualitySwap(
+      nextQuality: requestedQuality,
+      resumeAt: currentPosition,
+      wasPlaying: isPlaying,
+    );
   }
 
   void toggleLock() {

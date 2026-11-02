@@ -122,7 +122,13 @@ export function RegistrationSheet() {
               max={50}
               value={copies}
               className="w-24"
-              onChange={(event) => setCopies(Number(event.target.value))}
+              onChange={(event) => {
+                // Clearing the input gives an empty string, which `Number`
+                // reads as NaN; `setCopies(NaN)` then rendered the field as
+                // the literal text "NaN" with no way back without a reload.
+                const parsed = parseInt(event.target.value, 10);
+                setCopies(Number.isFinite(parsed) ? parsed : 1);
+              }}
             />
           </div>
           <Button

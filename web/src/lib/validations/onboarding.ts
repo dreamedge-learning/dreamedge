@@ -108,16 +108,16 @@ export const onboardingAcademicsSchema = z.object({
 });
 
 // --- Step 3: how to reach you ---
-
+//
+// Field order matches the printed registration sheet and the admin's
+// counter entry form: phone, email, parent name, parent phone. The three
+// agree so an admin typing from a paper form can go top-to-bottom without
+// looking up what maps to what. Zod preserves insertion order on parse, so
+// the error summary follows the same order too. Plenty of Class 6 students
+// have no phone of their own, which is why `phone` is optional and the
+// parent's is the required one.
 export const onboardingContactSchema = z.object({
-  // Plenty of Class 6 students have no phone of their own, which is exactly
-  // why the parent's number below is the required one.
   phone: optionalIndianPhone("Your mobile number"),
-  parent_name: required("Parent or guardian name", 120).refine(
-    (value) => value.length >= 2,
-    "Parent or guardian name must be at least 2 characters."
-  ),
-  parent_phone: indianPhone("Parent or guardian mobile number"),
   email: z
     .string()
     .trim()
@@ -127,6 +127,11 @@ export const onboardingContactSchema = z.object({
       (value) => value === undefined || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
       "Enter a valid email address."
     ),
+  parent_name: required("Parent or guardian name", 120).refine(
+    (value) => value.length >= 2,
+    "Parent or guardian name must be at least 2 characters."
+  ),
+  parent_phone: indianPhone("Parent or guardian mobile number"),
 });
 
 // --- Step 4: where you are ---
@@ -178,10 +183,13 @@ export const ONBOARDING_FIELDS = [
   "class",
   "board",
   "school_name",
+  // Contact order matches the printed sheet and the admin's counter form:
+  // phone, email, parent name, parent phone. Drives both the fetch map and
+  // the error-summary order through the whole feature.
   "phone",
+  "email",
   "parent_name",
   "parent_phone",
-  "email",
   "city",
   "state",
   "pincode",

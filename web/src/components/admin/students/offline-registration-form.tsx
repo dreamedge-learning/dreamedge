@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { INDIAN_STATES } from "@/lib/constants/indian-states";
 import { formatINR } from "@/lib/format";
+import { SUPPORT_PHONE } from "@/lib/site";
 import {
   GENDER_OPTIONS,
   STUDENT_BOARDS,
@@ -148,6 +149,7 @@ export function OfflineRegistrationForm({
     return (
       <RegistrationComplete
         result={result}
+        adminName={adminName}
         onRegisterAnother={registerAnother}
         onOpenStudent={() => router.push("/admin/students")}
       />
@@ -550,12 +552,53 @@ function Field({
   );
 }
 
+// Print stylesheet: hide the panel's shell during a print, show only the
+// receipt card. Visibility rather than display so the parent containers keep
+// their place and the receipt is not dragged out of position by a collapsed
+// ancestor.
+const RECEIPT_PRINT_CSS = `
+@page { size: A5 portrait; margin: 10mm; }
+
+@media screen { .de-receipt-print-only { display: none; } }
+
+@media print {
+  body * { visibility: hidden !important; }
+  .de-receipt, .de-receipt * { visibility: visible !important; }
+
+  html, body, main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .de-receipt {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: 148mm;
+    margin: 0;
+    padding: 0;
+    box-shadow: none !important;
+  }
+
+  .de-receipt-band {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* On-screen we only want the summary card; the receipt is the one that
+     survives the visibility rule above when it is time to print. */
+  .de-receipt-print-only { display: block; }
+}
+`;
+
 function RegistrationComplete({
   result,
+  adminName,
   onRegisterAnother,
   onOpenStudent,
 }: {
   result: OfflineRegistrationResult;
+  adminName: string;
   onRegisterAnother: () => void;
   onOpenStudent: () => void;
 }) {
@@ -695,6 +738,131 @@ function RegistrationComplete({
           Go to students
         </Button>
       </div>
+
+      <style>{RECEIPT_PRINT_CSS}</style>
+      <PrintableReceipt result={result} adminName={adminName} />
+    </div>
+  );
+}
+
+/**
+ * The receipt that comes off the printer when the admin clicks "Print receipt".
+ *
+ * Lives inside the component tree because `window.print()` can only print
+ * what the page already holds; a separate route would need a second trip for
+ * data and a long new life for a short-lived receipt. Hidden on screen through
+ * `de-receipt-print-only`, revealed by `visibility: visible` under
+ * `@media print`.
+ *
+ * Matches the printed sheet's receipt stub by eye: same brand bar, same
+ * dark-blue strip, same signature line. The numbers are prefilled rather
+ * than left blank -- the whole point of the "Print receipt" button is that
+ * the admin has already typed them in.
+ */
+function PrintableReceipt({
+  result,
+  adminName,
+}: {
+  result: OfflineRegistrationResult;
+  adminName: string;
+}) {
+  const today = new Date().toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+  return (
+    <div className="de-receipt-print-only de-receipt mx-auto w-full max-w-[148mm] bg-white text-[#16223B]">
+      <div className="de-receipt-band flex items-center gap-3 bg-[#16223B] px-5 py-3 text-white">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#F26A21] text-sm font-bold">
+          DE
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-bold leading-tight tracking-wide">
+            DREAM EDGE
+          </p>
+          <p className="text-[10px] leading-tight text-white/75">
+            Dream IIT Institute · Kalmeshwar · {SUPPORT_PHONE}
+          </p>
+        </div>
+      </div>
+
+      <div className="px-5 pb-4 pt-3">
+        <div className="mb-3 flex items-baseline justify-between border-b border-[#16223B] pb-1.5">
+          <h2 className="text-[13px] font-bold uppercase tracking-[0.12em]">
+            Registration receipt
+          </h2>
+          <span className="text-[9px] text-[#8892A0]">{today}</span>
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-5 gap-y-2 text-[11px]">
+          <ReceiptRow label="Student name" value={result.fullName} />
+          {result.studentCode && (
+            <ReceiptRow label="Student code" value={result.studentCode} mono />
+          )}
+          <ReceiptRow
+            label="Email"
+            value={result.emailIsPlaceholder ? "—" : result.email}
+          />
+          <ReceiptRow label="Registered by" value={adminName} />
+          {result.enrolment ? (
+            <>
+              <ReceiptRow label="Course" value={result.enrolment.courseTitle} />
+              <ReceiptRow
+                label="Amount received"
+                value={formatINR(result.enrolment.amount)}
+              />
+              <ReceiptRow
+                label="Order"
+                value={result.enrolment.orderId.slice(0, 8)}
+                mono
+              />
+            </>
+          ) : (
+            <ReceiptRow label="Payment" value="Not recorded here" />
+          )}
+        </dl>
+
+        <div className="mt-5 flex items-end justify-between gap-6">
+          <p className="max-w-[55%] text-[9px] leading-[1.5] text-[#8892A0]">
+            Keep this receipt. Quote the student code for any enquiry about
+            fees, classes or course access.
+          </p>
+          <div className="w-40">
+            <div className="h-7 border-b border-[#16223B]" />
+            <p className="mt-1 text-[8px] uppercase tracking-wider text-[#8892A0]">
+              Authorised signature
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <dt className="text-[8px] font-semibold uppercase tracking-wider text-[#8892A0]">
+        {label}
+      </dt>
+      <dd
+        className={
+          "mt-0.5 text-[11px] font-medium text-[#16223B]" +
+          (mono ? " font-mono tracking-wider" : "")
+        }
+      >
+        {value}
+      </dd>
     </div>
   );
 }
