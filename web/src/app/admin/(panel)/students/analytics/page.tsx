@@ -3,8 +3,9 @@ import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { ExportButton } from "@/components/admin/export-button";
 import { StudentAnalytics } from "@/components/admin/students/student-analytics";
+import { ProgressExportControls } from "@/components/admin/students/progress-export-controls";
+import { createClient } from "@/lib/supabase/server";
 import { fetchStudentAnalytics } from "../actions";
 
 function AnalyticsSkeleton() {
@@ -30,7 +31,18 @@ async function AnalyticsLoader() {
   return <StudentAnalytics data={result.data} />;
 }
 
-export default function StudentAnalyticsPage() {
+async function fetchCourseOptions() {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("courses")
+    .select("id, title")
+    .order("title");
+  return data ?? [];
+}
+
+export default async function StudentAnalyticsPage() {
+  const courses = await fetchCourseOptions();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -46,10 +58,9 @@ export default function StudentAnalyticsPage() {
             Student growth, engagement, and geographic distribution.
           </p>
         </div>
-        <div className="ml-auto">
-          <ExportButton dataset="student-progress" label="Export progress" />
-        </div>
       </div>
+
+      <ProgressExportControls courses={courses} />
 
       <Suspense fallback={<AnalyticsSkeleton />}>
         <AnalyticsLoader />

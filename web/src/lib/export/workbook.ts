@@ -1,3 +1,5 @@
+import type { Writable } from "node:stream";
+
 import ExcelJS from "exceljs";
 
 /**
@@ -20,6 +22,49 @@ const WHITE = "FFFFFFFF";
 const ZEBRA = "FFF7F8FA";
 const FOOTER_GRAY = "FF8892A0";
 const RULE_GRAY = "FFE2E5EA";
+
+// Shared style objects. ExcelJS stores a cell's style by reference, and
+// previously `writeSheet` built a fresh `{ vertical, horizontal, wrapText }`
+// per cell plus a fresh fill on every other row. For a 250,000-row progress
+// export that was a million short-lived objects on the hot path, enough to
+// take the serialisation past Hobby's 10 s wall on its own.
+const HEADER_FONT = { bold: true, color: { argb: WHITE } };
+const HEADER_FILL: ExcelJS.FillPattern = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: DARK_BLUE },
+};
+const HEADER_ALIGN_LEFT: Partial<ExcelJS.Alignment> = {
+  vertical: "middle",
+  horizontal: "left",
+};
+const HEADER_ALIGN_RIGHT: Partial<ExcelJS.Alignment> = {
+  vertical: "middle",
+  horizontal: "right",
+};
+const BODY_ALIGN_LEFT: Partial<ExcelJS.Alignment> = {
+  vertical: "middle",
+  horizontal: "left",
+  wrapText: false,
+};
+const BODY_ALIGN_RIGHT: Partial<ExcelJS.Alignment> = {
+  vertical: "middle",
+  horizontal: "right",
+  wrapText: false,
+};
+const ZEBRA_FILL: ExcelJS.FillPattern = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: ZEBRA },
+};
+const BRAND_FILL = HEADER_FILL;
+const FOOTER_BORDER: Partial<ExcelJS.Borders> = {
+  top: { style: "thin", color: { argb: RULE_GRAY } },
+};
+const BRAND_FONT = { bold: true, size: 14, color: { argb: WHITE } };
+const FILTER_FONT = { size: 10, italic: true, color: { argb: ORANGE } };
+const FOOTER_FONT = { size: 9, color: { argb: FOOTER_GRAY } };
+const EMPTY_FONT = { italic: true, color: { argb: FOOTER_GRAY } };
 
 const IST_OFFSET_MINUTES = 330;
 
@@ -224,19 +269,17 @@ function writeBanner(
   const brand = sheet.addRow([`Dream Edge — ${title}`]);
   sheet.mergeCells(brand.number, 1, brand.number, span);
   brand.height = 26;
-  brand.getCell(1).font = { bold: true, size: 14, color: { argb: WHITE } };
-  brand.getCell(1).fill = {
-    type: "pattern",
-    pattern: "solid",
-    fgColor: { argb: DARK_BLUE },
-  };
-  brand.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+  const brandCell = brand.getCell(1);
+  brandCell.font = BRAND_FONT;
+  brandCell.fill = BRAND_FILL;
+  brandCell.alignment = HEADER_ALIGN_LEFT;
 
   const filterRow = sheet.addRow([filters?.trim() || "No filters applied"]);
   sheet.mergeCells(filterRow.number, 1, filterRow.number, span);
   filterRow.height = 18;
-  filterRow.getCell(1).font = { size: 10, italic: true, color: { argb: ORANGE } };
-  filterRow.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+  const filterCell = filterRow.getCell(1);
+  filterCell.font = FILTER_FONT;
+  filterCell.alignment = HEADER_ALIGN_LEFT;
 
   sheet.addRow([]);
 
@@ -259,10 +302,9 @@ function writeFooter(
 
   const footer = sheet.addRow([parts.join("  ·  ")]);
   sheet.mergeCells(footer.number, 1, footer.number, Math.max(columnCount, 1));
-  footer.getCell(1).font = { size: 9, color: { argb: FOOTER_GRAY } };
-  footer.getCell(1).border = {
-    top: { style: "thin", color: { argb: RULE_GRAY } },
-  };
+  const footerCell = footer.getCell(1);
+  footerCell.font = FOOTER_FONT;
+  footerCell.border = FOOTER_BORDER;
 }
 
 function writeSheet(
@@ -283,15 +325,28 @@ function writeSheet(
 
   const header = sheet.addRow(columns.map((column) => column.header));
   header.height = 20;
+
+  // Per-column alignment picked once, then referenced from every cell.
+  // Pre-resolved so the hot row loop below is a reference assignment, not an
+  // allocation.
+  const columnAlignBody: Partial<ExcelJS.Alignment>[] = columns.map((column) =>
+    RIGHT_ALIGNED.includes(column.format ?? "text")
+      ? BODY_ALIGN_RIGHT
+      : BODY_ALIGN_LEFT
+  );
+  const columnAlignHeader: Partial<ExcelJS.Alignment>[] = columns.map((column) =>
+    RIGHT_ALIGNED.includes(column.format ?? "text")
+      ? HEADER_ALIGN_RIGHT
+      : HEADER_ALIGN_LEFT
+  );
+  const columnNumFmt: (string | undefined)[] = columns.map(
+    (column) => NUMBER_FORMATS[column.format ?? "text"]
+  );
+
   header.eachCell((cell, index) => {
-    cell.font = { bold: true, color: { argb: WHITE } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_BLUE } };
-    cell.alignment = {
-      vertical: "middle",
-      horizontal: RIGHT_ALIGNED.includes(columns[index - 1]?.format ?? "text")
-        ? "right"
-        : "left",
-    };
+    cell.font = HEADER_FONT;
+    cell.fill = HEADER_FILL;
+    cell.alignment = columnAlignHeader[index - 1] ?? HEADER_ALIGN_LEFT;
   });
 
   // Freezing below the header keeps the column names on screen while an admin
@@ -307,20 +362,17 @@ function writeSheet(
       columns.map((column) => cellValue(row[column.key], column.format ?? "text"))
     );
 
+    const zebra = rowIndex % 2 === 1;
     excelRow.eachCell({ includeEmpty: true }, (cell, index) => {
-      const format = columns[index - 1]?.format ?? "text";
-      const numberFormat = NUMBER_FORMATS[format];
+      const i = index - 1;
+      const numberFormat = columnNumFmt[i];
 
       if (numberFormat) cell.numFmt = numberFormat;
 
-      cell.alignment = {
-        vertical: "middle",
-        horizontal: RIGHT_ALIGNED.includes(format) ? "right" : "left",
-        wrapText: false,
-      };
+      cell.alignment = columnAlignBody[i] ?? BODY_ALIGN_LEFT;
 
-      if (rowIndex % 2 === 1) {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } };
+      if (zebra) {
+        cell.fill = ZEBRA_FILL;
       }
     });
   });
@@ -328,7 +380,7 @@ function writeSheet(
   if (rows.length === 0) {
     const empty = sheet.addRow(["No rows matched these filters."]);
     sheet.mergeCells(empty.number, 1, empty.number, Math.max(columns.length, 1));
-    empty.getCell(1).font = { italic: true, color: { argb: FOOTER_GRAY } };
+    empty.getCell(1).font = EMPTY_FONT;
   }
 
   writeFooter(sheet, columns.length, rows.length, generatedBy);
@@ -352,9 +404,9 @@ function writeSummarySheet(
   const header = sheet.addRow(["Measure", "Value"]);
   header.height = 20;
   header.eachCell((cell, index) => {
-    cell.font = { bold: true, color: { argb: WHITE } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: DARK_BLUE } };
-    cell.alignment = { vertical: "middle", horizontal: index === 2 ? "right" : "left" };
+    cell.font = HEADER_FONT;
+    cell.fill = HEADER_FILL;
+    cell.alignment = index === 2 ? HEADER_ALIGN_RIGHT : HEADER_ALIGN_LEFT;
   });
 
   entries.forEach((entry, index) => {
@@ -363,13 +415,13 @@ function writeSummarySheet(
     const numberFormat = NUMBER_FORMATS[format];
 
     if (numberFormat) row.getCell(2).numFmt = numberFormat;
-    row.getCell(2).alignment = {
-      horizontal: RIGHT_ALIGNED.includes(format) ? "right" : "left",
-    };
+    row.getCell(2).alignment = RIGHT_ALIGNED.includes(format)
+      ? BODY_ALIGN_RIGHT
+      : BODY_ALIGN_LEFT;
 
     if (index % 2 === 1) {
       row.eachCell({ includeEmpty: true }, (cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ZEBRA } };
+        cell.fill = ZEBRA_FILL;
       });
     }
   });
@@ -390,7 +442,9 @@ function newWorkbook(generatedBy: string | undefined): ExcelJS.Workbook {
   return workbook;
 }
 
-export async function buildWorkbook(options: WorkbookOptions): Promise<Buffer> {
+function assembleWorkbook(
+  options: WorkbookOptions | MultiSheetWorkbookOptions
+): ExcelJS.Workbook {
   const workbook = newWorkbook(options.generatedBy);
 
   if (options.summary && options.summary.length > 0) {
@@ -403,32 +457,40 @@ export async function buildWorkbook(options: WorkbookOptions): Promise<Buffer> {
     );
   }
 
-  writeSheet(workbook, options, options.filters, options.generatedBy);
+  if ("sheets" in options) {
+    for (const sheet of options.sheets) {
+      writeSheet(workbook, sheet, options.filters, options.generatedBy);
+    }
+  } else {
+    writeSheet(workbook, options, options.filters, options.generatedBy);
+  }
 
-  return Buffer.from(await workbook.xlsx.writeBuffer());
+  return workbook;
 }
 
-/** One workbook, several sheets — the full student export joins on student id. */
-export async function buildMultiSheetWorkbook(
-  options: MultiSheetWorkbookOptions
-): Promise<Buffer> {
-  const workbook = newWorkbook(options.generatedBy);
+/**
+ * Writes the .xlsx bytes into a Node writable as ExcelJS serialises them.
+ *
+ * The route wraps this in a web `ReadableStream` so the Response starts
+ * flowing to the client as soon as the first chunk is ready, rather than
+ * waiting for the whole workbook to be assembled into one Buffer. For a
+ * 50 MB progress export that saves one full copy of the file in memory
+ * and gets the download bar moving before the serverless wall closes.
+ */
+export async function streamWorkbook(
+  options: WorkbookOptions,
+  destination: Writable
+): Promise<void> {
+  const workbook = assembleWorkbook(options);
+  await workbook.xlsx.write(destination);
+}
 
-  if (options.summary && options.summary.length > 0) {
-    writeSummarySheet(
-      workbook,
-      options.title,
-      options.summary,
-      options.filters,
-      options.generatedBy
-    );
-  }
-
-  for (const sheet of options.sheets) {
-    writeSheet(workbook, sheet, options.filters, options.generatedBy);
-  }
-
-  return Buffer.from(await workbook.xlsx.writeBuffer());
+export async function streamMultiSheetWorkbook(
+  options: MultiSheetWorkbookOptions,
+  destination: Writable
+): Promise<void> {
+  const workbook = assembleWorkbook(options);
+  await workbook.xlsx.write(destination);
 }
 
 /**

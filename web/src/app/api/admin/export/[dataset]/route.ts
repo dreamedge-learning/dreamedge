@@ -1,3 +1,5 @@
+import { PassThrough, Readable } from "node:stream";
+
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -6,8 +8,8 @@ import { isMultiSheetExport } from "@/lib/export/access";
 import { EXPORT_DATASETS, exportFileStem } from "@/lib/export/datasets";
 import {
   buildCsv,
-  buildMultiSheetWorkbook,
-  buildWorkbook,
+  streamMultiSheetWorkbook,
+  streamWorkbook,
 } from "@/lib/export/workbook";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,6 +30,14 @@ import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Explicit wall for Vercel. Hobby's hard cap is 60 s and defaults to 10 s;
+// Pro honours up to 300 s. A full progress export walks student_progress
+// through 50 windows of 1000 rows plus a few seconds for ExcelJS to lay
+// them out, so 10 s is not enough and the default was closing the door
+// mid-serialisation. Set to Hobby's ceiling here; a Pro deployment can
+// override through its own layout file if more is actually needed.
+export const maxDuration = 60;
 
 const formatSchema = z.enum(["xlsx", "csv"]).default("xlsx");
 
@@ -112,36 +122,11 @@ export async function GET(
   const primary = loaded.sheets[0];
   const rowCount = loaded.sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
 
-  const body =
-    format === "csv"
-      ? buildCsv({
-          columns: primary.columns,
-          rows: primary.rows,
-          title: dataset.label,
-          filters: loaded.filters,
-          generatedBy: admin.adminUser.full_name,
-        })
-      : isMultiSheetExport(key)
-        ? await buildMultiSheetWorkbook({
-            title: dataset.label,
-            sheets: loaded.sheets,
-            filters: loaded.filters,
-            generatedBy: admin.adminUser.full_name,
-            summary: loaded.summary,
-          })
-        : await buildWorkbook({
-            sheetName: primary.sheetName,
-            title: dataset.label,
-            columns: primary.columns,
-            rows: primary.rows,
-            filters: loaded.filters,
-            generatedBy: admin.adminUser.full_name,
-            summary: loaded.summary,
-          });
-
-  // Logged after the file is built, so a failed export does not look like a
-  // completed download, and awaited so the row is committed before the
-  // response ends and the serverless invocation is frozen.
+  // Logged before the body is handed off, so an export that never finishes
+  // streaming still leaves one row recording that the rows were read. The
+  // alternative (log after `write` resolves) hid an abandoned download from
+  // the audit log and would hide a hijacked session that drops the TLS
+  // channel the moment it has the rows.
   const { error: auditError } = await supabase.from("audit_log").insert({
     user_id: admin.adminUser.user_id,
     action: "export",
@@ -155,21 +140,79 @@ export async function GET(
   });
 
   if (auditError) {
+    // Records about children: fail closed on the audit row. A download
+    // without one is a data-exfiltration event this panel cannot see,
+    // which is the whole thing the audit log existed to prevent.
     console.error(`[export:${key}] audit row failed`, auditError);
+    return NextResponse.json(
+      { error: "Could not record the export. Please try again." },
+      { status: 500 }
+    );
   }
 
   const fileName = `${exportFileStem(key)}.${format}`;
 
-  // A workbook comes back as a Node Buffer, whose backing store is typed
-  // loosely enough (it may be a SharedArrayBuffer) that the Response
-  // constructor will not take it. Copying into a plain Uint8Array is the
-  // conversion, and it is the only one the web Response type accepts.
-  const payload = typeof body === "string" ? body : new Uint8Array(body);
+  if (format === "csv") {
+    const csv = buildCsv({
+      columns: primary.columns,
+      rows: primary.rows,
+      title: dataset.label,
+      filters: loaded.filters,
+      generatedBy: admin.adminUser.full_name,
+    });
 
-  return new NextResponse(payload, {
+    return new NextResponse(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  // The .xlsx path. ExcelJS serialises straight into the response body,
+  // which saves a full in-memory copy of the workbook and gets the
+  // download bar moving before serialisation finishes.
+  const pass = new PassThrough();
+
+  const writer = isMultiSheetExport(key)
+    ? streamMultiSheetWorkbook(
+        {
+          title: dataset.label,
+          sheets: loaded.sheets,
+          filters: loaded.filters,
+          generatedBy: admin.adminUser.full_name,
+          summary: loaded.summary,
+        },
+        pass
+      )
+    : streamWorkbook(
+        {
+          sheetName: primary.sheetName,
+          title: dataset.label,
+          columns: primary.columns,
+          rows: primary.rows,
+          filters: loaded.filters,
+          generatedBy: admin.adminUser.full_name,
+          summary: loaded.summary,
+        },
+        pass
+      );
+
+  // Any failure after the response starts has to tear down the stream so the
+  // client sees a truncated download instead of a complete-looking one. The
+  // caller cannot see this error through the normal response path, so it is
+  // logged as well.
+  writer.catch((error) => {
+    console.error(`[export:${key}] stream failed mid-serialisation`, error);
+    pass.destroy(error instanceof Error ? error : new Error(String(error)));
+  });
+
+  const webStream = Readable.toWeb(pass) as unknown as ReadableStream<Uint8Array>;
+
+  return new NextResponse(webStream, {
     headers: {
-      "Content-Type":
-        format === "csv" ? "text/csv; charset=utf-8" : XLSX_CONTENT_TYPE,
+      "Content-Type": XLSX_CONTENT_TYPE,
       "Content-Disposition": `attachment; filename="${fileName}"`,
       "Cache-Control": "no-store",
     },

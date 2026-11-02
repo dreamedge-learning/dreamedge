@@ -435,11 +435,17 @@ async function describeStudentFilters(
  * The students an export covers, as ids, so the companion sheets of the full
  * export can be narrowed to the same people.
  *
- * Below the threshold the narrowing happens in the query. Above it the id list
- * would make a request URL tens of kilobytes long, which proxies truncate, so
- * the rows are read whole and filtered here instead.
+ * The earlier shape dropped the `.in()` filter above 200 ids and read every
+ * row in the companion table, then filtered in memory. For an export of 250
+ * students that meant reading every enrolment, order and progress row on the
+ * platform; past a few thousand students it timed out while the admin was
+ * still waiting on a sheet that was supposed to be about their 300 people.
+ *
+ * `.in()` on an id list of a few thousand uuids is well below the PostgREST
+ * URL cap, so page the ids in `CHUNK_SIZE` groups and concatenate the
+ * results. The ceiling here is chosen for the URL budget, not the server.
  */
-const IN_FILTER_LIMIT = 200;
+const STUDENT_ID_CHUNK = 200;
 
 async function rowsForStudents<T extends { student_id: string }>(
   label: string,
@@ -452,15 +458,18 @@ async function rowsForStudents<T extends { student_id: string }>(
 ): Promise<T[]> {
   if (studentIds.length === 0) return [];
 
-  const narrow = studentIds.length <= IN_FILTER_LIMIT;
-  const rows = await fetchAllRows<T>(label, (from, to) =>
-    query(from, to, narrow ? studentIds : null)
-  );
+  const unique = Array.from(new Set(studentIds));
+  const out: T[] = [];
 
-  if (narrow) return rows;
+  for (let i = 0; i < unique.length; i += STUDENT_ID_CHUNK) {
+    const chunk = unique.slice(i, i + STUDENT_ID_CHUNK);
+    const rows = await fetchAllRows<T>(label, (from, to) =>
+      query(from, to, chunk)
+    );
+    out.push(...rows);
+  }
 
-  const wanted = new Set(studentIds);
-  return rows.filter((row) => wanted.has(row.student_id));
+  return out;
 }
 
 const studentsDataset = defineDataset({
