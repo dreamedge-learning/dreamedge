@@ -40,13 +40,36 @@ export function registrationSourceLabel(value: string | null | undefined): strin
  * registers them at the counter. A synthetic address on a domain we own keeps
  * the column honest without inventing a deliverable one; the panel flags
  * these so a real address can be collected later.
+ *
+ * `discriminator` scopes the address to one student rather than one phone.
+ * Two siblings sharing a parent's number would otherwise land on the same
+ * synthetic address and the second registration would hit the unique index —
+ * the normal case at the Kalmeshwar counter, with the cash in the drawer.
+ * Callers that write one row per auth user (phone-OTP signup) may omit it;
+ * callers that write several rows for one phone (admin registering a family)
+ * must pass something unique per student.
  */
-export function syntheticEmailForPhone(phone: string): string {
-  return `${phone.replace(/\D/g, "")}@phone.dreamedge.local`;
+export function syntheticEmailForPhone(phone: string, discriminator?: string): string {
+  const digits = phone.replace(/\D/g, "");
+  const tag = discriminator ? `-${discriminator.replace(/[^a-z0-9]/gi, "").toLowerCase()}` : "";
+  return `${digits}${tag}@phone.dreamedge.local`;
 }
 
 export function syntheticEmailForUser(userId: string): string {
   return `${userId}@user.dreamedge.local`;
+}
+
+/**
+ * A short random tag suitable for a synthetic email's discriminator.
+ *
+ * Six base-36 characters is a 1-in-2 billion collision for the second entry
+ * against the same phone, which is enough for a counter that registers at
+ * most a few families per day. The character set is a-z0-9, which the
+ * regex at the top of the module (and `isSyntheticEmail` below) does not
+ * reject.
+ */
+export function syntheticEmailDiscriminator(): string {
+  return Math.random().toString(36).slice(2, 8).padEnd(6, "0");
 }
 
 /** True for an address we invented rather than one a student gave us. */

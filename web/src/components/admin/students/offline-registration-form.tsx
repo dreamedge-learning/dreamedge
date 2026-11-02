@@ -77,6 +77,11 @@ export function OfflineRegistrationForm({
   const [validityDays, setValidityDays] = useState("");
   const [result, setResult] = useState<OfflineRegistrationResult | null>(null);
   const [duplicate, setDuplicate] = useState<ExistingStudentMatch | null>(null);
+  // Set from the collision panel's "This is a different student" button. The
+  // next submit sends it; the action skips the pre-insert duplicate check for
+  // one submission, so the admin can register a sibling who shares an email
+  // without the first registration blocking them.
+  const [overrideDuplicate, setOverrideDuplicate] = useState(false);
 
   const selectedCourse = useMemo(
     () => courses.find((course) => course.id === courseId) ?? null,
@@ -97,6 +102,9 @@ export function OfflineRegistrationForm({
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
+    if (overrideDuplicate) {
+      formData.set("confirm_different_student", "1");
+    }
     setPending(true);
     setDuplicate(null);
 
@@ -113,17 +121,27 @@ export function OfflineRegistrationForm({
       return;
     }
 
+    // Reset the override so a later unrelated submit cannot carry it over.
+    setOverrideDuplicate(false);
     setResult(outcome.data);
   }
 
   function registerAnother() {
     setResult(null);
     setDuplicate(null);
+    setOverrideDuplicate(false);
     setCourseId("");
     setAmount("");
     setValidityDays("");
     formRef.current?.reset();
     window.scrollTo({ top: 0 });
+  }
+
+  function confirmDifferentStudent() {
+    setOverrideDuplicate(true);
+    setDuplicate(null);
+    // Re-submit through the normal form path so every field is re-validated.
+    formRef.current?.requestSubmit();
   }
 
   if (result) {
@@ -169,21 +187,32 @@ export function OfflineRegistrationForm({
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <div className="space-y-2 text-sm">
-              <p className="font-medium">This student is already registered.</p>
+              <p className="font-medium">A student with this email is already on file.</p>
               <p className="text-muted-foreground">
                 {duplicate.fullName}
-                {duplicate.studentCode ? ` (${duplicate.studentCode})` : ""} already
-                has an account on {duplicate.email}. Open that record rather than
-                creating a second one — a duplicate splits their enrolments from
-                their progress.
+                {duplicate.studentCode ? ` (${duplicate.studentCode})` : ""} is
+                registered on {duplicate.email}. If this is the same person,
+                open the existing record rather than creating a second one — a
+                duplicate splits their enrolments from their progress. If a
+                sibling or a parent is sharing the address, confirm it is a
+                different student and the registration will go through.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                render={<Link href="/admin/students" />}
-              >
-                Open the existing record
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  render={<Link href="/admin/students" />}
+                >
+                  Open the existing record
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={confirmDifferentStudent}
+                >
+                  This is a different student
+                </Button>
+              </div>
             </div>
           </div>
         </div>

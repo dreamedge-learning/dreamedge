@@ -22,6 +22,15 @@ export const offlineRegistrationSchema = studentProfileSchema.extend({
   registration_date: dateText("Registration date").optional(),
   admin_notes: z.string().max(2000, "Notes are too long.").optional(),
 
+  // Admin override from the collision panel: "I looked at the matching
+  // record, and this really is a different student who happens to share
+  // the address." The unique index on students.email is the backstop; this
+  // only turns off the pre-insert duplicate check.
+  confirm_different_student: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((value) => value === true || value === "1" || value === "on"),
+
   // --- the optional enrolment block ---
   course_id: z.string().uuid("Choose a course.").optional(),
   amount: z
@@ -57,6 +66,7 @@ export const offlineRegistrationInput = (formData: FormData) => {
     ...base,
     registration_date: formText(formData, "registration_date"),
     admin_notes: formText(formData, "admin_notes"),
+    confirm_different_student: formText(formData, "confirm_different_student"),
     course_id: formText(formData, "course_id"),
     amount: formText(formData, "amount"),
     payment_method: formText(formData, "payment_method"),

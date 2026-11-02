@@ -10,7 +10,10 @@ import {
   createStudentProfile,
   findStudentByEmail,
 } from "@/lib/students/create-student";
-import { syntheticEmailForPhone } from "@/lib/students/identity";
+import {
+  syntheticEmailDiscriminator,
+  syntheticEmailForPhone,
+} from "@/lib/students/identity";
 import { profileColumns } from "@/lib/students/profile-columns";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -85,6 +88,12 @@ export interface ExistingStudentMatch {
  * centre have no email. The same synthetic shape the phone-OTP path already
  * uses keeps the column honest; the record is flagged in the panel so a real
  * address can be collected later.
+ *
+ * Each synthetic address carries a random discriminator so two siblings
+ * sharing a parent's number land on different addresses. Without it the
+ * second sibling's registration failed on the unique index with the cash
+ * already in the drawer, and the admin had to invent a fake email at the
+ * counter.
  */
 function resolveEmail(values: {
   email?: string;
@@ -100,7 +109,7 @@ function resolveEmail(values: {
 
   // The profile schema requires a parent's number, so there is always one.
   return {
-    email: syntheticEmailForPhone(phone ?? ""),
+    email: syntheticEmailForPhone(phone ?? "", syntheticEmailDiscriminator()),
     isPlaceholder: true,
   };
 }
@@ -167,16 +176,31 @@ export async function registerStudentOffline(
     // this whole feature: the student signed up online last week and has
     // forgotten. Offer the existing record rather than refusing or, worse,
     // creating a second one.
-    const existing = await findStudentByEmail(email);
-    if (existing) {
-      return {
-        existing: {
-          studentId: existing.id,
-          studentCode: existing.student_code,
-          fullName: existing.full_name,
-          email: existing.email,
-        },
-      };
+    //
+    // Two exceptions. A synthetic address is one we invented, scoped to this
+    // one registration by a random discriminator, so it cannot collide with
+    // anything already on file -- the collision would have been a false
+    // positive against a sibling or a family member with the same phone, and
+    // the earlier shape of this check refused the second sibling outright.
+    //
+    // `confirm_different_student` is the admin's own override, set from the
+    // collision panel when they have looked at the matching record and
+    // decided it really is a different person sharing the address. The
+    // insert's unique constraint on email will then raise an honest error
+    // rather than merging them silently.
+    const override = values.confirm_different_student === true;
+    if (!isPlaceholder && !override) {
+      const existing = await findStudentByEmail(email);
+      if (existing) {
+        return {
+          existing: {
+            studentId: existing.id,
+            studentCode: existing.student_code,
+            fullName: existing.full_name,
+            email: existing.email,
+          },
+        };
+      }
     }
 
     const service = createServiceClient();
