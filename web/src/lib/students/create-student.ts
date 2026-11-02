@@ -177,10 +177,16 @@ export async function findStudentByUserId(userId: string) {
 export async function findStudentByEmail(email: string) {
   const service = createServiceClient();
 
+  // Exact match, not `ilike`. PostgREST maps `ilike` straight through to the
+  // SQL operator, where `_` is a single-character wildcard: a lookup for
+  // `john_doe@gmail.com` would then match a stored `johnXdoe@gmail.com` and
+  // send the OAuth callback into the re-point branch against someone else's
+  // record. The column is written in lower case everywhere a row is
+  // created, so a case-exact comparison is the honest one.
   const { data } = await service
     .from("students")
     .select("id, user_id, student_code, full_name, email, profile_completed")
-    .ilike("email", email.trim())
+    .eq("email", email.trim().toLowerCase())
     .maybeSingle();
 
   return data;

@@ -86,11 +86,16 @@ export async function resolveContactEmail(
   const email = given.toLowerCase();
   if (email === currentEmail.toLowerCase()) return {};
 
+  // Exact match, not `ilike`: PostgREST hands it to SQL where `_` is a
+  // single-character wildcard, so `john_doe@gmail.com` would then clash with
+  // `johnXdoe@gmail.com` and this would read as "already in use" against a
+  // row that is a different person. The column is written in lower case
+  // everywhere, and `email` is already lowered.
   const service = createServiceClient();
   const { data: clash } = await service
     .from("students")
     .select("id")
-    .ilike("email", email)
+    .eq("email", email)
     .neq("id", studentId)
     .maybeSingle();
 

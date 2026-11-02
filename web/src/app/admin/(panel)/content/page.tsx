@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Plus, BookOpen } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { sanitizeSearch } from "@/lib/search";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CourseCard } from "@/components/admin/content/course-card";
@@ -43,7 +44,12 @@ async function getCourses(params: SearchParams) {
   }
 
   if (params.q) {
-    query = query.ilike("title", `%${params.q}%`);
+    // Strip the ilike wildcards from the admin's text before it reaches
+    // PostgREST; otherwise a query of `foo_bar` would also match `fooXbar`.
+    const safe = sanitizeSearch(params.q);
+    if (safe.length > 0) {
+      query = query.ilike("title", `%${safe}%`);
+    }
   }
 
   const { data, count, error } = await query;
