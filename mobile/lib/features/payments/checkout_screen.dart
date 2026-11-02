@@ -22,11 +22,30 @@ class CheckoutScreen extends ConsumerStatefulWidget {
   ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
+/// Shape of a payment setback that the screen keeps around after the
+/// Razorpay modal has gone, so the student has something to retry from
+/// instead of a snackbar that times out.
+///
+/// `failed`      -- the gateway or the bank refused the charge; retry
+///                  is safe, the Edge Function dedups a pending order
+///                  for 15 min so the same Razorpay order reopens.
+/// `unconfirmed` -- the charge may have gone through server-side but
+///                  the verify call did not reach us. Do NOT invite a
+///                  second attempt; send the student to support.
+enum PaymentErrorKind { failed, unconfirmed }
+
+class _PaymentError {
+  final PaymentErrorKind kind;
+  final String reason;
+  const _PaymentError({required this.kind, required this.reason});
+}
+
 class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   late Razorpay _razorpay;
   bool _isProcessing = false;
   String? _currentOrderId;
   String? _currentRazorpayOrderId;
+  _PaymentError? _paymentError;
 
   @override
   void initState() {
@@ -45,7 +64,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   Future<void> _initiatePayment() async {
     if (_isProcessing) return;
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isProcessing = true;
+      _paymentError = null;
+    });
 
     try {
       final service = ref.read(paymentServiceProvider);
@@ -111,12 +133,16 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         _showSuccessDialog();
       }
     } catch (e) {
+      // The charge may have landed server-side and only the verify call
+      // dropped. The webhook or an admin can reconcile; the student
+      // must NOT be invited to pay a second time.
       if (mounted) {
-        _showSnackBar(
-          'Payment received. If enrollment doesn\'t appear shortly, '
-          'our system will process it automatically.',
-          isError: false,
-        );
+        setState(() {
+          _paymentError = _PaymentError(
+            kind: PaymentErrorKind.unconfirmed,
+            reason: 'We could not confirm your payment with the gateway.',
+          );
+        });
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
@@ -125,8 +151,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
   void _handlePaymentError(PaymentFailureResponse response) {
     if (mounted) {
-      _showSnackBar(response.message ?? 'Payment failed. Please try again.');
-      setState(() => _isProcessing = false);
+      setState(() {
+        _paymentError = _PaymentError(
+          kind: PaymentErrorKind.failed,
+          reason:
+              response.message ??
+              'Your bank or card issuer declined the payment.',
+        );
+        _isProcessing = false;
+      });
     }
   }
 
@@ -360,6 +393,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
+                if (_paymentError != null) ...[
+                  _PaymentErrorPanel(error: _paymentError!),
+                  const SizedBox(height: 16),
+                ],
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -390,7 +427,17 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: _isProcessing ? null : _initiatePayment,
+                  // An `unconfirmed` payment MUST NOT be retried from this
+                  // button: the gateway may have charged and the webhook is
+                  // the right path to reconcile it. The button is disabled
+                  // in that state and the panel above tells the student to
+                  // reach support.
+                  onPressed:
+                      _isProcessing ||
+                              _paymentError?.kind ==
+                                  PaymentErrorKind.unconfirmed
+                          ? null
+                          : _initiatePayment,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.orange,
                     foregroundColor: AppColors.white,
@@ -408,7 +455,9 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                               strokeWidth: 2.5, color: AppColors.white),
                         )
                       : Text(
-                          'Pay ₹${price.toStringAsFixed(0)}',
+                          _paymentError?.kind == PaymentErrorKind.failed
+                              ? 'Try payment again · ₹${price.toStringAsFixed(0)}'
+                              : 'Pay ₹${price.toStringAsFixed(0)}',
                           style: GoogleFonts.inter(
                               fontSize: 16, fontWeight: FontWeight.w600),
                         ),
@@ -490,6 +539,82 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Persistent panel for a payment that failed or finished without being
+/// confirmed. Lives in the body so it survives a scroll and offers an
+/// explicit next step -- a snackbar times out and leaves the student
+/// looking at a page that acts like nothing happened.
+class _PaymentErrorPanel extends StatelessWidget {
+  final _PaymentError error;
+
+  const _PaymentErrorPanel({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    final isFailed = error.kind == PaymentErrorKind.failed;
+    final accent = isFailed ? AppColors.error : AppColors.warning;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isFailed
+                ? Icons.error_outline_rounded
+                : Icons.pending_outlined,
+            color: accent,
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isFailed
+                      ? 'Payment failed'
+                      : 'Payment pending confirmation',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  error.reason,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: AppColors.textPrimary.withValues(alpha: 0.85),
+                    height: 1.4,
+                  ),
+                ),
+                if (!isFailed) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'If money left your account, please contact support '
+                    'before paying again — it may still be on its way.',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      color: AppColors.textSecondary,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

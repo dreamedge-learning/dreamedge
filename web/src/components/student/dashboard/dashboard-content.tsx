@@ -13,6 +13,7 @@ import {
   Share2,
   Copy,
   FileText,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -116,6 +117,11 @@ const QUICK_ACTIONS = [
     icon: UserCircle,
     label: "My Profile",
     href: "/dashboard/profile",
+  },
+  {
+    icon: Receipt,
+    label: "Payment history",
+    href: "/dashboard/payment-history",
   },
   {
     icon: HelpCircle,

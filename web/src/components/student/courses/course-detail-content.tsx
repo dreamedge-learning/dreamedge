@@ -17,6 +17,8 @@ import {
   Play,
   Loader2,
   CheckCircle2,
+  AlertCircle,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -48,6 +50,17 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
   const [expanded, setExpanded] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  // A persistent panel for a failed or unconfirmed payment. The old shape
+  // showed a toast and left the student at the pre-click state, which
+  // disappeared the moment the toast timed out and left them with no
+  // record of what went wrong. The panel below carries a reason and an
+  // explicit Retry button that re-runs the enrol path -- the Edge
+  // Function dedups a pending order for 15 min, so a quick retry reuses
+  // the same Razorpay order rather than creating a second one.
+  const [paymentError, setPaymentError] = useState<{
+    kind: "failed" | "unconfirmed";
+    reason: string;
+  } | null>(null);
 
   const discount =
     course.original_price && course.original_price > course.price
@@ -82,6 +95,7 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
 
   async function handlePaidEnroll() {
     setEnrolling(true);
+    setPaymentError(null);
 
     // The server action calls the create-razorpay-order Edge Function, which
     // re-derives the price from the database, creates the `orders` row and
@@ -140,23 +154,31 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
           });
 
           if (verifyResult.error || !verifyResult.data) {
-            toast.error(verifyResult.error ?? "Payment could not be confirmed.", {
-              description:
-                "Your payment may still have gone through — please contact support before paying again.",
-              duration: 10000,
+            // The payment may have gone through server-side while our
+            // confirm call failed. Do NOT invite the student to pay
+            // again -- send them to support and let the webhook or an
+            // admin reconcile.
+            setPaymentError({
+              kind: "unconfirmed",
+              reason:
+                verifyResult.error ??
+                "We could not confirm your payment with the gateway.",
             });
             return;
           }
 
+          setPaymentError(null);
           toast.success("Payment successful!", {
             description: "You are now enrolled in this course.",
           });
           router.refresh();
         } catch (err) {
-          toast.error("Could not confirm your payment.", {
-            description:
-              err instanceof Error ? err.message : "Please contact support.",
-            duration: 10000,
+          setPaymentError({
+            kind: "unconfirmed",
+            reason:
+              err instanceof Error
+                ? err.message
+                : "We could not confirm your payment with the gateway.",
           });
         } finally {
           setVerifying(false);
@@ -179,8 +201,11 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
         open: () => void;
       };
       rzp.on("payment.failed", (response) => {
-        toast.error("Payment failed", {
-          description: response.error?.description || "Please try again.",
+        setPaymentError({
+          kind: "failed",
+          reason:
+            response.error?.description ||
+            "Your bank or card issuer declined the payment.",
         });
         setEnrolling(false);
       });
@@ -433,6 +458,56 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
                   </>
                 )}
               </div>
+
+              {paymentError && (
+                <div
+                  role="alert"
+                  className={
+                    "mt-4 rounded-lg border p-3 text-sm " +
+                    (paymentError.kind === "failed"
+                      ? "border-rose-500/40 bg-rose-500/5"
+                      : "border-amber-500/40 bg-amber-500/5")
+                  }
+                >
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle
+                      className={
+                        "mt-0.5 h-4 w-4 shrink-0 " +
+                        (paymentError.kind === "failed"
+                          ? "text-rose-600"
+                          : "text-amber-600")
+                      }
+                    />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <p className="font-semibold">
+                        {paymentError.kind === "failed"
+                          ? "Payment failed"
+                          : "Payment pending confirmation"}
+                      </p>
+                      <p className="break-words text-xs text-foreground/80">
+                        {paymentError.reason}
+                      </p>
+                      {paymentError.kind === "unconfirmed" && (
+                        <p className="text-xs text-muted-foreground">
+                          If money left your account, please contact support
+                          before paying again — it may still be on its way.
+                        </p>
+                      )}
+                      {paymentError.kind === "failed" && (
+                        <button
+                          type="button"
+                          onClick={handlePaidEnroll}
+                          disabled={enrolling || verifying}
+                          className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-rose-600/30 bg-background px-3 py-1.5 text-xs font-semibold text-rose-700 transition-colors hover:bg-rose-500/10 disabled:opacity-60 dark:text-rose-400"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          Try payment again
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* CTA */}
               {renderEnrollButton()}
