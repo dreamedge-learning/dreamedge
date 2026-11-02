@@ -40,10 +40,22 @@ class ContentRepository {
 
   /// One lesson, best available.
   ///
-  /// The player and the reader both need this before they can do anything, so
-  /// cached wins over an error. A lesson whose row has changed since it was
-  /// cached -- a new rendition, a revoked offline flag -- is corrected on the
-  /// next successful fetch.
+  /// Network-first while online, and deliberately so -- the opposite of
+  /// [watchTopicContents] above, which paints from the cache and refreshes
+  /// behind it.
+  ///
+  /// The difference is what the two are for. A lesson *list* is navigation:
+  /// painting it instantly from the cache is the whole point, and a title that
+  /// is a few minutes stale costs nothing. A single lesson *row* is what the
+  /// player then acts on, and it carries `is_downloadable`, `play_limit`,
+  /// `video_status` and the Bunny guid. Serving those from the cache first
+  /// would mean opening a lesson against an offline permission the admin has
+  /// since revoked, or a replay limit that has since changed, and only
+  /// correcting it after the student had already started.
+  ///
+  /// So the list is fast and the lesson is current. Cached still wins over an
+  /// error, because a student who can see the lesson should be able to open
+  /// it.
   Future<Content> content(String id) async {
     if (connectivity.isOnline) {
       try {

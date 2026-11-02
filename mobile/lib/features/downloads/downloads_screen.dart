@@ -81,29 +81,53 @@ class DownloadsScreen extends ConsumerWidget {
     );
   }
 
-  /// Groups by topic, falling back to a single bucket.
+  /// Groups by course, naming the subject under it.
   ///
-  /// Course and subject would be the fuller hierarchy, but a download knows
-  /// its topic for certain and its course only if the course was browsed on
-  /// this device. Grouping by what is reliably known beats a tree with
-  /// "Unknown course" in it.
+  /// Each download now records where it sits in the tree -- the enqueue walks
+  /// the cached subjects and courses to resolve it -- so the heading can say
+  /// "Class 9 Maths · Algebra" instead of counting rows. It used to group by
+  /// topic id and head each group with "3 lessons", which told a student
+  /// nothing about which course they were looking at and read as a bug.
+  ///
+  /// A download saved before that context existed, or one whose course was
+  /// never browsed on this device, still has no names to show. Those collect
+  /// under one honest heading at the end rather than inventing a course for
+  /// them.
   List<_Group> _group(List<DownloadedLesson> lessons) {
-    final byTopic = <String, List<DownloadedLesson>>{};
+    final grouped = <String, List<DownloadedLesson>>{};
+    final titles = <String, String>{};
+
     for (final lesson in lessons) {
-      final key = lesson.content?.topicId ?? lesson.record.topicId ?? 'other';
-      byTopic.putIfAbsent(key, () => []).add(lesson);
+      final record = lesson.record;
+      final course = record.courseName;
+      final subject = record.subjectName;
+
+      final key = course == null && subject == null
+          ? '__unplaced'
+          : '${record.courseId ?? course}|${record.subjectId ?? subject}';
+
+      titles[key] = switch ((course, subject)) {
+        (final c?, final s?) => '$c · $s',
+        (final c?, null) => c,
+        (null, final s?) => s,
+        _ => 'Saved lessons',
+      };
+
+      grouped.putIfAbsent(key, () => []).add(lesson);
     }
 
-    return byTopic.entries
-        .map(
-          (entry) => _Group(
-            title: entry.value.length == 1
-                ? '1 lesson'
-                : '${entry.value.length} lessons',
-            lessons: entry.value,
-          ),
-        )
-        .toList();
+    final keys = grouped.keys.toList()
+      ..sort((a, b) {
+        // The unplaced bucket goes last wherever it appears.
+        if (a == '__unplaced') return 1;
+        if (b == '__unplaced') return -1;
+        return (titles[a] ?? '').compareTo(titles[b] ?? '');
+      });
+
+    return [
+      for (final key in keys)
+        _Group(title: titles[key] ?? 'Saved lessons', lessons: grouped[key]!),
+    ];
   }
 
   Future<void> _confirmClearAll(
@@ -157,6 +181,7 @@ class _Header extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final wifiOnly = ref.watch(downloadSettingsProvider).wifiOnly;
     final online = ref.watch(isOnlineProvider);
+    final free = ref.watch(freeSpaceProvider).valueOrNull;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -172,7 +197,11 @@ class _Header extends ConsumerWidget {
           const SizedBox(height: 2),
           Text(
             'used by $itemCount saved '
-            '${itemCount == 1 ? 'lesson' : 'lessons'}',
+            '${itemCount == 1 ? 'lesson' : 'lessons'}'
+            // Free space is the number that answers the question a student is
+            // actually asking here, which is whether to delete something.
+            // Omitted rather than guessed at when the platform will not say.
+            '${free == null ? '' : ' · ${formatBytes(free)} free'}',
             style: AppTypography.bodySmall,
           ),
           const SizedBox(height: 10),

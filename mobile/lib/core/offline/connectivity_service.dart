@@ -2,10 +2,20 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
+
+import '../logging/app_log.dart';
 
 /// What kind of connection the device has, as far as downloads care.
 enum NetworkKind { none, wifi, mobile, other }
+
+/// Whether anything out there answered -- including "we have not asked yet".
+///
+/// The third case is not pedantry. The probe takes up to three seconds, and
+/// treating "not yet known" as "offline" meant a fully online student saw the
+/// offline banner and the downloads-only view on every single cold launch,
+/// then watched the real Home replace it. Unknown has to be its own answer so
+/// the screens can decline to act on it.
+enum Reachability { unknown, online, offline }
 
 class NetworkState {
   final NetworkKind kind;
@@ -18,15 +28,33 @@ class NetworkState {
   /// report "connected" while nothing can be reached. Treating those as
   /// online is what makes an app sit on a spinner instead of showing the
   /// student their downloads.
-  final bool reachable;
+  final Reachability reachability;
 
-  const NetworkState({required this.kind, required this.reachable});
+  const NetworkState({required this.kind, required this.reachability});
 
-  bool get isOnline => reachable;
+  /// Something answered. False while the first probe is still in flight, so
+  /// never use this to decide to show an offline screen -- use [isOffline],
+  /// which is only true once we know.
+  bool get isOnline => reachability == Reachability.online;
+
+  /// We asked, and nothing answered. This is the one that may hide content.
+  bool get isOffline => reachability == Reachability.offline;
+
+  bool get isKnown => reachability != Reachability.unknown;
+
   bool get isWifi => kind == NetworkKind.wifi;
   bool get isMetered => kind == NetworkKind.mobile;
 
-  static const offline = NetworkState(kind: NetworkKind.none, reachable: false);
+  /// Before the first probe resolves.
+  static const unknown = NetworkState(
+    kind: NetworkKind.none,
+    reachability: Reachability.unknown,
+  );
+
+  static const offline = NetworkState(
+    kind: NetworkKind.none,
+    reachability: Reachability.offline,
+  );
 }
 
 /// Says whether the app can reach the internet, and tells anyone who asks
@@ -44,7 +72,10 @@ class ConnectivityService {
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   Timer? _recheck;
 
-  NetworkState _current = NetworkState.offline;
+  // Unknown, not offline. The probe has not run yet, and claiming the student
+  // is offline before asking is what put the offline banner over Home on every
+  // launch.
+  NetworkState _current = NetworkState.unknown;
 
   /// Hosts worth asking. One is Supabase, because that is what the app
   /// actually needs to reach; the other is a public resolver, so a Supabase
@@ -65,6 +96,9 @@ class ConnectivityService {
   /// A cheap, synchronous answer for code that cannot await, such as deciding
   /// whether to show the offline banner during a build.
   bool get isOnline => _current.isOnline;
+
+  /// Known to be offline, as opposed to not yet asked.
+  bool get isOffline => _current.isOffline;
 
   Stream<NetworkState> get states => _states.stream;
 
@@ -98,7 +132,12 @@ class ConnectivityService {
     }
 
     final reachable = await _probe();
-    _publish(NetworkState(kind: kind, reachable: reachable));
+    _publish(
+      NetworkState(
+        kind: kind,
+        reachability: reachable ? Reachability.online : Reachability.offline,
+      ),
+    );
   }
 
   NetworkKind _kindOf(List<ConnectivityResult> results) {
@@ -144,12 +183,20 @@ class ConnectivityService {
       _recheck = Timer(_offlineRecheck, () => unawaited(refresh()));
     }
 
-    if (next.kind == _current.kind && next.reachable == _current.reachable) {
+    if (next.kind == _current.kind &&
+        next.reachability == _current.reachability) {
       return;
     }
 
     _current = next;
     if (!_states.isClosed) _states.add(next);
-    debugPrint('connectivity: ${next.kind.name}, reachable=${next.reachable}');
+
+    // The kind and the verdict, and deliberately not the host that answered:
+    // this fired on every network change and named the Supabase project, which
+    // is a student's logcat telling anyone reading it where the content lives.
+    logDebug(
+      'connectivity',
+      '${next.kind.name}, reachability=${next.reachability.name}',
+    );
   }
 }

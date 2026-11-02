@@ -19,7 +19,7 @@ class MyLearningScreen extends ConsumerWidget {
     // With nothing reachable there is no point drawing a screen whose every
     // section needs the network. The downloads are what the student can
     // actually use, so they are what is shown.
-    if (!ref.watch(isOnlineProvider)) {
+    if (ref.watch(isOfflineProvider)) {
       return const OfflineContentView(insteadOf: 'My Learning');
     }
 

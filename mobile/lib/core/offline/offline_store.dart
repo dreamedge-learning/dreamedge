@@ -562,6 +562,18 @@ class OfflineStore {
     });
   }
 
+  /// Queued positions to flush, oldest first.
+  ///
+  /// The cap is 500, up from 200. The player queues a position every 15
+  /// seconds, so 200 rows is 50 minutes -- exactly one lesson -- and an
+  /// offline session longer than that needed several reconnects to drain. 500
+  /// covers a little over two hours of continuous watching, which is past the
+  /// point a student is doing anything else.
+  ///
+  /// Overflowing was never a correctness problem: the rows for one item are
+  /// collapsed to their furthest position before anything is sent, and a
+  /// position behind the server's is dropped, so a position can lag but never
+  /// regress. The cap only decides how many reconnects it takes.
   Future<List<QueuedProgress>> queuedProgress({int limit = 500}) async {
     final owner = await _owner();
     if (owner == null) return const [];

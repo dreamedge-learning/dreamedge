@@ -224,7 +224,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   Widget _buildStage(PlayerController controller, {bool fill = false}) {
     switch (controller.phase) {
       case PlayerPhase.loading:
-        return const VideoPlaceholder(state: PlaceholderState.loading);
+        return const VideoPlaceholder();
 
       case PlayerPhase.processing:
         return _StageMessage(
@@ -267,7 +267,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
   Widget _buildVideo(PlayerController controller, {required bool fill}) {
     final video = controller.video;
     if (video == null) {
-      return const VideoPlaceholder(state: PlaceholderState.loading);
+      return const VideoPlaceholder();
     }
 
     return ColoredBox(

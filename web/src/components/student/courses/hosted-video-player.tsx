@@ -21,15 +21,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/** What /api/content/[id]/video answers with. */
+/**
+ * The part of /api/content/[id]/video this player reads.
+ *
+ * `isDownloadable` and `offlineLicenseDays` are deliberately not here. The
+ * route returns them for the Flutter app, which keeps copies; this component
+ * takes `allowDownload` from its caller and has no offline licence to honour,
+ * and declaring fields nobody reads only suggests that it does.
+ */
 interface PlaybackPayload {
   provider: string;
   hls: string | null;
   mp4: Record<string, string>;
   thumbnail: string | null;
   durationSeconds: number | null;
-  isDownloadable: boolean;
-  offlineLicenseDays: number;
+
+  /** When these URLs stop working. Used to re-sign before they do. */
   expiresAt: string;
 }
 
@@ -92,35 +99,65 @@ export function HostedVideoPlayer({
   const [quality, setQuality] = useState<string>(AUTO);
   const [resumePrompt, setResumePrompt] = useState(false);
 
-  // Fetch the signed URLs.
+  // Fetch the signed URLs, and keep them signed.
   //
   // Nothing is reset here first, because nothing needs to be: the caller keys
   // this component on the content item, so switching lessons in the sidebar
   // mounts a fresh one rather than reusing this state. That is also what
   // stops one lesson ever being shown through another's expiring token.
+  //
+  // The refresh is the part that was missing. These URLs are signed for six
+  // hours, and this ran once per lesson: a tab left open past that held dead
+  // URLs, the next segment came back 403, and the video stopped with nothing
+  // on screen to explain it and no re-fetch to recover. `expiresAt` was
+  // returned for exactly this and read nowhere.
+  //
+  // Swapping in freshly signed URLs is invisible because the attach effect
+  // below captures the position and whether it was playing, the same way it
+  // does for a quality change. This mirrors what the app does on its side.
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
 
-    fetch(`/api/content/${contentItemId}/video`, { cache: "no-store" })
-      .then(async (response) => {
-        if (!active) return;
+    const schedule = (expiresAt: string) => {
+      const lapsesIn = new Date(expiresAt).getTime() - Date.now();
+      if (!Number.isFinite(lapsesIn)) return;
 
-        if (!response.ok) {
-          const body = (await response.json().catch(() => null)) as
-            | { error?: string }
-            | null;
-          setError(body?.error ?? "This video is temporarily unavailable.");
-          return;
-        }
+      // Five minutes of headroom, the same margin the app allows, and never
+      // sooner than a minute from now -- a device clock running ahead of the
+      // server would otherwise turn this into a request loop.
+      timer = setTimeout(load, Math.max(60_000, lapsesIn - 5 * 60_000));
+    };
 
-        setPayload((await response.json()) as PlaybackPayload);
-      })
-      .catch(() => {
-        if (active) setError("Could not reach the video. Check your connection.");
-      });
+    const load = () => {
+      fetch(`/api/content/${contentItemId}/video`, { cache: "no-store" })
+        .then(async (response) => {
+          if (!active) return;
+
+          if (!response.ok) {
+            const body = (await response.json().catch(() => null)) as
+              | { error?: string }
+              | null;
+            setError(body?.error ?? "This video is temporarily unavailable.");
+            return;
+          }
+
+          const next = (await response.json()) as PlaybackPayload;
+          setPayload(next);
+          schedule(next.expiresAt);
+        })
+        .catch(() => {
+          if (active) {
+            setError("Could not reach the video. Check your connection.");
+          }
+        });
+    };
+
+    load();
 
     return () => {
       active = false;
+      if (timer) clearTimeout(timer);
     };
   }, [contentItemId]);
 

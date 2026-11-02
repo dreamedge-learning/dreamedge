@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 
+import '../logging/app_log.dart';
 import '../services/storage_service.dart';
 
 /// Names this install, for the download records the server keeps.
@@ -57,7 +58,7 @@ class DeviceIdentity {
       }
     } catch (err) {
       // A device that will not describe itself still gets a usable id.
-      debugPrint('device: model unavailable: $err');
+      logDebug('device', 'model unavailable: $err');
     }
     return 'device';
   }

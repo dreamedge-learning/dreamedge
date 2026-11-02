@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../logging/app_log.dart';
 import '../services/notification_service.dart';
 import 'download_record.dart';
 
@@ -13,12 +14,25 @@ import 'download_record.dart';
 /// the app again". One notification for the whole queue rather than one each:
 /// six lessons downloading should not be six rows in the shade.
 ///
-/// Android treats a long download as work that should be visible, which is
-/// what FOREGROUND_SERVICE_DATA_SYNC in the manifest declares. The transfer
-/// itself still runs in the Dart isolate, so this notification is the user's
-/// window onto it rather than the thing keeping it alive -- a download will
-/// not survive the system killing the app, which is what the resumable queue
-/// is for.
+/// There is no foreground service behind this, and the notification no longer
+/// implies there is.
+///
+/// The manifest used to declare FOREGROUND_SERVICE and
+/// FOREGROUND_SERVICE_DATA_SYNC with no `<service>` to use them, which bought
+/// nothing: the transfer runs in the Dart isolate, and on Android 13+ a
+/// backgrounded app is frozen within minutes. A 700 MB lesson would stall
+/// while this notification went on showing a progress bar that was not
+/// moving -- the worst of both, because the student had no reason to look.
+///
+/// Of the two honest options -- implement a real service, or stop claiming
+/// what we cannot do -- this is the second. A foreground service is a native
+/// Service, a startForeground call, a Play Console declaration for the
+/// data-sync type and a notification handed between Kotlin and Dart; shipping
+/// that without a device to test it on would be worse than not shipping it.
+/// The resumable queue already makes a stall cheap, because the transfer
+/// resumes by Range from the byte it reached. So the notification says the
+/// app needs to stay open, and the permissions that promised otherwise are
+/// gone from the manifest.
 class DownloadNotifier {
   DownloadNotifier({
     required this._onPauseAll,
@@ -63,7 +77,7 @@ class DownloadNotifier {
       final status = await Permission.notification.status;
       if (status.isDenied) await Permission.notification.request();
     } catch (err) {
-      debugPrint('downloads: notification permission unavailable: $err');
+      logDebug('downloads', 'notification permission unavailable: $err');
     }
   }
 
@@ -89,7 +103,7 @@ class DownloadNotifier {
           >()
           ?.createNotificationChannel(channel);
     } catch (err) {
-      debugPrint('downloads: notification channel unavailable: $err');
+      logDebug('downloads', 'notification channel unavailable: $err');
     }
   }
 
@@ -113,7 +127,12 @@ class DownloadNotifier {
         ? 'Saving ${pending.first.title}'
         : 'Saving ${pending.length} lessons';
 
-    final body = total > 0 ? '${_mb(done)} of ${_mb(total)}' : 'Starting…';
+    // "Keep the app open" is the part that matters. Without a foreground
+    // service the transfer stops when Android freezes the process, and a
+    // student who does not know that reads a stalled bar as a broken app.
+    final body = total > 0
+        ? '${_mb(done)} of ${_mb(total)} · keep the app open'
+        : 'Starting… keep the app open';
 
     await _show(
       title: title,
@@ -139,7 +158,7 @@ class DownloadNotifier {
     try {
       await _plugin.cancel(_notificationId);
     } catch (err) {
-      debugPrint('downloads: could not clear notification: $err');
+      logDebug('downloads', 'could not clear notification: $err');
     }
   }
 
@@ -199,7 +218,7 @@ class DownloadNotifier {
       );
       _visible = true;
     } catch (err) {
-      debugPrint('downloads: could not post notification: $err');
+      logDebug('downloads', 'could not post notification: $err');
     }
   }
 

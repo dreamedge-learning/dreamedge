@@ -1,82 +1,30 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/colors.dart';
-import '../../../shared/theme/typography.dart';
 
-enum PlaceholderState { loading, error, unavailable }
-
+/// The 16:9 dark panel the player shows while there is nothing to draw yet.
+///
+/// Loading only. It used to carry `error` and `unavailable` states and an
+/// `onRetry` button, none of which any caller ever passed: the player's real
+/// failure UI is `_StageMessage` in video_player_screen.dart, which says what
+/// went wrong and offers the retry. Two widgets for one job is how they end up
+/// disagreeing about the wording, so the paths nothing reached are gone.
 class VideoPlaceholder extends StatelessWidget {
-  final PlaceholderState state;
-  final VoidCallback? onRetry;
-
-  const VideoPlaceholder({
-    super.key,
-    required this.state,
-    this.onRetry,
-  });
+  const VideoPlaceholder({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return AspectRatio(
+    return const AspectRatio(
       aspectRatio: 16 / 9,
-      child: Container(
-        decoration: const BoxDecoration(color: AppColors.darkBlue),
-        child: Center(child: _buildContent()),
+      child: ColoredBox(
+        color: AppColors.darkBlue,
+        child: Center(
+          child: CircularProgressIndicator(
+            color: AppColors.orange,
+            strokeWidth: 3,
+          ),
+        ),
       ),
     );
-  }
-
-  Widget _buildContent() {
-    switch (state) {
-      case PlaceholderState.loading:
-        return const CircularProgressIndicator(
-          color: AppColors.orange,
-          strokeWidth: 3,
-        );
-
-      case PlaceholderState.error:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline_rounded,
-                size: 40, color: AppColors.white),
-            const SizedBox(height: 10),
-            Text(
-              'Could not load video',
-              style: AppTypography.bodyMedium
-                  .copyWith(color: AppColors.white),
-            ),
-            if (onRetry != null) ...[
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: onRetry,
-                style: TextButton.styleFrom(
-                  backgroundColor: AppColors.orange.withValues(alpha: 0.2),
-                  foregroundColor: AppColors.orange,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                ),
-                child: const Text('Retry'),
-              ),
-            ],
-          ],
-        );
-
-      case PlaceholderState.unavailable:
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.play_circle_outline_rounded,
-                size: 48, color: AppColors.white.withValues(alpha: 0.6)),
-            const SizedBox(height: 10),
-            Text(
-              'Video not available',
-              style: AppTypography.bodyMedium.copyWith(
-                color: AppColors.white.withValues(alpha: 0.7),
-              ),
-            ),
-          ],
-        );
-    }
   }
 }

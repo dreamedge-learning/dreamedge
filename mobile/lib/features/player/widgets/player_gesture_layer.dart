@@ -36,6 +36,13 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
   Timer? _indicatorTimer;
 
   bool _showPlayPulse = false;
+
+  /// What the pulse should draw, captured at the moment of the tap.
+  ///
+  /// `controller.isPlaying` flips asynchronously, so reading it while the
+  /// pulse draws can show the state we were in rather than the one the tap is
+  /// taking us to.
+  bool _pulseShowsPlaying = false;
   Timer? _pulseTimer;
 
   /// Which half the last double-tap landed in, so the ripple goes there.
@@ -61,9 +68,12 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
         local.dy < size.height * 2 / 3;
   }
 
-  void _pulsePlayIcon() {
+  void _pulsePlayIcon({required bool playing}) {
     _pulseTimer?.cancel();
-    setState(() => _showPlayPulse = true);
+    setState(() {
+      _pulseShowsPlaying = playing;
+      _showPlayPulse = true;
+    });
     _pulseTimer = Timer(const Duration(milliseconds: 500), () {
       if (mounted) setState(() => _showPlayPulse = false);
     });
@@ -143,8 +153,9 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
             // reaching for the centre means "stop", a tap near the edge means
             // "let me see the scrubber".
             if (_isCentre(details.localPosition, size)) {
+              final willBePlaying = !controller.isPlaying;
               controller.togglePlay();
-              _pulsePlayIcon();
+              _pulsePlayIcon(playing: willBePlaying);
             } else {
               controller.tapScreen();
             }
@@ -169,8 +180,15 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
               // The play/pause pulse the centre tap leaves behind, so a tap
               // that lands while the controls are hidden still acknowledges
               // itself.
-              if (_showPlayPulse)
-                Center(
+              //
+              // Always mounted, with the opacity driven to zero. It used to be
+              // mounted at opacity 1 and removed by the timer, so the
+              // AnimatedOpacity never animated anything -- the glyph popped in
+              // and popped out again. IgnorePointer because a permanently
+              // mounted circle in this Stack would otherwise swallow the very
+              // centre taps it exists to acknowledge.
+              Center(
+                child: IgnorePointer(
                   child: AnimatedOpacity(
                     opacity: _showPlayPulse ? 1 : 0,
                     duration: const Duration(milliseconds: 160),
@@ -180,21 +198,26 @@ class _PlayerGestureLayerState extends State<PlayerGestureLayer> {
                         color: AppColors.black.withValues(alpha: 0.5),
                         shape: BoxShape.circle,
                       ),
+                      // The affordance, not the state: a tap that pauses
+                      // leaves a play glyph on the frozen frame, inviting the
+                      // tap that resumes. The other way round flashed a pause
+                      // icon over a video that had already stopped.
                       child: Icon(
-                        controller.isPlaying
-                            ? Icons.play_arrow_rounded
-                            : Icons.pause_rounded,
+                        _pulseShowsPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
                         color: AppColors.white,
                         size: 36,
                       ),
                     ),
                   ),
                 ),
+              ),
 
-              if (controller.seekBadge != Duration.zero)
+              if (controller.seekBadgeVisible)
                 SeekFeedback(
                   amount: controller.seekBadge,
-                  forward: controller.seekBadge > Duration.zero,
+                  forward: controller.seekBadgeForward,
                 ),
 
               if (_target == _DragTarget.brightness)

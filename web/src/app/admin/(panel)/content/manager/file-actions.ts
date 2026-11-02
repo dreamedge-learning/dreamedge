@@ -111,9 +111,14 @@ export async function createUploadTicket(
     // The extension is checked as well as the type, because a browser reports
     // an empty type for a format it does not recognise and .mkv is one of them.
     if (mimeType?.startsWith("video/") || VIDEO_EXTENSIONS.test(fileName)) {
+      // Worded without pointing at a panel that may not be on screen. The
+      // video uploader only renders for an item whose type is Video, so
+      // telling the admin to use "the Video section above" was advice they
+      // could not follow while attaching a file to a PDF or a note.
       return {
         error:
-          "Videos are uploaded in the Video section above, not as an attachment.",
+          "Videos cannot be attached as files. Set this item's type to Video "
+          + "and upload it there, or attach a document instead.",
       };
     }
 

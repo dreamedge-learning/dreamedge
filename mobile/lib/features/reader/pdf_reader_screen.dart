@@ -42,6 +42,13 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
     _source = _resolve();
   }
 
+  // No dispose() for _viewer, deliberately. In pdfrx 2.x PdfViewerController
+  // is a `ValueListenable<Matrix4>`, not a ChangeNotifier, and has no dispose
+  // to call -- it holds no resources of its own. PdfViewer._attach(null) runs
+  // from the viewer's own dispose and takes the controller's listener off the
+  // transformation controller with it, so nothing is retained once this route
+  // goes. Adding a dispose() here would not compile.
+
   Future<_ReaderSource> _resolve() async {
     final local = await ref.read(localLibraryProvider).find(widget.contentId);
     if (local != null) {

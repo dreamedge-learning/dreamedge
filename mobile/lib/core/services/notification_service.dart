@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../logging/app_log.dart';
+
 class NotificationService {
   static final NotificationService _instance = NotificationService._();
   factory NotificationService() => _instance;
@@ -85,7 +87,7 @@ class NotificationService {
         onConflict: 'user_id,token',
       );
     } catch (e) {
-      debugPrint('device_tokens upsert failed (non-fatal): $e');
+      logDebug('notifications', 'device token upsert failed: $e');
     }
   }
 

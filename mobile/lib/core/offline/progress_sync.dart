@@ -1,5 +1,4 @@
-import 'package:flutter/foundation.dart';
-
+import '../logging/app_log.dart';
 import '../providers/playback_provider.dart';
 import '../services/content_service.dart';
 import 'connectivity_service.dart';
@@ -48,7 +47,7 @@ class QueuedProgressWriter implements ProgressWriter {
         lastPositionSeconds: positionSeconds,
       );
     } catch (err) {
-      debugPrint('progress: queued after a failed write: $err');
+      logDebug('progress', 'queued after a failed write: $err');
       await _queue(contentItemId, positionSeconds, progressPercentage, status);
     }
   }
@@ -128,7 +127,7 @@ class QueuedProgressWriter implements ProgressWriter {
         );
         sent++;
       } catch (err) {
-        debugPrint('progress: ${entry.key} not flushed: $err');
+        logDebug('progress', 'an item was not flushed: $err');
         // Leave its rows queued for the next attempt.
         return sent;
       }

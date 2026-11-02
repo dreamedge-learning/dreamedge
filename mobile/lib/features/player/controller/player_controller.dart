@@ -62,6 +62,12 @@ class PlayerController extends ChangeNotifier {
   // Long enough not to fight a student who is reaching for the scrubber.
   static const Duration _controlsTimeout = Duration(seconds: 3);
 
+  /// Below this, a saved position is indistinguishable from the start.
+  static const Duration resumeThreshold = Duration(seconds: 30);
+
+  /// Within this of the end counts as finished.
+  static const int completeTailSeconds = 10;
+
   // A double-tap seek, and how long the badge keeps accumulating further taps.
   static const Duration _seekStep = Duration(seconds: 5);
   static const Duration _seekBadgeLinger = Duration(milliseconds: 900);
@@ -108,6 +114,14 @@ class PlayerController extends ChangeNotifier {
   int _playsUsed = 0;
 
   Duration _pendingSeekBadge = Duration.zero;
+
+  // The badge's side and its visibility are tracked separately from its
+  // amount. Deriving both from the amount's sign meant a forward double-tap
+  // followed by a backward one inside the linger window summed to zero, and
+  // every trace of the feedback disappeared in the middle of the student
+  // correcting themselves.
+  bool _seekBadgeForward = true;
+  bool _seekBadgeVisible = false;
   Timer? _seekBadgeTimer;
   Timer? _controlsTimer;
   Timer? _progressTimer;
@@ -160,6 +174,13 @@ class PlayerController extends ChangeNotifier {
   bool get playingLocalCopy => _playingLocalCopy;
 
   Duration get seekBadge => _pendingSeekBadge;
+
+  /// Which side the badge belongs on: the direction of the most recent tap,
+  /// not the sign of the running total.
+  bool get seekBadgeForward => _seekBadgeForward;
+
+  /// Whether the badge is on screen at all.
+  bool get seekBadgeVisible => _seekBadgeVisible;
   int get resumeFromSeconds => _resumeFromSeconds;
   int get playLimit => _playLimit;
   int get playsUsed => _playsUsed;
@@ -235,7 +256,10 @@ class PlayerController extends ChangeNotifier {
 
       // Offer to resume rather than silently jumping: a student who finished
       // the lesson yesterday and reopened it today usually wants the start.
-      if (_resumeFromSeconds > 30 && !_isComplete()) {
+      if (shouldOfferResume(
+        savedSeconds: _resumeFromSeconds,
+        totalSeconds: _payload?.durationSeconds ?? _content?.durationSeconds ?? 0,
+      )) {
         _set(() => _phase = PlayerPhase.askingToResume);
         return;
       }
@@ -288,10 +312,24 @@ class PlayerController extends ChangeNotifier {
     }
   }
 
-  bool _isComplete() {
-    final total = _payload?.durationSeconds ?? _content?.durationSeconds ?? 0;
-    if (total <= 0) return false;
-    return _resumeFromSeconds >= total - 10;
+  /// Whether a saved position is worth offering to resume from.
+  ///
+  /// Two thresholds, and both exist because of how it reads to a student. Less
+  /// than [resumeThreshold] in is indistinguishable from the start, and a
+  /// prompt to "resume from 0:12" is noise. Within [completeTailSeconds] of
+  /// the end means they finished it, and someone reopening a finished lesson
+  /// wants the beginning -- offering to resume at 44:58 of a 45-minute video
+  /// reads as a bug.
+  ///
+  /// A lesson with no known duration gets the prompt: better to offer it than
+  /// to silently discard a position the student earned.
+  static bool shouldOfferResume({
+    required int savedSeconds,
+    required int totalSeconds,
+  }) {
+    if (savedSeconds <= resumeThreshold.inSeconds) return false;
+    if (totalSeconds <= 0) return true;
+    return savedSeconds < totalSeconds - completeTailSeconds;
   }
 
   /// Claims one play against the lesson's replay limit, at most once.
@@ -346,14 +384,22 @@ class PlayerController extends ChangeNotifier {
 
   bool _playClaimed = false;
 
+  /// What a refused play actually means.
+  ///
+  /// `register_content_play` answers `allowed: false` for three different
+  /// things, and only one of them is a replay limit. Telling a student with an
+  /// expired session to "contact your mentor about another look" sends them to
+  /// a person who cannot help.
+  static PlayerPhase phaseForRefusal(String? reason) =>
+      reason == null || reason == 'limit_reached'
+      ? PlayerPhase.limitReached
+      : PlayerPhase.failed;
+
   /// Shows the right screen for a refused play.
   void _onPlayRefused() {
     final reason = _refusalReason;
 
-    // A limit the student has genuinely spent gets the replay-limit screen. A
-    // session or catalogue problem is a failure, and says so, because "contact
-    // your mentor" is useless advice for a sign-in that has lapsed.
-    if (reason == null || reason == 'limit_reached') {
+    if (phaseForRefusal(reason) == PlayerPhase.limitReached) {
       _set(() => _phase = PlayerPhase.limitReached);
       return;
     }
@@ -571,9 +617,15 @@ class PlayerController extends ChangeNotifier {
     final step = forward ? _seekStep : -_seekStep;
 
     _pendingSeekBadge += step;
+    _seekBadgeForward = forward;
+    _seekBadgeVisible = true;
+
     _seekBadgeTimer?.cancel();
     _seekBadgeTimer = Timer(_seekBadgeLinger, () {
-      _set(() => _pendingSeekBadge = Duration.zero);
+      _set(() {
+        _pendingSeekBadge = Duration.zero;
+        _seekBadgeVisible = false;
+      });
     });
 
     await seekTo(position + step);
@@ -755,8 +807,8 @@ class PlayerController extends ChangeNotifier {
 
     final resumeAt = position;
 
-    if (_retryAttempt < _retryDelays.length) {
-      final delay = _retryDelays[_retryAttempt];
+    if (_retryAttempt < maxPlaybackRetries) {
+      final delay = retryDelayFor(_retryAttempt);
       _retryAttempt++;
 
       _retryTimer?.cancel();
@@ -833,12 +885,35 @@ class PlayerController extends ChangeNotifier {
   /// usable life -- which is the case the six-hour TTL actually produces.
   /// Re-minting on every attempt would turn a two-second signal drop into
   /// three Edge Function calls.
-  bool _shouldRefreshToken() {
-    final payload = _payload;
+  bool _shouldRefreshToken() => shouldRefreshToken(
+    payload: _payload,
+    attempt: _retryAttempt,
+  );
+
+  /// Whether the next recovery attempt should re-mint the token first.
+  ///
+  /// On the last attempt always, and sooner once the payload has run out of
+  /// usable life -- which is the case the six-hour TTL actually produces.
+  /// Re-minting on every attempt would turn a two-second signal drop into
+  /// three Edge Function calls.
+  static bool shouldRefreshToken({
+    required PlaybackPayload? payload,
+    required int attempt,
+  }) {
     if (payload == null) return true;
     if (!payload.isUsable) return true;
-    return _retryAttempt >= _retryDelays.length;
+    return attempt >= maxPlaybackRetries;
   }
+
+  /// How long to wait before recovery attempt [attempt] (zero-based).
+  ///
+  /// Clamped rather than indexed, so a caller that has lost count backs off by
+  /// the longest delay instead of throwing out of a timer callback.
+  static Duration retryDelayFor(int attempt) =>
+      _retryDelays[attempt.clamp(0, _retryDelays.length - 1)];
+
+  /// How many recovery attempts a broken stream gets before giving up.
+  static int get maxPlaybackRetries => _retryDelays.length;
 
   /// Retries from the start of the chain: a fresh token, then a fresh player.
   ///

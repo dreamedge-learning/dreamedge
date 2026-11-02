@@ -1,6 +1,6 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../logging/app_log.dart';
 import '../services/playback_service.dart';
 import 'content_provider.dart';
 import 'offline_provider.dart';
@@ -54,7 +54,7 @@ class DirectProgressWriter implements ProgressWriter {
             lastPositionSeconds: positionSeconds,
           );
     } catch (err) {
-      debugPrint('progress: not saved: $err');
+      logDebug('progress', 'not saved: $err');
     }
   }
 }

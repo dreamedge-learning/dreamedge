@@ -7,11 +7,15 @@
          first run, before anything has been seen, is the one most often
          refused, and refusing it here costs only the progress bar.
 
-         FOREGROUND_SERVICE_DATA_SYNC is how Android classifies work like
-         this: a long transfer the user asked for and should be able to see. -->
+         FOREGROUND_SERVICE and FOREGROUND_SERVICE_DATA_SYNC are deliberately
+         NOT declared. They were, with no <service> element to use them, which
+         bought nothing and cost a Play Console declaration for a service type
+         this app does not implement. The transfer runs in the Dart isolate and
+         stops when Android freezes the process; the notification says so, and
+         the queue resumes by Range on the next launch. When a real foreground
+         service is written, both permissions come back here together with the
+         <service android:foregroundServiceType="dataSync"> that earns them. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <application
         android:label="Dream Edge"
         android:name="${applicationName}"

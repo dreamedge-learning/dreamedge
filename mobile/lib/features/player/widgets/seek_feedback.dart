@@ -22,7 +22,15 @@ class SeekFeedback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final seconds = amount.inSeconds.abs();
-    if (seconds == 0) return const SizedBox.shrink();
+
+    // Zero is drawn, not hidden. It is reached by a student correcting
+    // themselves -- a forward double-tap and then a backward one -- and
+    // disappearing at exactly the moment they undo their own seek is the one
+    // time the feedback is most confusing to lose. The side comes from the
+    // last tap, so the panel stays where their thumb is.
+    final label = seconds == 0
+        ? '0 seconds'
+        : '${forward ? '+' : '−'}$seconds seconds';
 
     return IgnorePointer(
       child: Align(
@@ -48,7 +56,7 @@ class SeekFeedback extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${forward ? '+' : '−'}$seconds seconds',
+                  label,
                   style: AppTypography.caption.copyWith(
                     color: AppColors.white,
                     fontWeight: FontWeight.w600,

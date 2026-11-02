@@ -12,19 +12,22 @@ import '../../../shared/theme/typography.dart';
 /// not itself the reason the screen looks wrong. It appears only when there is
 /// genuinely nothing reachable, which is why it sits on the reachability probe
 /// rather than on whether an interface exists.
+///
+/// And only once that probe has actually answered. Watching `isOnline` meant
+/// it showed for the first few seconds of every launch, because "not asked
+/// yet" and "offline" were the same value.
 class OfflineBanner extends ConsumerWidget {
   const OfflineBanner({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final online = ref.watch(isOnlineProvider);
+    final offline = ref.watch(isOfflineProvider);
 
     return AnimatedSize(
       duration: const Duration(milliseconds: 180),
       alignment: Alignment.topCenter,
-      child: online
-          ? const SizedBox(width: double.infinity, height: 0)
-          : Container(
+      child: offline
+          ? Container(
               width: double.infinity,
               color: AppColors.darkBlue,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -46,7 +49,8 @@ class OfflineBanner extends ConsumerWidget {
                   ),
                 ],
               ),
-            ),
+            )
+          : const SizedBox(width: double.infinity, height: 0),
     );
   }
 }

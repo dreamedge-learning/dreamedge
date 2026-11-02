@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../config/router.dart';
 import '../models/content.dart';
 import '../offline/connectivity_service.dart';
 import '../offline/device_identity.dart';
+import '../offline/disk_space.dart';
 import '../offline/download_manager.dart';
 import '../offline/download_notifier.dart';
 import '../offline/download_record.dart';
@@ -69,19 +72,51 @@ final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
 
 /// The connection, as a stream for widgets that rebuild on it.
 ///
-/// Seeded with the service's current answer so the first frame is right: a
-/// banner that flashes "you're offline" on every launch would be worse than
-/// no banner.
+/// Genuinely seeded this time. `service.states` is a broadcast stream that only
+/// fires on a change, so a provider handed it bare sits on `AsyncLoading` until
+/// the first probe resolves -- up to three seconds, or longer when the Supabase
+/// host times out first. The comment here used to claim the first frame was
+/// right while nothing made it so.
 final networkStateProvider = StreamProvider<NetworkState>((ref) {
   final service = ref.watch(connectivityServiceProvider);
-  return service.states;
+
+  // Subscribed before the seed is emitted, rather than after. An `async*`
+  // generator pauses at its first `yield` and only subscribes to the source
+  // when the listener asks for more -- and a broadcast stream drops whatever
+  // it emits in that gap. The gap covers exactly the moment the first probe
+  // resolves, which is the one event this provider exists to deliver.
+  final controller = StreamController<NetworkState>();
+  final subscription = service.states.listen(controller.add);
+  controller.add(service.state);
+
+  ref.onDispose(() {
+    subscription.cancel();
+    controller.close();
+  });
+
+  return controller.stream;
 });
 
-/// A synchronous read for code that cannot await, such as a build method.
+/// Something answered, as far as we know.
+///
+/// False while the first probe is in flight, so this must not be used to
+/// decide to hide content -- see [isOfflineProvider].
 final isOnlineProvider = Provider<bool>((ref) {
   final watched = ref.watch(networkStateProvider);
   return watched.valueOrNull?.isOnline ??
       ref.watch(connectivityServiceProvider).isOnline;
+});
+
+/// We asked, and nothing answered.
+///
+/// This is the one a screen may act on. The difference matters on every cold
+/// launch: `!isOnline` is true before the probe has run, so Home, Courses and
+/// My Learning all swapped themselves for the downloads-only view and the
+/// banner flashed over the top, for a student whose connection was fine.
+final isOfflineProvider = Provider<bool>((ref) {
+  final watched = ref.watch(networkStateProvider);
+  return watched.valueOrNull?.isOffline ??
+      ref.watch(connectivityServiceProvider).isOffline;
 });
 
 final downloadSettingsProvider = ChangeNotifierProvider<DownloadSettings>((
@@ -233,6 +268,24 @@ final downloadRecordProvider = Provider.family<DownloadRecord?, String>((
     if (record.contentItemId == contentItemId) return record;
   }
   return null;
+});
+
+/// Free space where downloads land, or null when the platform will not say.
+///
+/// The Downloads header shows this next to what is used, because "4.2 GB
+/// saved" does not tell a student whether they can save another lesson and
+/// "1.1 GB free" does.
+final freeSpaceProvider = FutureProvider<int?>((ref) async {
+  // Re-read when the downloads change: deleting a lesson is the main reason a
+  // student is looking at this number at all, and it has to move when they do.
+  ref.watch(downloadsProvider);
+
+  try {
+    final base = await getApplicationSupportDirectory();
+    return await const DiskSpace().freeBytes(base.path);
+  } on FileSystemException {
+    return null;
+  }
 });
 
 /// Bytes currently held on the device.

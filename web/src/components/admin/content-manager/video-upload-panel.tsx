@@ -220,6 +220,29 @@ export function VideoUploadPanel({ item, onItemChange }: VideoUploadPanelProps) 
         // the bytes stopped instead of sending the whole lesson again.
         storeFingerprintForResuming: true,
         removeFingerprintOnSuccess: true,
+        // The video guid is part of the fingerprint, which is what stops a
+        // remembered upload URL being replayed against a different video.
+        //
+        // createVideoUploadTicket reuses the staged guid only while Bunny
+        // still reports that video as unfinished; if the lookup throws it
+        // creates a new one instead. With a file-only fingerprint, the stored
+        // URL still pointed at the *old* upload while the headers below
+        // carried the new VideoId, so the resumed request was a new video
+        // addressed to an old URL -- which Bunny refuses, leaving the admin
+        // with "Upload failed" and an orphaned staged video.
+        //
+        // Scoping the fingerprint to the guid makes the two agree by
+        // construction: the same guid finds its upload and resumes, a new guid
+        // finds nothing and starts cleanly.
+        fingerprint: async (file) =>
+          [
+            "bunny",
+            videoGuid,
+            file.name,
+            file.type,
+            file.size,
+            file.lastModified,
+          ].join("/"),
         headers: {
           AuthorizationSignature: signature,
           AuthorizationExpire: String(expire),
