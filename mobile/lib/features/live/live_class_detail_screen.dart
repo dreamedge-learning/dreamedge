@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/live_class.dart';
 import '../../core/providers/live_class_provider.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
+import 'live_stream_screen.dart';
 
 class LiveClassDetailScreen extends ConsumerWidget {
   final String classId;
@@ -16,6 +20,49 @@ class LiveClassDetailScreen extends ConsumerWidget {
     final uri = Uri.parse(url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  /// Opens the right surface for whatever the class is pointing at.
+  ///
+  /// `in_app` with a meeting_url goes to the native stream screen -- a lean
+  /// video_player attached to the HLS URL, no scrubber or quality menu, same
+  /// 16:9 frame as the on-demand player. Everything else (Zoom, Google
+  /// Meet, YouTube) opens in the external app, which is where those
+  /// providers want to be anyway.
+  void _joinLive(BuildContext context, LiveClass liveClass) {
+    final url = liveClass.meetingUrl;
+    if (url == null || url.isEmpty) return;
+
+    if (liveClass.isInApp) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => LiveStreamScreen(
+            title: liveClass.title,
+            instructor: liveClass.instructorName,
+            streamUrl: url,
+          ),
+        ),
+      );
+      return;
+    }
+
+    unawaited(_launchUrl(url));
+  }
+
+  /// Opens the course player for the edited rewatch when the admin has
+  /// attached one, or falls back to the raw recording URL. The content
+  /// item carries the signed URL, offline terms and progress tracking,
+  /// so a deep-link here is better than a bare file.
+  void _watchRewatch(BuildContext context, LiveClass liveClass) {
+    final contentId = liveClass.rewatchContentId;
+    if (contentId != null && contentId.isNotEmpty) {
+      context.push('/player/$contentId');
+      return;
+    }
+    final url = liveClass.recordingUrl;
+    if (url != null && url.isNotEmpty) {
+      unawaited(_launchUrl(url));
     }
   }
 
@@ -146,7 +193,7 @@ class LiveClassDetailScreen extends ConsumerWidget {
                         ),
                       ],
                       const SizedBox(height: 32),
-                      _buildActionSection(liveClass),
+                      _buildActionSection(context, liveClass),
                     ],
                   ),
                 ),
@@ -194,10 +241,10 @@ class LiveClassDetailScreen extends ConsumerWidget {
         textColor = const Color(0xFF3B82F6);
         label = 'Scheduled';
         icon = Icons.event_outlined;
-      case 'completed':
+      case 'ended':
         bgColor = AppColors.success.withValues(alpha: 0.1);
         textColor = AppColors.success;
-        label = 'Completed';
+        label = 'Ended';
         icon = Icons.check_circle_outline;
       default:
         bgColor = AppColors.gray.withValues(alpha: 0.1);
@@ -242,14 +289,16 @@ class LiveClassDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildActionSection(LiveClass liveClass) {
-    if (liveClass.isLive && liveClass.meetingUrl != null) {
+  Widget _buildActionSection(BuildContext context, LiveClass liveClass) {
+    if (liveClass.canJoin) {
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
-          onPressed: () => _launchUrl(liveClass.meetingUrl!),
+          onPressed: () => _joinLive(context, liveClass),
           icon: const Icon(Icons.videocam_outlined, size: 20),
-          label: const Text('Join Live Class'),
+          label: Text(liveClass.isInApp
+              ? 'Join live class'
+              : 'Open meeting'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.orange,
             foregroundColor: AppColors.white,
@@ -293,13 +342,17 @@ class LiveClassDetailScreen extends ConsumerWidget {
       );
     }
 
-    if (liveClass.isCompleted && liveClass.hasRecording) {
+    if (liveClass.isEnded && liveClass.hasRecording) {
+      final hasEditedRewatch = liveClass.rewatchContentId != null &&
+          liveClass.rewatchContentId!.isNotEmpty;
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
-          onPressed: () => _launchUrl(liveClass.recordingUrl!),
+          onPressed: () => _watchRewatch(context, liveClass),
           icon: const Icon(Icons.play_circle_outline, size: 20),
-          label: const Text('Watch Recording'),
+          label: Text(hasEditedRewatch
+              ? 'Watch rewatch'
+              : 'Watch recording'),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.darkBlue,
             foregroundColor: AppColors.white,

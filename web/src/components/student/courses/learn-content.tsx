@@ -114,6 +114,13 @@ export interface SyllabusSubject {
 interface LearnContentProps {
   course: Course;
   subjects: SyllabusSubject[];
+  /**
+   * Content item id to open on first paint. Used by the live-class
+   * rewatch deep-link; the page passes the id from `?content=` through,
+   * and this component opens the player on that item if it exists in
+   * the syllabus.
+   */
+  initialContentId?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -794,7 +801,11 @@ function ItemViewer({
 /* Page                                                                        */
 /* -------------------------------------------------------------------------- */
 
-export function LearnContent({ course, subjects }: LearnContentProps) {
+export function LearnContent({
+  course,
+  subjects,
+  initialContentId,
+}: LearnContentProps) {
   const flatItems = useMemo(
     () => subjects.flatMap((s) => s.topics.flatMap((t) => t.items)),
     [subjects]
@@ -820,14 +831,24 @@ export function LearnContent({ course, subjects }: LearnContentProps) {
     }
   );
 
-  // Resume at the first unfinished item. Derived from the server snapshot, so
-  // completing something later never yanks the player elsewhere.
+  // Resume at the item named in the URL first, then the first unfinished.
+  // The deep-link takes priority so a rewatch button on the live-class
+  // page lands the student right at the lesson, not at the resume point.
+  const deepLinkItem = useMemo(
+    () =>
+      initialContentId
+        ? flatItems.find((i) => i.id === initialContentId) ?? null
+        : null,
+    [flatItems, initialContentId]
+  );
+
   const initialItem = useMemo(
     () =>
+      deepLinkItem ??
       flatItems.find((i) => i.progress?.status !== "completed") ??
       flatItems[0] ??
       null,
-    [flatItems]
+    [deepLinkItem, flatItems]
   );
 
   const [currentItemId, setCurrentItemId] = useState<string | null>(

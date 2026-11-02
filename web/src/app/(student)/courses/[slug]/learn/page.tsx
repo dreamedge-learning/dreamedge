@@ -15,6 +15,7 @@ import type {
 
 interface PageProps {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ content?: string }>;
 }
 
 export async function generateMetadata({
@@ -229,8 +230,9 @@ async function fetchProgress(
   return map;
 }
 
-export default async function LearnPage({ params }: PageProps) {
+export default async function LearnPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
+  const { content: initialContentId } = (await searchParams) ?? {};
   const supabase = await createClient();
 
   const { data: course } = await supabase
@@ -262,5 +264,13 @@ export default async function LearnPage({ params }: PageProps) {
 
   const subjects = await fetchSyllabus(supabase, course.id, student.id);
 
-  return <LearnContent course={course as Course} subjects={subjects} />;
+  return (
+    <LearnContent
+      course={course as Course}
+      subjects={subjects}
+      initialContentId={
+        typeof initialContentId === "string" ? initialContentId : null
+      }
+    />
+  );
 }
