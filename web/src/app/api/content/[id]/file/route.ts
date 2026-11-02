@@ -82,21 +82,29 @@ export async function GET(
     );
   }
 
-  // Keeping a copy is a separate permission from reading one, and it is
-  // refused here rather than reported for the client to honour.
+  // Reading a document and keeping a copy of it are different permissions.
   //
-  // `?download=1` minted a download-dispositioned URL without consulting the
-  // flag at all, and `?json=1` handed the raw URL over while merely stating
-  // `isDownloadable` in the body. So an admin switching "Available offline in
-  // app" off for a paid PDF changed nothing: a student still entitled to read
-  // it could take a copy, with no content_downloads row recording that the
-  // copy existed, so a refund revoked nothing and support could not see it.
+  //   READ -- the student is opening the file inline, nothing survives the
+  //           tab or the reader route. The website embeds a signed URL in an
+  //           <object>, the app's PDF reader fetches the URL with `?json=1`
+  //           and never saves it. Allowed for every entitled student.
   //
-  // The video path has always refused this server-side
-  // (video-playback-token/index.ts). Same answer, same status, same words --
-  // there is one rule about who may keep what, and both doors enforce it.
-  const wantsCopy = asAttachment || url.searchParams.get("json") === "1";
-  if (wantsCopy && !entitlement.isDownloadable) {
+  //   COPY -- the student is about to walk away with the bytes. The website
+  //           sets `?download=1` so the signed URL gets a Content-Disposition
+  //           header, and the app's download manager sets `?device=<id>` so
+  //           the file can be recorded against a device and later revoked.
+  //           Allowed only when `is_downloadable` is on.
+  //
+  // The earlier shape ("`?json=1` means copy") merged the two because the app
+  // happens to use JSON for both the reader and the downloader -- but the two
+  // app paths are distinguishable by the device marker, and the website
+  // reader does not go through this branch at all. Gate on intent, not on
+  // response format: a reader without a device must open the file.
+  //
+  // The video path refuses the same way server-side
+  // (video-playback-token/index.ts). Same rule, same status, same words.
+  const isCopyRequest = asAttachment || deviceId !== null;
+  if (isCopyRequest && !entitlement.isDownloadable) {
     return NextResponse.json(
       { error: "This lesson is not available offline." },
       { status: 403 }
@@ -145,36 +153,46 @@ export async function GET(
     );
   }
 
+  const serverNow = new Date();
+
+  // A copy must be auditable: a refund revokes against content_downloads and
+  // support reads it to answer "did my booklet go anywhere?". The earlier
+  // shape only wrote this row when the Dart app named a device, so a browser
+  // download walked out of the bucket unrecorded. The web browser does not
+  // have a stable device identity, so we attribute its downloads to the
+  // student instead -- one row per student per item on the web side is still
+  // one row more than silence, and the Dart `device_id` is unchanged.
+  if (isCopyRequest) {
+    const auditDeviceId = deviceId ?? `web:${caller.studentId}`;
+    const { error: recordError } = await service
+      .from("content_downloads")
+      .upsert(
+        {
+          student_id: caller.studentId,
+          content_item_id: id,
+          device_id: auditDeviceId,
+          quality: null,
+          downloaded_at: serverNow.toISOString(),
+          last_verified_at: serverNow.toISOString(),
+        },
+        { onConflict: "student_id,content_item_id,device_id" }
+      );
+
+    if (recordError) {
+      // Logged, not returned: a paid student must not lose their file to a
+      // bookkeeping failure. The same rule the Edge Function follows for
+      // video.
+      console.error("[content file] download not recorded", recordError);
+    }
+  }
+
   // A redirect is right for the browser, which follows it and streams the
   // object. It is wrong for the app: Dio would follow it too, but the app
   // needs the URL itself so a paused download can be resumed against it with
-  // a Range header. `?json=1` asks for the address instead of the content.
+  // a Range header. `?json=1` asks for the address instead of the content --
+  // the app's reader uses it too, which is why it must be allowed without a
+  // device id (see the intent split above).
   if (url.searchParams.get("json") === "1") {
-    const serverNow = new Date();
-
-    if (deviceId) {
-      // Bookkeeping, not a gate -- the same rule the Edge Function follows for
-      // video. A student who has paid must not lose their file because this
-      // write failed, so it is logged rather than returned.
-      const { error: recordError } = await service
-        .from("content_downloads")
-        .upsert(
-          {
-            student_id: caller.studentId,
-            content_item_id: id,
-            device_id: deviceId,
-            quality: null,
-            downloaded_at: serverNow.toISOString(),
-            last_verified_at: serverNow.toISOString(),
-          },
-          { onConflict: "student_id,content_item_id,device_id" }
-        );
-
-      if (recordError) {
-        console.error("[content file] download not recorded", recordError);
-      }
-    }
-
     return NextResponse.json(
       {
         url: signed.signedUrl,
