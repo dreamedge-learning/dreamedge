@@ -6,6 +6,7 @@ import '../../../core/models/content.dart';
 import '../../../core/offline/byte_format.dart';
 import '../../../core/offline/download_manager.dart';
 import '../../../core/offline/download_record.dart';
+import '../../../core/offline/server_clock.dart';
 import '../../../core/providers/offline_provider.dart';
 import '../../../shared/theme/colors.dart';
 import '../../../shared/theme/typography.dart';
@@ -146,7 +147,10 @@ class _Done extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final locked = !record.isLicenceValid;
+    final reading =
+        ref.watch(clockReadingProvider).valueOrNull ??
+        ClockReading.untrusted();
+    final locked = !record.isLicenceValidAt(reading);
 
     return IconButton(
       visualDensity: VisualDensity.compact,
@@ -197,7 +201,10 @@ Future<void> showDownloadSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),
     builder: (sheetContext) {
-      final locked = !record.isLicenceValid;
+      final locked = !record.isLicenceValidAt(
+        ref.read(clockReadingProvider).valueOrNull ??
+            ClockReading.untrusted(),
+      );
 
       return SafeArea(
         child: Column(

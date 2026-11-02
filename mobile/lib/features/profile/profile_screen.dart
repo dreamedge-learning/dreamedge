@@ -112,10 +112,9 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               );
               if (confirmed == true) {
-                // The cache and the downloads belong to this account. Leaving
-                // them for whoever signs in next would show one student
-                // another student's lessons.
-                await ref.read(offlineStoreProvider).clearAll();
+                // Clearing what belonged to this session is part of signing
+                // out, so it lives in AuthService.logout rather than here:
+                // every other way a session ends used to skip it.
                 await ref.read(authServiceProvider).logout();
               }
             },

@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import 'connectivity_service.dart';
 import 'download_manager.dart';
 import 'licence_sweeper.dart';
@@ -12,11 +10,19 @@ import 'progress_sync.dart';
 class SyncOutcome {
   final int progressSent;
   final int licencesRevoked;
+
+  /// True when the licence check could not be completed -- unreachable,
+  /// unusable answer, or an answer that cannot be told apart from a fault.
+  /// Nothing was revoked, and the Downloads screen says "could not check"
+  /// rather than letting the student believe their licences are current.
+  final bool licenceCheckInconclusive;
+
   final DateTime at;
 
   const SyncOutcome({
     required this.progressSent,
     required this.licencesRevoked,
+    required this.licenceCheckInconclusive,
     required this.at,
   });
 }
@@ -81,21 +87,26 @@ class OfflineSync {
 
     try {
       final sent = await progress.flush();
-      final revoked = await licences.sweep();
+      final swept = await licences.sweep();
       await refreshEnrollments();
       await downloads.restore();
 
-      if (sent > 0 || revoked > 0) {
+      final inconclusive = swept.result == SweepResult.inconclusive;
+
+      if (sent > 0 || swept.revoked > 0 || inconclusive) {
         _outcomes.add(
           SyncOutcome(
             progressSent: sent,
-            licencesRevoked: revoked,
+            licencesRevoked: swept.revoked,
+            licenceCheckInconclusive: inconclusive,
             at: DateTime.now(),
           ),
         );
       }
-    } catch (err) {
-      debugPrint('offline sync: $err');
+    } catch (_) {
+      // A reconnect that failed is not something to show the student: the
+      // licences already on disk decide what plays, and the next connectivity
+      // event tries again.
     } finally {
       _running = false;
     }

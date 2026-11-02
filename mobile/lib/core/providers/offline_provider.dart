@@ -14,6 +14,7 @@ import '../offline/licence_sweeper.dart';
 import '../offline/offline_store.dart';
 import '../offline/offline_sync.dart';
 import '../offline/progress_sync.dart';
+import '../offline/server_clock.dart';
 import '../repositories/content_repository.dart';
 import '../repositories/course_repository.dart';
 import '../repositories/enrollment_repository.dart';
@@ -26,10 +27,38 @@ import 'student_provider.dart';
 import 'supabase_provider.dart';
 
 /// The on-device database, shared by everything.
+///
+/// Every row it holds belongs to one student, so it is given a way to ask who
+/// that is rather than being told once. A store that cached the answer would
+/// go on serving the signed-out student's downloads to whoever signed in next,
+/// which on a shared family phone is exactly the failure this scoping exists
+/// to stop.
 final offlineStoreProvider = Provider<OfflineStore>((ref) {
-  final store = OfflineStore();
+  final store = OfflineStore(
+    owner: () async {
+      final student = await ref.read(currentStudentProvider.future);
+      return student?.id;
+    },
+  );
   ref.onDispose(store.dispose);
   return store;
+});
+
+/// The clock every licence decision is made against.
+final serverClockProvider = Provider<ServerClock>((ref) {
+  return ServerClock(ref.watch(offlineStoreProvider));
+});
+
+/// The current reading, for the screens that show a licence rather than
+/// enforce one.
+///
+/// Re-read whenever a download changes, which covers the sweep: it patches
+/// rows, so a reading taken after one is never older than the licences it is
+/// being compared against. Enforcement never reads this -- `LocalLibrary.find`
+/// takes its own reading on the spot, so a stale frame cannot open a file.
+final clockReadingProvider = FutureProvider<ClockReading>((ref) async {
+  ref.watch(downloadsProvider);
+  return ref.watch(serverClockProvider).read();
 });
 
 final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
@@ -103,6 +132,7 @@ final Provider<DownloadManager> downloadManagerProvider =
         settings: ref.watch(downloadSettingsProvider),
         device: ref.watch(deviceIdentityProvider),
         notifier: ref.watch(downloadNotifierProvider),
+        clock: ref.watch(serverClockProvider),
         dio: ref.watch(dioProvider),
       );
       ref.onDispose(manager.dispose);
@@ -113,6 +143,8 @@ final licenceSweeperProvider = Provider<LicenceSweeper>((ref) {
   return LicenceSweeper(
     client: ref.watch(supabaseClientProvider),
     store: ref.watch(offlineStoreProvider),
+    clock: ref.watch(serverClockProvider),
+    device: ref.watch(deviceIdentityProvider),
   );
 });
 

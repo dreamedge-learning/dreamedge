@@ -342,6 +342,13 @@ class PlaybackPayload {
   /// When these URLs stop working.
   final DateTime expiresAt;
 
+  /// The server's own clock when it answered.
+  ///
+  /// Every licence this payload leads to is measured from here rather than
+  /// from `DateTime.now()`. A licence measured by the device clock is a
+  /// licence the student renews in their date settings.
+  final DateTime serverNow;
+
   const PlaybackPayload({
     required this.provider,
     this.hls,
@@ -352,6 +359,7 @@ class PlaybackPayload {
     required this.offlineLicenseDays,
     this.validUntil,
     required this.expiresAt,
+    required this.serverNow,
   });
 
   /// Resolution heights, highest first, as the quality menu lists them.
@@ -379,6 +387,10 @@ class PlaybackPayload {
     }
 
     final expires = json['expiresAt'] as String?;
+    final rawServerNow = json['serverNow'] as String?;
+    final serverNow = rawServerNow == null
+        ? null
+        : DateTime.tryParse(rawServerNow);
 
     return PlaybackPayload(
       provider: json['provider'] as String? ?? 'none',
@@ -397,6 +409,11 @@ class PlaybackPayload {
       expiresAt: expires != null
           ? DateTime.tryParse(expires) ?? DateTime.now()
           : DateTime.now(),
+      // An answer that carried no server clock falls back to the device's.
+      // That is a weaker anchor, but refusing to play a lesson because the
+      // function has not been redeployed yet would be worse, and the expiry
+      // above still caps how long such a payload is usable.
+      serverNow: (serverNow ?? DateTime.now()).toUtc(),
     );
   }
 }

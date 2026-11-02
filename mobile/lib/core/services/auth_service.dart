@@ -3,7 +3,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class AuthService {
   final SupabaseClient _client;
 
-  AuthService(this._client);
+  /// What to tear down before the session goes.
+  ///
+  /// Sign-out used to be `signOut()` and nothing else, with the cleanup
+  /// written into the one button that called it. Every other way a session
+  /// ends -- and there are several -- skipped it, leaving the next student
+  /// looking at this one's cached course list. It belongs here, where it
+  /// cannot be forgotten.
+  final Future<void> Function()? _onSignOut;
+
+  AuthService(this._client, {this._onSignOut});
 
   Session? get currentSession => _client.auth.currentSession;
   User? get currentUser => _client.auth.currentUser;
@@ -68,7 +77,24 @@ class AuthService {
     );
   }
 
+  /// Ends the session, after clearing what belonged to it.
+  ///
+  /// The cleanup runs first, while the student's identity can still be
+  /// resolved -- the cached mirrors are scoped by student id and dropping them
+  /// afterwards would have nothing to scope by.
+  ///
+  /// Downloads are deliberately not touched. They are scoped to a student id
+  /// and checked against the signed-in one before a file is opened, so keeping
+  /// them is safe; deleting them would cost a student who signs back in a
+  /// gigabyte of mobile data for nothing.
   Future<void> logout() async {
+    try {
+      await _onSignOut?.call();
+    } catch (_) {
+      // A failed teardown must not trap the student in a session they asked to
+      // leave. The worst case is a stale cached catalogue, which the next
+      // refresh replaces.
+    }
     await _client.auth.signOut();
   }
 }

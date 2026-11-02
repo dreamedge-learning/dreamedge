@@ -10,11 +10,25 @@ class DocumentSource {
   final bool isDownloadable;
   final int offlineLicenseDays;
 
+  /// When the enrolment behind this document runs out, or null if it never
+  /// does.
+  ///
+  /// The offline licence is capped by it, exactly as the video path caps
+  /// against the same field. Without it a student with ten days of enrolment
+  /// left downloaded every booklet and past paper and kept each for thirty.
+  final DateTime? validUntil;
+
+  /// The server's clock when it answered, which is what the licence is
+  /// measured from. The device's clock belongs to the student.
+  final DateTime serverNow;
+
   const DocumentSource({
     required this.url,
     required this.fileName,
     required this.isDownloadable,
     required this.offlineLicenseDays,
+    this.validUntil,
+    required this.serverNow,
   });
 }
 
@@ -44,7 +58,14 @@ class DocumentService {
 
   DocumentService(this._client, Dio dio) : _dio = dio;
 
-  Future<DocumentSource> getSource(String contentItemId, {String? fileId}) async {
+  /// [deviceId] is sent when the caller is about to keep a copy, so the route
+  /// can record a `content_downloads` row against this device. Reading a
+  /// document inline leaves nothing behind and sends none.
+  Future<DocumentSource> getSource(
+    String contentItemId, {
+    String? fileId,
+    String? deviceId,
+  }) async {
     final token = _client.auth.currentSession?.accessToken;
     if (token == null) {
       throw const DocumentException(
@@ -53,7 +74,11 @@ class DocumentService {
       );
     }
 
-    final query = {'json': '1', if (fileId != null) 'f': fileId};
+    final query = {
+      'json': '1',
+      if (fileId != null) 'f': fileId,
+      if (deviceId != null) 'device': deviceId,
+    };
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/content/$contentItemId/file')
         .replace(queryParameters: query);
 
@@ -71,12 +96,27 @@ class DocumentService {
     if (response.statusCode == 200) {
       final body = response.data;
       if (body != null && body['url'] is String) {
+        final rawValidUntil = body['validUntil'] as String?;
+        final rawServerNow = body['serverNow'] as String?;
+
         return DocumentSource(
           url: body['url'] as String,
           fileName: body['fileName'] as String? ?? 'Document',
           isDownloadable: body['isDownloadable'] as bool? ?? false,
           offlineLicenseDays:
               (body['offlineLicenseDays'] as num?)?.toInt() ?? 30,
+          validUntil: rawValidUntil == null
+              ? null
+              : DateTime.tryParse(rawValidUntil)?.toUtc(),
+          // An answer from a deployment that predates this field falls back to
+          // the device clock. A weaker anchor than the server's, but refusing
+          // to open a booklet over it would be the worse failure.
+          serverNow:
+              (rawServerNow == null
+                      ? null
+                      : DateTime.tryParse(rawServerNow))
+                  ?.toUtc() ??
+              DateTime.now().toUtc(),
         );
       }
       throw const DocumentException(

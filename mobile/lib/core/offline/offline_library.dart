@@ -1,10 +1,9 @@
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 import 'download_record.dart';
 import 'local_library.dart';
 import 'offline_store.dart';
+import 'server_clock.dart';
 
 /// The real answer to "do we already have this?".
 ///
@@ -12,22 +11,33 @@ import 'offline_store.dart';
 /// reader ask through [LocalLibrary] and never learn that a database is
 /// involved.
 class OfflineLibrary implements LocalLibrary {
-  OfflineLibrary(this._store);
+  OfflineLibrary(this._store, this._clock);
 
   final OfflineStore _store;
+  final ServerClock _clock;
 
   @override
   Future<LocalCopy?> find(String contentItemId) async {
+    // Whose copy this is, before anything else. The store scopes its reads to
+    // the signed-in student, and this is the second check on the same fact:
+    // a phone is shared, and a file on disk does not stop belonging to the
+    // sibling who paid for it just because somebody else signed in.
+    final owner = await _store.currentOwner();
+    if (owner == null) return null;
+
     final record = await _store.download(contentItemId);
-    if (record == null) return null;
+    if (record == null || record.studentId != owner) return null;
 
     final path = record.localPath;
     if (record.status != DownloadStatus.done || path == null) return null;
 
     // A lapsed licence is not a usable copy. This is the check that stops a
     // paid lesson being free forever after one download, so it happens before
-    // the file is even looked at.
-    if (!record.isLicenceValid) return null;
+    // the file is even looked at -- and it is made against the server's clock,
+    // because a decision made against the device's is a decision the student
+    // makes in their date settings.
+    final reading = await _clock.read();
+    if (!record.isLicenceValidAt(reading)) return null;
 
     // The file can go missing without us: Android reclaims app storage under
     // pressure, and a student can clear app data. A record pointing at
@@ -42,8 +52,9 @@ class OfflineLibrary implements LocalLibrary {
         });
         return null;
       }
-    } catch (err) {
-      debugPrint('offline: could not check $path: $err');
+    } on FileSystemException {
+      // Unreadable is as good as absent to the player, and the record is left
+      // alone so a transient storage error does not look like a lost file.
       return null;
     }
 

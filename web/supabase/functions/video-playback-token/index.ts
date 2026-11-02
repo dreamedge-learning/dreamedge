@@ -292,7 +292,13 @@ serve(async (req) => {
   }
 
   const ttl = forDownload ? DOWNLOAD_TTL_SECONDS : STREAM_TTL_SECONDS
-  const expiresAt = new Date(Date.now() + ttl * 1000).toISOString()
+
+  // The app anchors every offline licence to this rather than to its own
+  // clock. A licence measured by the device's clock is one the student renews
+  // in their date settings: buy a month, download the course, set the phone
+  // back a year, stay in airplane mode.
+  const serverNow = new Date()
+  const expiresAt = new Date(serverNow.getTime() + ttl * 1000).toISOString()
 
   let hls: string | null = null
   let mp4: Record<string, string> = {}
@@ -347,8 +353,8 @@ serve(async (req) => {
         content_item_id: contentItemId,
         device_id: body.deviceId,
         quality: body.quality ?? null,
-        downloaded_at: new Date().toISOString(),
-        last_verified_at: new Date().toISOString(),
+        downloaded_at: serverNow.toISOString(),
+        last_verified_at: serverNow.toISOString(),
       },
       { onConflict: 'student_id,content_item_id,device_id' }
     )
@@ -368,5 +374,6 @@ serve(async (req) => {
     offlineLicenseDays: entitlement.offline_license_days,
     validUntil: entitlement.valid_until,
     expiresAt,
+    serverNow: serverNow.toISOString(),
   })
 })

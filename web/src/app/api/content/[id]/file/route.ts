@@ -39,6 +39,11 @@ export async function GET(
   const asAttachment = url.searchParams.get("download") === "1";
   const requestedFileId = url.searchParams.get("f");
 
+  // The app names the device it is saving to. A downloaded booklet is a copy
+  // that has left our reach, and a copy with no device recorded against it is
+  // one support cannot see and a refund cannot revoke.
+  const deviceId = url.searchParams.get("device");
+
   const caller = await authenticateStudent(request);
   if (!caller) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
@@ -124,12 +129,43 @@ export async function GET(
   // needs the URL itself so a paused download can be resumed against it with
   // a Range header. `?json=1` asks for the address instead of the content.
   if (url.searchParams.get("json") === "1") {
+    const serverNow = new Date();
+
+    if (deviceId) {
+      // Bookkeeping, not a gate -- the same rule the Edge Function follows for
+      // video. A student who has paid must not lose their file because this
+      // write failed, so it is logged rather than returned.
+      const { error: recordError } = await service
+        .from("content_downloads")
+        .upsert(
+          {
+            student_id: caller.studentId,
+            content_item_id: id,
+            device_id: deviceId,
+            quality: null,
+            downloaded_at: serverNow.toISOString(),
+            last_verified_at: serverNow.toISOString(),
+          },
+          { onConflict: "student_id,content_item_id,device_id" }
+        );
+
+      if (recordError) {
+        console.error("[content file] download not recorded", recordError);
+      }
+    }
+
     return NextResponse.json(
       {
         url: signed.signedUrl,
         fileName: file.display_name,
         isDownloadable: entitlement.isDownloadable,
         offlineLicenseDays: entitlement.offlineLicenseDays,
+        // The two the app could not get anywhere else, and without which a
+        // downloaded PDF outlived the enrolment that paid for it: the
+        // enrolment's own end date to cap the licence against, and the
+        // server's clock to measure it from rather than the device's.
+        validUntil: entitlement.validUntil,
+        serverNow: serverNow.toISOString(),
       },
       { headers: { "Cache-Control": "no-store, private" } }
     );

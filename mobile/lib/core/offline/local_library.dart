@@ -13,12 +13,14 @@ class LocalCopy {
 
   /// When the licence lapses and the student must reconnect once. Null means
   /// nothing expires -- a free item with no enrolment behind it.
+  ///
+  /// For display only. Whether the licence still stands was decided before
+  /// this object existed, by [LocalLibrary.find] against the server's clock;
+  /// a second answer computed here from `DateTime.now()` is how the date
+  /// settings became a way to keep a lesson forever.
   final DateTime? licenceExpiresAt;
 
   const LocalCopy({required this.path, this.quality, this.licenceExpiresAt});
-
-  bool get isLicenceValid =>
-      licenceExpiresAt == null || DateTime.now().isBefore(licenceExpiresAt!);
 }
 
 /// Where the player asks "do we already have this?".
@@ -50,5 +52,8 @@ class EmptyLocalLibrary implements LocalLibrary {
 }
 
 final localLibraryProvider = Provider<LocalLibrary>((ref) {
-  return OfflineLibrary(ref.watch(offlineStoreProvider));
+  return OfflineLibrary(
+    ref.watch(offlineStoreProvider),
+    ref.watch(serverClockProvider),
+  );
 });

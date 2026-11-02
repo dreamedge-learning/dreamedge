@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/content.dart';
@@ -10,15 +9,24 @@ import '../services/document_service.dart';
 import '../services/playback_service.dart';
 import 'connectivity_service.dart';
 import 'device_identity.dart';
+import 'disk_space.dart';
 import 'download_notifier.dart';
 import 'download_record.dart';
 import 'download_settings.dart';
 import 'offline_store.dart';
+import 'server_clock.dart';
 
 /// Why a download could not be started, in words worth showing.
 class DownloadRefused implements Exception {
   final String message;
-  const DownloadRefused(this.message);
+
+  /// True when the device has no room. The caller says something different for
+  /// this than for "the admin has not allowed this offline", because telling a
+  /// student a lesson is unavailable when the real answer is "free up 700 MB"
+  /// sends them to support instead of to their photo gallery.
+  final bool outOfSpace;
+
+  const DownloadRefused(this.message, {this.outOfSpace = false});
 
   @override
   String toString() => message;
@@ -50,9 +58,11 @@ class DownloadManager {
     required this._settings,
     required this._device,
     required this._notifier,
+    required this._clock,
     required this._dio,
   }) {
     _watchConnectivity();
+    _settings.addListener(_onAllowedNetworkChanged);
   }
 
   final OfflineStore _store;
@@ -62,15 +72,28 @@ class DownloadManager {
   final DownloadSettings _settings;
   final DeviceIdentity _device;
   final DownloadNotifier _notifier;
+  final ServerClock _clock;
   final Dio _dio;
 
   static const int _maxConcurrent = 2;
-  static const int _maxAttempts = 3;
 
-  /// Refuse rather than fill the device. A phone with no room left stops
-  /// taking photos and stops receiving messages, and the student will not
-  /// connect that to a video they saved.
-  static const int _freeSpaceFloorBytes = 300 * 1024 * 1024;
+  /// One first attempt plus this many retries.
+  ///
+  /// Named for what it is rather than for the loop bound it used to be: the
+  /// old `_maxAttempts = 3` with `attempts < _maxAttempts` gave two retries
+  /// while the comment and the backoff table both described three.
+  static const int _maxRetries = 3;
+
+  /// Headroom to leave beyond the file itself, so a finished download does not
+  /// leave a phone that cannot take a photo or receive a message. The student
+  /// will not connect either of those to a video they saved.
+  static const int _freeSpaceMarginBytes = 200 * 1024 * 1024;
+
+  /// What to assume a lesson costs when its size is not known yet, which is
+  /// the case before the first byte arrives. A 50-minute 480p lesson lands
+  /// near this, so it is a floor on the space check rather than a guess that
+  /// lets a 700 MB file onto a device with 400 MB free.
+  static const int _assumedItemBytes = 400 * 1024 * 1024;
 
   static const List<Duration> _backoff = [
     Duration(seconds: 3),
@@ -78,7 +101,13 @@ class DownloadManager {
     Duration(seconds: 45),
   ];
 
+  static const DiskSpace _disk = DiskSpace();
+
   final Map<String, CancelToken> _active = {};
+
+  /// Retry timers, so a timer cannot fire into a disposed manager and pump a
+  /// queue that no longer has a database behind it.
+  final Set<Timer> _retryTimers = {};
 
   StreamSubscription<NetworkState>? _networkWatch;
   bool _pumping = false;
@@ -92,7 +121,14 @@ class DownloadManager {
   /// paths for one fact is how a progress ring ends up disagreeing with the
   /// list it sits in.
   Future<void> dispose() async {
+    _settings.removeListener(_onAllowedNetworkChanged);
     await _networkWatch?.cancel();
+
+    for (final timer in _retryTimers) {
+      timer.cancel();
+    }
+    _retryTimers.clear();
+
     for (final token in _active.values) {
       token.cancel('shutting down');
     }
@@ -111,21 +147,41 @@ class DownloadManager {
       throw const DownloadRefused('This lesson is not available offline.');
     }
 
+    final owner = await _store.currentOwner();
+    if (owner == null) {
+      throw const DownloadRefused(
+        'Please sign in again to save this lesson.',
+      );
+    }
+
     final existing = await _store.download(content.id);
     if (existing != null && existing.status == DownloadStatus.done) {
       return;
     }
 
+    // Size-aware rather than a fixed floor. The old check refused anything
+    // below 300 MB free and waved through a 700 MB video on a device with
+    // 400 MB, which is the one case the check existed for.
+    final needed = _bytesStillNeeded(existing);
     final free = await _freeSpace();
-    if (free != null && free < _freeSpaceFloorBytes) {
+    if (free != null && free < needed + _freeSpaceMarginBytes) {
+      final shortfall = needed + _freeSpaceMarginBytes - free;
       throw DownloadRefused(
-        'Not enough space on your device. Free up about '
-        '${(_freeSpaceFloorBytes / 1024 / 1024).round()} MB and try again.',
+        'Not enough space. Free up about '
+        '${(shortfall / 1024 / 1024).ceil()} MB and try again.',
+        outOfSpace: true,
       );
     }
 
+    final place = await _store.lessonContext(content.topicId);
+
     final record = DownloadRecord(
       contentItemId: content.id,
+      studentId: owner,
+      courseId: place.courseId,
+      courseName: place.courseName,
+      subjectId: place.subjectId,
+      subjectName: place.subjectName,
       topicId: content.topicId,
       title: content.title,
       type: content.type.wireValue,
@@ -138,6 +194,8 @@ class DownloadManager {
       status: DownloadStatus.queued,
       attempts: 0,
       licenceExpiresAt: existing?.licenceExpiresAt,
+      licenceDays: existing?.licenceDays,
+      lastVerifiedAt: existing?.lastVerifiedAt,
       createdAt: existing?.createdAt ?? DateTime.now(),
     );
 
@@ -145,37 +203,58 @@ class DownloadManager {
     unawaited(_pump());
   }
 
+  int _bytesStillNeeded(DownloadRecord? existing) {
+    if (existing == null) return _assumedItemBytes;
+    final remaining = existing.bytesTotal - existing.bytesDone;
+    return remaining > 0 ? remaining : _assumedItemBytes;
+  }
+
   /// Queues everything downloadable under a topic.
   ///
-  /// Returns how many were skipped, so the screen can say so rather than
-  /// quietly doing less than the student asked for.
-  Future<({int queued, int skipped})> enqueueAll(List<Content> items) async {
+  /// Reports the two reasons separately, because they are not the same message
+  /// to a student: one needs an admin to change a switch, the other needs them
+  /// to delete something.
+  Future<({int queued, int notOffline, int noSpace})> enqueueAll(
+    List<Content> items,
+  ) async {
     var queued = 0;
-    var skipped = 0;
+    var notOffline = 0;
 
-    for (final item in items) {
+    for (var index = 0; index < items.length; index++) {
+      final item = items[index];
       if (!item.canDownload) {
-        skipped++;
+        notOffline++;
         continue;
       }
       try {
         await enqueue(item);
         queued++;
-      } on DownloadRefused {
-        // Out of space, almost certainly. Stop rather than report a hundred
-        // identical failures.
-        skipped += items.length - queued - skipped;
-        break;
+      } on DownloadRefused catch (refused) {
+        if (!refused.outOfSpace) {
+          notOffline++;
+          continue;
+        }
+        // Out of space. Stop rather than report a hundred identical failures,
+        // and count everything left as space rather than as unavailable.
+        final remaining = items
+            .sublist(index)
+            .where((candidate) => candidate.canDownload)
+            .length;
+        return (queued: queued, notOffline: notOffline, noSpace: remaining);
       }
     }
 
-    return (queued: queued, skipped: skipped);
+    return (queued: queued, notOffline: notOffline, noSpace: 0);
   }
 
+  /// The student pressed pause.
+  ///
+  /// Recorded as such, so the next connectivity event does not undo it.
   Future<void> pause(String contentItemId) async {
     _active.remove(contentItemId)?.cancel('paused');
     await _store.patchDownload(contentItemId, {
       'status': DownloadStatus.paused.name,
+      'paused_reason': PauseReason.student.name,
     });
     await _notifier.sync(await _store.pendingDownloads());
   }
@@ -183,6 +262,7 @@ class DownloadManager {
   Future<void> resume(String contentItemId) async {
     await _store.patchDownload(contentItemId, {
       'status': DownloadStatus.queued.name,
+      'paused_reason': null,
       'attempts': 0,
       'error': null,
     });
@@ -215,6 +295,8 @@ class DownloadManager {
   /// Anything the database says was mid-flight when the app died is not
   /// actually running, so it goes back to queued before the pump starts.
   Future<void> restore() async {
+    await purgeUnowned();
+
     final stuck = await _store.pendingDownloads();
     for (final record in stuck) {
       if (record.status == DownloadStatus.downloading) {
@@ -226,28 +308,54 @@ class DownloadManager {
     unawaited(_pump());
   }
 
+  /// Deletes the files left by rows the version 1 schema could not attribute.
+  ///
+  /// Those rows have no owner, so no student can play them and none of them
+  /// will ever be listed. Without this their bytes would sit on the device
+  /// forever, which on a phone that held a course is a gigabyte the student
+  /// cannot find and cannot free.
+  Future<void> purgeUnowned() async {
+    final orphans = await _store.unownedDownloads();
+    for (final record in orphans) {
+      await _deleteFile(record.localPath);
+      await _store.removeDownload(record.contentItemId, studentId: '');
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // The pump
   // ---------------------------------------------------------------------------
 
   void _watchConnectivity() {
-    _networkWatch = _connectivity.states.listen((state) {
-      if (!state.isOnline) return;
-
-      // Wi-Fi came back, or any connection did. Anything the Wi-Fi-only rule
-      // paused is eligible again, and the student should not have to ask.
-      unawaited(_resumeAutoPaused());
+    _networkWatch = _connectivity.states.listen((_) {
+      unawaited(_onAllowedNetworkChanged());
     });
+  }
+
+  /// Both directions of the Wi-Fi-only rule.
+  ///
+  /// The resume direction used to be the only one handled, which meant a
+  /// student who queued three lessons on home Wi-Fi and walked out of range
+  /// had Android hand over to 4G while the transfer stream never errored:
+  /// two gigabytes onto a metered pack, under a settings screen promising the
+  /// opposite. So the rule is re-evaluated on every transition, and a
+  /// connection that is no longer allowed cancels what is in flight rather
+  /// than only refusing what has not started.
+  Future<void> _onAllowedNetworkChanged() async {
+    if (_canUseNetworkNow()) {
+      await _resumeAutoPaused();
+      return;
+    }
+    await _parkForNetwork();
   }
 
   Future<void> _resumeAutoPaused() async {
     if (!_canUseNetworkNow()) return;
 
-    final paused = await _store.pendingDownloads(includePaused: true);
-    for (final record in paused) {
-      if (record.status != DownloadStatus.paused) continue;
+    for (final record in await _store.autoPausedDownloads()) {
       await _store.patchDownload(record.contentItemId, {
         'status': DownloadStatus.queued.name,
+        'paused_reason': null,
       });
     }
     unawaited(_pump());
@@ -293,6 +401,7 @@ class DownloadManager {
 
   static final DownloadRecord _none = DownloadRecord(
     contentItemId: '',
+    studentId: '',
     title: '',
     type: 'video',
     bytesTotal: 0,
@@ -303,12 +412,17 @@ class DownloadManager {
   );
 
   /// Puts the queue to sleep until the connection the student allows returns.
+  ///
+  /// Cancels what is in flight as well as parking what is queued. Resuming is
+  /// safe because the transfer resumes by Range from where the file actually
+  /// ends, so the bytes already paid for are not spent twice.
   Future<void> _parkForNetwork() async {
     final pending = await _store.pendingDownloads();
     for (final record in pending) {
-      _active.remove(record.contentItemId)?.cancel('waiting for wifi');
+      _active.remove(record.contentItemId)?.cancel('connection not allowed');
       await _store.patchDownload(record.contentItemId, {
         'status': DownloadStatus.paused.name,
+        'paused_reason': PauseReason.network.name,
       });
     }
 
@@ -328,6 +442,7 @@ class DownloadManager {
 
     await _store.patchDownload(id, {
       'status': DownloadStatus.downloading.name,
+      'paused_reason': null,
       'error': null,
     });
 
@@ -352,12 +467,13 @@ class DownloadManager {
       );
     } on DioException catch (error) {
       if (CancelToken.isCancel(error)) {
-        // Paused or removed. The row already says so.
+        // Paused, parked or removed. The row already says so.
         return;
       }
       await _fail(id, 'Download interrupted.', retryable: true);
-    } catch (err) {
-      debugPrint('download: $id failed: $err');
+    } on FileSystemException {
+      await _fail(id, 'Could not save to this device.', retryable: false);
+    } catch (_) {
       await _fail(id, 'Download failed.', retryable: true);
     } finally {
       _active.remove(id);
@@ -365,12 +481,12 @@ class DownloadManager {
     }
   }
 
-  /// Where the bytes come from and where they go.
+  /// Where the bytes come from, where they go, and on what terms.
   Future<_Target> _resolveTarget(DownloadRecord record) async {
     final metered = _connectivity.state.isMetered;
+    final deviceId = await _device.id();
 
     if (record.isVideo) {
-      final deviceId = await _device.id();
       final wanted = record.quality ?? _settings.heightFor(metered: metered);
 
       final payload = await _playback.getForDownload(
@@ -378,6 +494,8 @@ class DownloadManager {
         deviceId: deviceId,
         quality: wanted,
       );
+
+      await _clock.anchor(payload.serverNow);
 
       final chosen = _pickRendition(payload, wanted);
       if (chosen == null) {
@@ -390,22 +508,44 @@ class DownloadManager {
         url: payload.mp4[chosen]!,
         quality: chosen,
         extension: 'mp4',
-        licenceExpiresAt: _licenceEnd(payload),
+        licenceExpiresAt: _licenceEnd(
+          serverNow: payload.serverNow,
+          licenceDays: payload.offlineLicenseDays,
+          validUntil: payload.validUntil,
+        ),
+        licenceDays: payload.offlineLicenseDays,
+        verifiedAt: payload.serverNow,
       );
     }
 
-    final document = await _documents.getSource(record.contentItemId);
+    // The device id goes to the document endpoint for the same reason it goes
+    // to the video one: a downloaded booklet is a copy that has to be
+    // auditable and revocable, and a row with no device on it is neither.
+    final document = await _documents.getSource(
+      record.contentItemId,
+      deviceId: deviceId,
+    );
     if (!document.isDownloadable) {
       throw const DownloadRefused('This lesson is not available offline.');
     }
+
+    await _clock.anchor(document.serverNow);
 
     return _Target(
       url: document.url,
       quality: null,
       extension: _extensionOf(document.fileName) ?? 'pdf',
-      licenceExpiresAt: DateTime.now().add(
-        Duration(days: document.offlineLicenseDays),
+      // The same cap the video path uses. Without it a student with ten days
+      // of enrolment left downloaded every booklet and past paper and kept
+      // them for thirty -- twenty days of readable paid content past the
+      // paywall, with no server-side record that the copies existed.
+      licenceExpiresAt: _licenceEnd(
+        serverNow: document.serverNow,
+        licenceDays: document.offlineLicenseDays,
+        validUntil: document.validUntil,
       ),
+      licenceDays: document.offlineLicenseDays,
+      verifiedAt: document.serverNow,
     );
   }
 
@@ -433,14 +573,16 @@ class DownloadManager {
     return best ?? '${heights.first}';
   }
 
-  /// The licence can never outlive the enrolment behind it.
-  DateTime? _licenceEnd(PlaybackPayload payload) {
-    final byPolicy = DateTime.now().add(
-      Duration(days: payload.offlineLicenseDays),
-    );
-    final enrolment = payload.validUntil;
-    if (enrolment == null) return byPolicy;
-    return enrolment.isBefore(byPolicy) ? enrolment : byPolicy;
+  /// The licence can never outlive the enrolment behind it, and is measured
+  /// from the server's clock rather than this device's.
+  DateTime? _licenceEnd({
+    required DateTime serverNow,
+    required int licenceDays,
+    required DateTime? validUntil,
+  }) {
+    final byPolicy = serverNow.add(Duration(days: licenceDays));
+    if (validUntil == null) return byPolicy;
+    return validUntil.isBefore(byPolicy) ? validUntil : byPolicy;
   }
 
   Future<void> _transfer(
@@ -550,13 +692,14 @@ class DownloadManager {
   }
 
   Future<void> _finish(DownloadRecord record, _Target target) async {
-    final now = DateTime.now();
-
     await _store.patchDownload(record.contentItemId, {
       'status': DownloadStatus.done.name,
+      'paused_reason': null,
       'quality': target.quality,
       'licence_expires_at': target.licenceExpiresAt?.millisecondsSinceEpoch,
-      'completed_at': now.millisecondsSinceEpoch,
+      'licence_days': target.licenceDays,
+      'last_verified_at': target.verifiedAt.millisecondsSinceEpoch,
+      'completed_at': target.verifiedAt.millisecondsSinceEpoch,
       'error': null,
       'attempts': 0,
     });
@@ -572,7 +715,7 @@ class DownloadManager {
 
     final attempts = record.attempts + 1;
 
-    if (retryable && attempts < _maxAttempts) {
+    if (retryable && attempts <= _maxRetries) {
       await _store.patchDownload(contentItemId, {
         'status': DownloadStatus.queued.name,
         'attempts': attempts,
@@ -582,7 +725,13 @@ class DownloadManager {
       // Backing off rather than hammering: a connection that just dropped is
       // usually back within seconds, and retrying instantly only burns
       // battery.
-      Timer(_backoff[attempts - 1], () => unawaited(_pump()));
+      final delay = _backoff[(attempts - 1).clamp(0, _backoff.length - 1)];
+      late final Timer timer;
+      timer = Timer(delay, () {
+        _retryTimers.remove(timer);
+        unawaited(_pump());
+      });
+      _retryTimers.add(timer);
       return;
     }
 
@@ -617,44 +766,22 @@ class DownloadManager {
       if (await folder.exists() && folder.listSync().isEmpty) {
         await folder.delete();
       }
-    } catch (err) {
-      debugPrint('download: could not delete $path: $err');
+    } on FileSystemException {
+      // The bytes outliving the record costs storage; it does not make
+      // anything playable, because the record is what the player reads.
     }
   }
 
+  /// Free space where downloads land, or null when the platform will not say.
+  ///
+  /// Null is "unknown", not "none": the caller skips the check and lets a
+  /// genuinely full device fail the write with a real disk error, because
+  /// refusing a download on a figure we do not have is the worse mistake.
   Future<int?> _freeSpace() async {
     try {
       final base = await getApplicationSupportDirectory();
-      final stat = await base.stat();
-      // `stat` carries no free-space figure on every platform, so this is a
-      // best effort: where it is unavailable the check is skipped rather than
-      // guessed at, and the download fails later with a real disk error.
-      if (stat.type == FileSystemEntityType.notFound) return null;
-      return await _availableBytes(base.path);
-    } catch (err) {
-      debugPrint('download: free space unknown: $err');
-      return null;
-    }
-  }
-
-  Future<int?> _availableBytes(String path) async {
-    if (!Platform.isAndroid && !Platform.isIOS) return null;
-    try {
-      // `df` is present on both and is the only figure available without a
-      // platform channel of our own.
-      final result = await Process.run('df', ['-k', path]);
-      final lines = (result.stdout as String).trim().split('\n');
-      if (lines.length < 2) return null;
-
-      final columns = lines.last
-          .split(RegExp(r'\s+'))
-          .where((c) => c.isNotEmpty)
-          .toList();
-      if (columns.length < 4) return null;
-
-      final kilobytes = int.tryParse(columns[3]);
-      return kilobytes == null ? null : kilobytes * 1024;
-    } catch (_) {
+      return await _disk.freeBytes(base.path);
+    } on FileSystemException {
       return null;
     }
   }
@@ -671,10 +798,19 @@ class _Target {
   final String extension;
   final DateTime? licenceExpiresAt;
 
+  /// The licence length the server granted, kept so the expiry can be checked
+  /// against the last real server contact rather than trusted on its own.
+  final int licenceDays;
+
+  /// The server's clock when this target was resolved.
+  final DateTime verifiedAt;
+
   const _Target({
     required this.url,
     required this.quality,
     required this.extension,
     required this.licenceExpiresAt,
+    required this.licenceDays,
+    required this.verifiedAt,
   });
 }

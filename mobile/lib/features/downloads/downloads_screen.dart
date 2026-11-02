@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/offline/byte_format.dart';
 import '../../core/offline/download_record.dart';
+import '../../core/offline/server_clock.dart';
 import '../../core/providers/offline_provider.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
@@ -210,8 +211,15 @@ class _DownloadRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final record = lesson.record;
     final content = lesson.content;
+
+    // Against the server's clock, not the device's. A reading taken before the
+    // first server answer is untrusted and locks the row, which is the point:
+    // a student who turned the date back should see a lock, not a lesson.
+    final reading =
+        ref.watch(clockReadingProvider).valueOrNull ??
+        ClockReading.untrusted();
     final locked =
-        record.status == DownloadStatus.done && !record.isLicenceValid;
+        record.status == DownloadStatus.done && !record.isLicenceValidAt(reading);
 
     return ListTile(
       leading: Container(
@@ -250,7 +258,7 @@ class _DownloadRow extends ConsumerWidget {
                   .remove(record.contentItemId),
             )
           : DownloadButton(content: content),
-      onTap: content == null || locked || !record.isPlayable
+      onTap: content == null || locked || !record.isPlayableAt(reading)
           ? null
           : () => context.push(routeForContent(content)),
     );

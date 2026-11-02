@@ -152,9 +152,10 @@ class LessonsScreen extends ConsumerWidget {
 
   /// Queues every downloadable lesson under this topic.
   ///
-  /// Reports what it skipped. A student who taps "download all" on a topic
-  /// with two videos and a quiz should be told the quiz was left out rather
-  /// than left to wonder why the count is short.
+  /// Reports what it skipped, and reports the two reasons apart. They used to
+  /// share one counter, so a topic that stopped halfway because the device was
+  /// full said "4 not available offline" -- which sends the student to a mentor
+  /// when what they needed was to delete something.
   Future<void> _downloadAll(
     BuildContext context,
     WidgetRef ref,
@@ -169,8 +170,10 @@ class LessonsScreen extends ConsumerWidget {
       result.queued == 0
           ? 'Nothing new to download'
           : '${result.queued} '
-              '${result.queued == 1 ? 'lesson' : 'lessons'} queued',
-      if (result.skipped > 0) '${result.skipped} not available offline',
+                '${result.queued == 1 ? 'lesson' : 'lessons'} queued',
+      if (result.notOffline > 0) '${result.notOffline} not available offline',
+      if (result.noSpace > 0)
+        '${result.noSpace} skipped — not enough space on this device',
     ];
 
     ScaffoldMessenger.of(context).showSnackBar(
