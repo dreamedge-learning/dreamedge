@@ -335,11 +335,17 @@ async function fetchStudentRows(
   let enrolledIds: string[] | null = null;
 
   if (isApplied(filters.courseId)) {
+    // Stable order: fetchAllRows walks pages by range(from, to), and
+    // unordered pages are not stable -- Postgres is free to return the
+    // same window in a different order each call, so a course with more
+    // than one window of enrolments could drop or duplicate student ids
+    // between pages. `id` is a uuid, so this gives a snapshot ordering.
     const enrolled = await fetchAllRows("enrolment", (from, to) =>
       supabase
         .from("enrollments")
         .select("student_id", { count: "exact" })
         .eq("course_id", filters.courseId as string)
+        .order("id", { ascending: true })
         .range(from, to)
     );
 
@@ -384,7 +390,14 @@ async function fetchStudentRows(
     if (filters.dateTo) query = query.lte("created_at", rangeEnd(filters.dateTo));
     if (enrolledIds) query = query.in("id", enrolledIds);
 
-    return query.order("created_at", { ascending: false }).range(from, to);
+    // `created_at` is not unique and new registrations keep arriving while
+    // the walk runs, so a tiebreaker on `id` keeps pages aligned -- without
+    // it two rows sharing a second could flip order between pages and the
+    // range() split would drop one and duplicate the other.
+    return query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
+      .range(from, to);
   });
 }
 
@@ -694,7 +707,8 @@ const studentsFullDataset = defineDataset({
              payment_method, course:courses(title)`,
             { count: "exact" }
           )
-          .order("purchased_at", { ascending: false });
+          .order("purchased_at", { ascending: false })
+          .order("id", { ascending: true });
         if (ids) query = query.in("student_id", ids);
         return query.range(from, to);
       }),
@@ -707,7 +721,8 @@ const studentsFullDataset = defineDataset({
              student:students(full_name, email, phone), course:courses(title)`,
             { count: "exact" }
           )
-          .order("created_at", { ascending: false });
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: true });
         if (ids) query = query.in("student_id", ids);
         return query.range(from, to);
       }),
@@ -715,7 +730,8 @@ const studentsFullDataset = defineDataset({
         let query = supabase
           .from("student_progress")
           .select(PROGRESS_SELECT, { count: "exact" })
-          .order("updated_at", { ascending: false });
+          .order("updated_at", { ascending: false })
+          .order("id", { ascending: true });
         if (ids) query = query.in("student_id", ids);
         return query.range(from, to);
       }),
@@ -829,7 +845,8 @@ const progressDataset = defineDataset({
       let query = supabase
         .from("student_progress")
         .select(PROGRESS_SELECT, { count: "exact" })
-        .order("updated_at", { ascending: false });
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.status)) {
         query = query.eq("status", filters.status as string);
@@ -908,7 +925,8 @@ const leadsDataset = defineDataset({
         .select("name, phone, email, class, source, status, remarks, created_at", {
           count: "exact",
         })
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (filters.search) {
         const safe = sanitizeSearch(filters.search);
@@ -957,7 +975,8 @@ const testimonialsDataset = defineDataset({
           "student_name, class, year, type, rating, content, video_url, is_visible, weight, created_at",
           { count: "exact" }
         )
-        .order("weight", { ascending: true });
+        .order("weight", { ascending: true })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.visible)) {
         query = query.eq("is_visible", filters.visible === "true");
@@ -1035,7 +1054,8 @@ function orderQuery(
     let query = supabase
       .from("orders")
       .select(ORDER_SELECT, { count: "exact" })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
     if (filters.search) {
       const safe = sanitizeSearch(filters.search);
@@ -1205,7 +1225,8 @@ const refundsDataset = defineDataset({
            course:courses(title))`,
           { count: "exact" }
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.status)) {
         query = query.eq("status", filters.status as "requested");
@@ -1286,7 +1307,8 @@ const referralCodesDataset = defineDataset({
            valid_until, created_at, student:students(full_name)`,
           { count: "exact" }
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.active)) {
         query = query.eq("is_active", filters.active === "true");
@@ -1328,7 +1350,8 @@ const revenueAnalyticsDataset = defineDataset({
         .from("orders")
         .select(ORDER_SELECT, { count: "exact" })
         .eq("status", "completed")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (filters.dateFrom) query = query.gte("created_at", rangeStart(filters.dateFrom));
       if (filters.dateTo) query = query.lte("created_at", rangeEnd(filters.dateTo));
@@ -1426,7 +1449,8 @@ const coursesDataset = defineDataset({
            created_at`,
           { count: "exact" }
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (filters.search) {
         const safe = sanitizeSearch(filters.search);
@@ -1495,56 +1519,72 @@ const contentItemsDataset = defineDataset({
     ]);
   },
   async fetcher(filters, supabase) {
+    // Filter by course_id server-side rather than by course title in memory
+    // after fetching every content item on the platform. The earlier shape
+    // did `fetch everything, then .filter((row) => row.course === title)`,
+    // which was wrong twice: two courses sharing a title handed the admin
+    // both of them (including drafts from the course they did not pick),
+    // and a rename between the page load and the click returned "no rows"
+    // against a correctly-selected course.
+    //
+    // PostgREST filters on an embedded column with the path:
+    // `topic.subject.course_id`. The embeds are marked `!inner` so a
+    // content item with no topic (unlikely but possible during authoring)
+    // does not slip through unfiltered.
+    const inner = isApplied(filters.courseId);
     const rows = await fetchAllRows<ContentItemQueryRow>("content item", (from, to) => {
       let query = supabase
         .from("content_items")
         .select(
-          `title, type, status, is_paid, is_downloadable, is_printable,
-           offline_license_days, play_limit, video_provider, video_status,
-           video_size_bytes, duration_seconds, weight, created_at,
-           topic:topics(name, subject:subjects(name, course:courses(title)))`,
+          inner
+            ? `title, type, status, is_paid, is_downloadable, is_printable,
+               offline_license_days, play_limit, video_provider, video_status,
+               video_size_bytes, duration_seconds, weight, created_at,
+               topic:topics!inner(name, subject:subjects!inner(name, course:courses!inner(title, id)))`
+            : `title, type, status, is_paid, is_downloadable, is_printable,
+               offline_license_days, play_limit, video_provider, video_status,
+               video_size_bytes, duration_seconds, weight, created_at,
+               topic:topics(name, subject:subjects(name, course:courses(title)))`,
           { count: "exact" }
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.type)) query = query.eq("type", filters.type as "video");
       if (isApplied(filters.status)) query = query.eq("status", filters.status as "published");
+      if (inner) {
+        query = query.eq("topic.subject.course_id", filters.courseId as string);
+      }
 
       return query.range(from, to);
     });
 
-    const courseTitle = isApplied(filters.courseId)
-      ? await courseLabel(supabase, filters.courseId)
-      : null;
-
-    return rows
-      .map((row) => {
-        const path = contentPath({ title: row.title, type: row.type, topic: row.topic });
-        return {
-          course: path.course,
-          subject: path.subject,
-          topic: path.topic,
-          title: row.title,
-          type: row.type,
-          status: row.status,
-          is_paid: row.is_paid,
-          is_downloadable: row.is_downloadable,
-          offline_license_days: row.offline_license_days,
-          is_printable: row.is_printable,
-          play_limit: row.play_limit,
-          video_provider: row.video_provider,
-          video_status: row.video_status,
-          video_size_mb:
-            row.video_size_bytes === null
-              ? null
-              : Math.round((row.video_size_bytes / (1024 * 1024)) * 10) / 10,
-          duration_minutes:
-            row.duration_seconds === null ? null : Math.round(row.duration_seconds / 60),
-          weight: row.weight,
-          created_at: row.created_at,
-        };
-      })
-      .filter((row) => !courseTitle || row.course === courseTitle);
+    return rows.map((row) => {
+      const path = contentPath({ title: row.title, type: row.type, topic: row.topic });
+      return {
+        course: path.course,
+        subject: path.subject,
+        topic: path.topic,
+        title: row.title,
+        type: row.type,
+        status: row.status,
+        is_paid: row.is_paid,
+        is_downloadable: row.is_downloadable,
+        offline_license_days: row.offline_license_days,
+        is_printable: row.is_printable,
+        play_limit: row.play_limit,
+        video_provider: row.video_provider,
+        video_status: row.video_status,
+        video_size_mb:
+          row.video_size_bytes === null
+            ? null
+            : Math.round((row.video_size_bytes / (1024 * 1024)) * 10) / 10,
+        duration_minutes:
+          row.duration_seconds === null ? null : Math.round(row.duration_seconds / 60),
+        weight: row.weight,
+        created_at: row.created_at,
+      };
+    });
   },
   summary(rows) {
     return [
@@ -1624,7 +1664,8 @@ const testsDataset = defineDataset({
            course:courses(title), questions(id)`,
           { count: "exact" }
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (filters.search) {
         const safe = sanitizeSearch(filters.search);
@@ -1707,7 +1748,8 @@ const questionBankDataset = defineDataset({
            subject:subjects(name), topic:topics(name)`,
           { count: "exact" }
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (filters.search) {
         const safe = sanitizeSearch(filters.search);
@@ -1812,7 +1854,8 @@ const liveClassesDataset = defineDataset({
       let query = supabase
         .from("live_classes")
         .select(LIVE_CLASS_SELECT, { count: "exact" })
-        .order("scheduled_at", { ascending: false });
+        .order("scheduled_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.status)) query = query.eq("status", filters.status as "scheduled");
       if (isApplied(filters.courseId)) query = query.eq("course_id", filters.courseId as string);
@@ -1844,7 +1887,8 @@ const recordingsDataset = defineDataset({
         .from("live_classes")
         .select(LIVE_CLASS_SELECT, { count: "exact" })
         .eq("status", "ended")
-        .order("scheduled_at", { ascending: false });
+        .order("scheduled_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.courseId)) query = query.eq("course_id", filters.courseId as string);
       if (filters.dateFrom) query = query.gte("scheduled_at", rangeStart(filters.dateFrom));
@@ -1911,7 +1955,8 @@ const notificationsDataset = defineDataset({
            student_notifications(is_read)`,
           { count: "exact" }
         )
-        .order("sent_at", { ascending: false });
+        .order("sent_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.channel)) query = query.eq("channel", filters.channel as "push");
 
@@ -1960,7 +2005,8 @@ const bannersDataset = defineDataset({
           "title, position, action_url, is_active, weight, starts_at, ends_at, created_at",
           { count: "exact" }
         )
-        .order("weight", { ascending: true });
+        .order("weight", { ascending: true })
+        .order("id", { ascending: true });
 
       if (isApplied(filters.active)) {
         query = query.eq("is_active", filters.active === "true");
@@ -2015,7 +2061,8 @@ const adminTeamDataset = defineDataset({
           "full_name, email, phone, is_active, last_login_at, created_at, roles(name)",
           { count: "exact" }
         )
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (filters.search) {
         const safe = sanitizeSearch(filters.search);
@@ -2084,7 +2131,8 @@ const auditLogDataset = defineDataset({
         .select("user_id, action, entity_type, entity_id, ip_address, created_at", {
           count: "exact",
         })
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
 
       if (filters.search) {
         const safe = sanitizeSearch(filters.search);
