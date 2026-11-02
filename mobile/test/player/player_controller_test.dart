@@ -385,19 +385,136 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // Not covered here, and why.
+  // Play-claim decision
   //
-  // "the play claim happens once per play and not on retry" and "the quality
-  // swap preserves position" both run through _attach, which builds a real
-  // VideoPlayerController and needs a platform to initialise. They belong in
-  // an integration test on a device, alongside the fullscreen-exit and
-  // token-expiry checks in the Stage B gate. Standing a fake controller up
-  // here would assert that the fake behaves, which is worth nothing.
-  //
-  // What is covered is the decision each of those paths consults: the claim is
-  // guarded by a single flag set on the first play() and never reset by
-  // retry(), and the quality swap hands _attach the captured position. The
-  // flag and the capture are three lines each; the platform around them is
-  // what needs a device.
+  // _ensurePlayClaimed and the RPC round-trip around it need a platform; the
+  // decisions they consult do not. `shouldClaimPlay` and `claimedFromResponse`
+  // are the two choices that would otherwise be read-only comments, lifted
+  // out as pure functions so a change here cannot drift from the behaviour.
   // ---------------------------------------------------------------------------
+
+  group('play claim decision', () {
+    test('a free lesson never calls the RPC', () {
+      // Unlimited replays means a counter that is only there to be bypassed.
+      expect(
+        PlayerController.shouldClaimPlay(playLimit: 0, playClaimed: false),
+        isFalse,
+      );
+      expect(
+        PlayerController.shouldClaimPlay(playLimit: -1, playClaimed: false),
+        isFalse,
+      );
+    });
+
+    test('a limited lesson calls the RPC once per session', () {
+      expect(
+        PlayerController.shouldClaimPlay(playLimit: 3, playClaimed: false),
+        isTrue,
+      );
+    });
+
+    test('a flag already set stops the next retry claiming again', () {
+      // The retry-after-stream-break case. Same play, no second count.
+      expect(
+        PlayerController.shouldClaimPlay(playLimit: 3, playClaimed: true),
+        isFalse,
+      );
+    });
+
+    test('an allowed-true response sets the claimed flag', () {
+      expect(
+        PlayerController.claimedFromResponse(
+          {'allowed': true, 'plays': 1, 'limit': 3},
+        ),
+        isTrue,
+      );
+    });
+
+    test('an allowed-false response leaves the flag off so the refusal shows', () {
+      expect(
+        PlayerController.claimedFromResponse(
+          {'allowed': false, 'plays': 3, 'limit': 3, 'reason': 'limit_reached'},
+        ),
+        isFalse,
+      );
+    });
+
+    test('a non-map response leaves the flag off', () {
+      // What the RPC returns when the schema changes under us; the caller's
+      // catch block handles the thrown case, which also leaves the flag off.
+      expect(PlayerController.claimedFromResponse(null), isFalse);
+      expect(PlayerController.claimedFromResponse('nope'), isFalse);
+      expect(PlayerController.claimedFromResponse(42), isFalse);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Quality swap capture
+  //
+  // `_attach` builds a real VideoPlayerController and needs a platform, but
+  // the capture that feeds it does not -- `planQualitySwap` is three lines
+  // deciding what to hand `_attach`, so the position-preserving behaviour
+  // can be checked here instead of behind an integration test.
+  // ---------------------------------------------------------------------------
+
+  group('quality swap plan', () {
+    const resumeAt = Duration(minutes: 3, seconds: 42);
+
+    test('a swap captures the position and playing state for _attach', () {
+      final plan = PlayerController.planQualitySwap(
+        currentQuality: '480',
+        requestedQuality: '720',
+        playingLocalCopy: false,
+        currentPosition: resumeAt,
+        isPlaying: true,
+      );
+
+      expect(plan, isNotNull);
+      expect(plan!.nextQuality, '720');
+      expect(plan.resumeAt, resumeAt);
+      expect(plan.wasPlaying, isTrue);
+    });
+
+    test('a paused swap keeps the paused state after reattach', () {
+      final plan = PlayerController.planQualitySwap(
+        currentQuality: 'auto',
+        requestedQuality: '1080',
+        playingLocalCopy: false,
+        currentPosition: resumeAt,
+        isPlaying: false,
+      );
+
+      expect(plan?.wasPlaying, isFalse);
+      expect(plan?.resumeAt, resumeAt);
+    });
+
+    test('picking the current quality is a no-op', () {
+      // Tapping the same option in the menu must not tear the controller
+      // down -- that would show the loading spinner for nothing.
+      expect(
+        PlayerController.planQualitySwap(
+          currentQuality: '720',
+          requestedQuality: '720',
+          playingLocalCopy: false,
+          currentPosition: resumeAt,
+          isPlaying: true,
+        ),
+        isNull,
+      );
+    });
+
+    test('a local copy has one rendition, so a swap is a no-op', () {
+      // The offline path has only one MP4 saved against the download.
+      expect(
+        PlayerController.planQualitySwap(
+          currentQuality: '480',
+          requestedQuality: '720',
+          playingLocalCopy: true,
+          currentPosition: resumeAt,
+          isPlaying: true,
+        ),
+        isNull,
+      );
+    });
+  });
 }
