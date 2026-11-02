@@ -682,6 +682,38 @@ export type Database = {
           },
         ]
       }
+      exam_events: {
+        Row: {
+          attempt_id: string
+          id: string
+          kind: string
+          meta: Json | null
+          occurred_at: string
+        }
+        Insert: {
+          attempt_id: string
+          id?: string
+          kind: string
+          meta?: Json | null
+          occurred_at?: string
+        }
+        Update: {
+          attempt_id?: string
+          id?: string
+          kind?: string
+          meta?: Json | null
+          occurred_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_events_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "test_attempts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           assigned_to: string | null
@@ -1114,6 +1146,7 @@ export type Database = {
           hint: string | null
           id: string
           image_url: string | null
+          is_required: boolean
           negative_marks: number
           options: Json | null
           positive_marks: number
@@ -1131,6 +1164,7 @@ export type Database = {
           hint?: string | null
           id?: string
           image_url?: string | null
+          is_required?: boolean
           negative_marks?: number
           options?: Json | null
           positive_marks?: number
@@ -1148,6 +1182,7 @@ export type Database = {
           hint?: string | null
           id?: string
           image_url?: string | null
+          is_required?: boolean
           negative_marks?: number
           options?: Json | null
           positive_marks?: number
@@ -1449,69 +1484,113 @@ export type Database = {
       }
       students: {
         Row: {
+          address_line: string | null
+          admin_notes: string | null
           avatar_url: string | null
           board: string | null
           city: string | null
           class: string | null
           created_at: string | null
+          date_of_birth: string | null
           email: string
           free_trial_expires_at: string | null
           full_name: string
+          gender: string | null
           id: string
           is_active: boolean | null
+          parent_name: string | null
+          parent_phone: string | null
           phone: string | null
+          pincode: string | null
+          profile_completed: boolean
+          profile_completed_at: string | null
           referral_code: string | null
           referred_by: string | null
+          registered_by: string | null
+          registration_source: string
           school_name: string | null
           state: string | null
           status: Database["public"]["Enums"]["student_status"]
+          student_code: string | null
           updated_at: string | null
           user_id: string
           wallet_balance: number
         }
         Insert: {
+          address_line?: string | null
+          admin_notes?: string | null
           avatar_url?: string | null
           board?: string | null
           city?: string | null
           class?: string | null
           created_at?: string | null
+          date_of_birth?: string | null
           email: string
           free_trial_expires_at?: string | null
           full_name: string
+          gender?: string | null
           id?: string
           is_active?: boolean | null
+          parent_name?: string | null
+          parent_phone?: string | null
           phone?: string | null
+          pincode?: string | null
+          profile_completed?: boolean
+          profile_completed_at?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          registered_by?: string | null
+          registration_source?: string
           school_name?: string | null
           state?: string | null
           status?: Database["public"]["Enums"]["student_status"]
+          student_code?: string | null
           updated_at?: string | null
           user_id: string
           wallet_balance?: number
         }
         Update: {
+          address_line?: string | null
+          admin_notes?: string | null
           avatar_url?: string | null
           board?: string | null
           city?: string | null
           class?: string | null
           created_at?: string | null
+          date_of_birth?: string | null
           email?: string
           free_trial_expires_at?: string | null
           full_name?: string
+          gender?: string | null
           id?: string
           is_active?: boolean | null
+          parent_name?: string | null
+          parent_phone?: string | null
           phone?: string | null
+          pincode?: string | null
+          profile_completed?: boolean
+          profile_completed_at?: string | null
           referral_code?: string | null
           referred_by?: string | null
+          registered_by?: string | null
+          registration_source?: string
           school_name?: string | null
           state?: string | null
           status?: Database["public"]["Enums"]["student_status"]
+          student_code?: string | null
           updated_at?: string | null
           user_id?: string
           wallet_balance?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "students_registered_by_fkey"
+            columns: ["registered_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       subjects: {
         Row: {
@@ -1558,38 +1637,53 @@ export type Database = {
         Row: {
           answers: Json
           attempt_number: number
+          expires_at: string | null
           id: string
+          last_activity_at: string | null
           percentage: number | null
           score: number | null
+          started_at: string
+          status: string
           student_id: string
-          submitted_at: string
+          submitted_at: string | null
           test_id: string
           time_taken_seconds: number | null
           total_marks: number | null
+          violation_count: number
         }
         Insert: {
           answers?: Json
           attempt_number?: number
+          expires_at?: string | null
           id?: string
+          last_activity_at?: string | null
           percentage?: number | null
           score?: number | null
+          started_at?: string
+          status?: string
           student_id: string
-          submitted_at?: string
+          submitted_at?: string | null
           test_id: string
           time_taken_seconds?: number | null
           total_marks?: number | null
+          violation_count?: number
         }
         Update: {
           answers?: Json
           attempt_number?: number
+          expires_at?: string | null
           id?: string
+          last_activity_at?: string | null
           percentage?: number | null
           score?: number | null
+          started_at?: string
+          status?: string
           student_id?: string
-          submitted_at?: string
+          submitted_at?: string | null
           test_id?: string
           time_taken_seconds?: number | null
           total_marks?: number | null
+          violation_count?: number
         }
         Relationships: [
           {
@@ -1853,6 +1947,7 @@ export type Database = {
       current_live_class_title: { Args: never; Returns: string }
       current_student_id: { Args: never; Returns: string }
       enroll_free_course: { Args: { p_course_id: string }; Returns: Json }
+      expire_stale_attempts: { Args: never; Returns: number }
       get_admin_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
@@ -1882,6 +1977,7 @@ export type Database = {
           hint: string
           id: string
           image_url: string
+          is_required: boolean
           negative_marks: number
           options: Json
           positive_marks: number
@@ -1900,6 +1996,12 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
+      log_exam_event: {
+        Args: { p_attempt_id: string; p_kind: string; p_meta?: Json }
+        Returns: number
+      }
+      next_student_code: { Args: never; Returns: string }
+      offline_check_in: { Args: { p_device_id?: string }; Returns: Json }
       prune_rate_limit_hits: { Args: never; Returns: undefined }
       record_admin_login_attempt: {
         Args: { p_email: string; p_ip?: string; p_succeeded?: boolean }
@@ -1909,10 +2011,42 @@ export type Database = {
         Args: { p_content_item_id: string }
         Returns: Json
       }
-      submit_test_attempt: {
-        Args: { p_answers: Json; p_started_at?: string; p_test_id: string }
-        Returns: Json
+      save_test_answers: {
+        Args: { p_answers: Json; p_attempt_id: string }
+        Returns: {
+          expires_at: string
+          saved_at: string
+          server_now: string
+        }[]
       }
+      start_test_attempt: {
+        Args: { p_test_id: string }
+        Returns: {
+          answers: Json
+          attempt_id: string
+          attempt_number: number
+          expires_at: string
+          resumed: boolean
+          server_now: string
+          started_at: string
+        }[]
+      }
+      submit_test_attempt:
+        | {
+            Args: { p_attempt_id: string; p_auto?: boolean }
+            Returns: {
+              awaiting_review: boolean
+              passed: boolean
+              percentage: number
+              score: number
+              show_results: boolean
+              total_marks: number
+            }[]
+          }
+        | {
+            Args: { p_answers: Json; p_started_at?: string; p_test_id: string }
+            Returns: Json
+          }
       touch_admin_last_login: { Args: never; Returns: undefined }
     }
     Enums: {

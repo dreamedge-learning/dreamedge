@@ -145,9 +145,25 @@ export function VideoUploadPanel({ item, onItemChange }: VideoUploadPanelProps) 
     return result.data ?? null;
   }, [item.id]);
 
+  // The first read lands in the promise callback rather than in the effect
+  // body. Calling a setState-ing function straight from the body cascades a
+  // second render before the first has painted, which is what
+  // react-hooks/set-state-in-effect objects to -- and it is an error here, so
+  // `npm run lint` exited non-zero on a file this change set introduced.
+  // Subscribing to an external system's answer is exactly the shape the rule
+  // asks for, and it is the shape the effect above already uses.
   useEffect(() => {
-    void loadStatus();
-  }, [loadStatus]);
+    let active = true;
+
+    void refreshVideoStatus(item.id).then((result) => {
+      if (!active || result.error) return;
+      setVideo(result.data ?? null);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [item.id]);
 
   // While Bunny is still working, ask again until it stops being "processing".
   useEffect(() => {
@@ -157,9 +173,12 @@ export function VideoUploadPanel({ item, onItemChange }: VideoUploadPanelProps) 
     return () => clearInterval(timer);
   }, [video?.status, loadStatus]);
 
-  function applyRow(row: unknown) {
-    if (row && typeof row === "object") onItemChange?.(row as ContentItem);
-  }
+  const applyRow = useCallback(
+    (row: unknown) => {
+      if (row && typeof row === "object") onItemChange?.(row as ContentItem);
+    },
+    [onItemChange]
+  );
 
   const startUpload = useCallback(
     async (file: File) => {
@@ -267,7 +286,7 @@ export function VideoUploadPanel({ item, onItemChange }: VideoUploadPanelProps) 
       uploadRef.current = upload;
       upload.start();
     },
-    [item.id, loadStatus]
+    [item.id, loadStatus, applyRow]
   );
 
   function pauseUpload() {

@@ -82,6 +82,27 @@ export async function GET(
     );
   }
 
+  // Keeping a copy is a separate permission from reading one, and it is
+  // refused here rather than reported for the client to honour.
+  //
+  // `?download=1` minted a download-dispositioned URL without consulting the
+  // flag at all, and `?json=1` handed the raw URL over while merely stating
+  // `isDownloadable` in the body. So an admin switching "Available offline in
+  // app" off for a paid PDF changed nothing: a student still entitled to read
+  // it could take a copy, with no content_downloads row recording that the
+  // copy existed, so a refund revoked nothing and support could not see it.
+  //
+  // The video path has always refused this server-side
+  // (video-playback-token/index.ts). Same answer, same status, same words --
+  // there is one rule about who may keep what, and both doors enforce it.
+  const wantsCopy = asAttachment || url.searchParams.get("json") === "1";
+  if (wantsCopy && !entitlement.isDownloadable) {
+    return NextResponse.json(
+      { error: "This lesson is not available offline." },
+      { status: 403 }
+    );
+  }
+
   // Scoped to the item either way, so `?f=` cannot reach a file belonging to
   // another lesson.
   let query = service

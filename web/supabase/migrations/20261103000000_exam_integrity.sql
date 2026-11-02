@@ -88,7 +88,10 @@ create index if not exists test_attempts_student_test_idx
 -- ----------------------------------------------------------------------------
 
 create table if not exists public.exam_events (
-  id          uuid primary key default uuid_generate_v4(),
+  -- gen_random_uuid(), as every other table here uses. uuid_generate_v4 lives
+  -- in the `extensions` schema, which is not on the search_path this migration
+  -- sets, so it raised 42883 and took the whole migration with it.
+  id          uuid primary key default gen_random_uuid(),
   attempt_id  uuid not null references public.test_attempts(id) on delete cascade,
   kind        text not null,
   occurred_at timestamptz not null default now(),

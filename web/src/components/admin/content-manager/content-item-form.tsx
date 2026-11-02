@@ -37,28 +37,65 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
   // has to be state rather than an uncontrolled input.
   const [downloadable, setDownloadable] = useState(item.is_downloadable);
 
+  // These decide what is on screen, and so they also decide what a save is
+  // allowed to write. They come from the live `type` state rather than from
+  // `item.type`: the saved row is one step behind the Select, so changing an
+  // item from PDF to Video used to show no video panel until a save had
+  // round-tripped.
+  const isVideo = type === "video";
+  const isQuiz = type === "quiz";
+  // Everything but a quiz can carry files. A video lesson routinely ships with
+  // the worked examples as a PDF alongside it.
+  const showFiles = !isQuiz;
+  const hasReadingControls = ["pdf", "pyp", "note", "ebook"].includes(type);
+
   function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
 
     const fields: Record<string, unknown> = {
       title: (fd.get("title") as string).trim(),
-      type: fd.get("type") as string,
+      // From the controlled state, not from FormData. These two selects are
+      // controlled, so the state is the value; reading them back out of the
+      // form is a second source of truth that can only ever disagree.
+      type,
+      status,
       description: (fd.get("description") as string) || null,
       is_paid: fd.get("is_paid") === "on",
-      is_downloadable: fd.get("is_downloadable") === "on",
-      is_printable: fd.get("is_printable") === "on",
-      status: fd.get("status") as string,
     };
 
     const playLimit = fd.get("play_limit") as string;
     fields.play_limit = playLimit ? parseInt(playLimit) : null;
 
-    const duration = fd.get("duration_seconds") as string;
-    fields.duration_seconds = duration ? parseInt(duration) * 60 : null;
+    // A control that was never rendered is absent from FormData, and
+    // `null === "on"` is false -- so reading a switch unconditionally does not
+    // read the admin's choice, it overwrites the stored value with false.
+    //
+    // `is_printable` was the visible case: the switch renders only for a
+    // reading type, so every save of a video or a quiz silently wrote
+    // printable = false. Harmless while printing means nothing for a video,
+    // and real data loss the moment a reading type is added or the condition
+    // is widened. `is_downloadable` and `duration_seconds` had the same shape:
+    // saving a quiz cleared the offline flag, and saving a PDF wiped whatever
+    // duration the row carried.
+    //
+    // So each field is written only when the control that owns it was on
+    // screen, driven by the same flags that put it there.
+    if (!isQuiz) {
+      fields.is_downloadable = fd.get("is_downloadable") === "on";
 
-    const licenceDays = fd.get("offline_license_days") as string;
-    if (licenceDays) fields.offline_license_days = parseInt(licenceDays);
+      const licenceDays = fd.get("offline_license_days") as string;
+      if (licenceDays) fields.offline_license_days = parseInt(licenceDays);
+    }
+
+    if (showFiles && hasReadingControls) {
+      fields.is_printable = fd.get("is_printable") === "on";
+    }
+
+    if (isVideo) {
+      const duration = fd.get("duration_seconds") as string;
+      fields.duration_seconds = duration ? parseInt(duration) * 60 : null;
+    }
 
     if (!fields.title) return;
 
@@ -76,13 +113,6 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
       toast.success("Content updated");
     });
   }
-
-  const isVideo = item.type === "video";
-  const isQuiz = item.type === "quiz";
-  // Everything but a quiz can carry files. A video lesson routinely ships with
-  // the worked examples as a PDF alongside it.
-  const showFiles = !isQuiz;
-  const hasReadingControls = ["pdf", "pyp", "note", "ebook"].includes(item.type);
 
   return (
     <form onSubmit={handleSave} className="space-y-5">

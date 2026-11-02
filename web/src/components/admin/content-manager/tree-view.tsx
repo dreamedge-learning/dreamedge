@@ -114,24 +114,35 @@ export function TreeView({ courses }: TreeViewProps) {
     })
   );
 
+  // The effect reads these through their own selectors rather than through
+  // `store`. The `useShallow` object above is a fresh identity whenever any
+  // selected value changes -- `tree` included -- so depending on `store` here
+  // would have `setTree` re-trigger the fetch that called it. The actions are
+  // stable references on the Zustand store, so selecting them individually
+  // gives the effect an honest dependency list instead of a suppressed one.
+  const courseId = useContentTree((s) => s.courseId);
+  const setLoading = useContentTree((s) => s.setLoading);
+  const setTree = useContentTree((s) => s.setTree);
+  const expandAll = useContentTree((s) => s.expandAll);
+
   useEffect(() => {
-    if (!store.courseId) return;
+    if (!courseId) return;
     let cancelled = false;
 
-    store.setLoading(true);
-    fetchCourseTree(store.courseId).then((result) => {
+    setLoading(true);
+    fetchCourseTree(courseId).then((result) => {
       if (cancelled) return;
-      store.setLoading(false);
+      setLoading(false);
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      store.setTree((result.data as unknown as TreeNode[]) || []);
-      store.expandAll();
+      setTree((result.data as unknown as TreeNode[]) || []);
+      expandAll();
     });
 
     return () => { cancelled = true; };
-  }, [store.courseId]);
+  }, [courseId, setLoading, setTree, expandAll]);
 
   function handleCourseChange(id: string | null) {
     store.setCourseId(id === "none" ? null : id);

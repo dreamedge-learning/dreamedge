@@ -1,15 +1,24 @@
+// A build error, not a convention. Importing this from anything that reaches
+// the browser now fails the build by name, which is a far better outcome than
+// the argument below -- that one explains why a leak would be harmless, and
+// relies on every future reader reaching the same conclusion.
+import "server-only";
+
 import { createHash, createHmac } from "node:crypto";
 
 /**
  * Bunny Stream: video hosting, resumable uploads and signed playback.
  *
- * This module is server-only, and not by convention alone. Next inlines an
- * environment variable into a client bundle only when its name starts with
- * NEXT_PUBLIC_, and none of the four below do, so in a browser they would all
- * read as undefined, `isBunnyConfigured()` would report false, and there is no
- * branch here that can produce a signature without them. Nothing is one bad
- * import away from shipping the API key to a student. Do not re-export any of
- * this from a file carrying "use client".
+ * This module is server-only, and the `server-only` import above is what makes
+ * that true: a client component that imports it does not render a leaked key,
+ * it fails to compile.
+ *
+ * The weaker guarantee is still worth knowing, because it is what kept this
+ * safe before: Next inlines an environment variable into a client bundle only
+ * when its name starts with NEXT_PUBLIC_, and none of the four below do, so in
+ * a browser they would all read as undefined, `isBunnyConfigured()` would
+ * report false, and there is no branch here that can produce a signature
+ * without them.
  *
  * Two different secrets are at work and they are not interchangeable:
  *
