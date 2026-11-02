@@ -182,9 +182,16 @@ class PlayerControls extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  '${formatClock(controller.position)} / ${formatClock(controller.duration)}',
-                  style: AppTypography.caption
-                      .copyWith(color: AppColors.white),
+                  '${formatClock(controller.displayPosition)}'
+                  ' / ${formatClock(controller.duration)}',
+                  style: AppTypography.caption.copyWith(
+                    color: AppColors.white,
+                    // The destination, not the position, so a drag reads as a
+                    // drag rather than as a clock that will not stop moving.
+                    fontWeight: controller.scrubTarget == null
+                        ? FontWeight.w400
+                        : FontWeight.w700,
+                  ),
                 ),
                 const Spacer(),
                 _TextButton(
@@ -237,31 +244,26 @@ class PlayerControls extends StatelessWidget {
 /// A slider alone cannot show how much is ready to play, which on a slow line
 /// is the difference between "it is loading" and "it has stopped". The stack
 /// underneath the slider is what draws that.
-class _Scrubber extends StatefulWidget {
+/// The seek bar.
+///
+/// Stateless: the drag target lives on the controller, because the clock
+/// beside this widget has to show it too.
+class _Scrubber extends StatelessWidget {
   final PlayerController controller;
 
   const _Scrubber({required this.controller});
 
   @override
-  State<_Scrubber> createState() => _ScrubberState();
-}
-
-class _ScrubberState extends State<_Scrubber> {
-  double? _dragFraction;
-
-  @override
   Widget build(BuildContext context) {
-    final controller = widget.controller;
     final total = controller.duration.inMilliseconds;
     if (total <= 0) {
       return const SizedBox(height: 28);
     }
 
-    final playedFraction =
-        (controller.position.inMilliseconds / total).clamp(0.0, 1.0);
     final bufferedFraction =
         (controller.buffered.inMilliseconds / total).clamp(0.0, 1.0);
-    final value = _dragFraction ?? playedFraction;
+    final value =
+        (controller.displayPosition.inMilliseconds / total).clamp(0.0, 1.0);
 
     return SizedBox(
       height: 28,
@@ -295,6 +297,17 @@ class _ScrubberState extends State<_Scrubber> {
                   const RoundSliderThumbShape(enabledThumbRadius: 7),
               overlayShape:
                   const RoundSliderOverlayShape(overlayRadius: 16),
+              // A continuous slider draws no value indicator unless it is
+              // asked to, so `Slider.label` alone rendered nothing at all.
+              // `onDrag` rather than the older `always`, which is deprecated
+              // from 3.28 -- the default here has moved more than once, which
+              // is why this is set explicitly rather than relied on.
+              showValueIndicator: ShowValueIndicator.onDrag,
+              valueIndicatorColor: AppColors.orange,
+              valueIndicatorTextStyle: AppTypography.caption.copyWith(
+                color: AppColors.white,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             child: Slider(
               value: value,
@@ -302,16 +315,12 @@ class _ScrubberState extends State<_Scrubber> {
                 Duration(milliseconds: (value * total).round()),
               ),
               divisions: null,
-              onChanged: (next) {
-                setState(() => _dragFraction = next);
-                controller.keepControlsAlive();
-              },
-              onChangeEnd: (next) {
-                setState(() => _dragFraction = null);
-                controller.seekTo(
-                  Duration(milliseconds: (next * total).round()),
-                );
-              },
+              onChanged: (next) => controller.scrubTo(
+                Duration(milliseconds: (next * total).round()),
+              ),
+              onChangeEnd: (next) => controller.endScrub(
+                Duration(milliseconds: (next * total).round()),
+              ),
             ),
           ),
         ],

@@ -55,16 +55,37 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     }
   }
 
+  /// The orientation this screen has already acted on.
+  ///
+  /// Null until the first build, so opening the player with the phone already
+  /// sideways still enters fullscreen.
+  Orientation? _actedOn;
+
   /// Landscape means full screen, which is what a student turning the phone is
-  /// asking for. Turning it back is the way out.
+  /// asking for.
+  ///
+  /// It fires on the *transition* into landscape and nowhere else. It used to
+  /// re-assert `fullscreen == (orientation == landscape)` on every build, which
+  /// meant the exit-fullscreen button could not win: it unlocked orientation,
+  /// the window stayed landscape because the phone was still sideways, and the
+  /// next build turned fullscreen straight back on. The icon flickered and
+  /// nothing changed. With rotation lock on there was no way out of the lesson
+  /// at all short of killing the app.
+  ///
+  /// So an explicit exit stands until the student rotates again, which is the
+  /// behaviour they are asking for either way.
   void _syncOrientation(PlayerController controller, Orientation orientation) {
+    final previous = _actedOn;
+    if (previous == orientation) return;
+    _actedOn = orientation;
+
     final wantsFullscreen = orientation == Orientation.landscape;
     if (controller.fullscreen == wantsFullscreen) return;
 
     // After the frame: this runs during build, and setting the system UI mode
     // rebuilds.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) controller.setFullscreen(wantsFullscreen);
+      if (mounted) controller.setFullscreen(wantsFullscreen, fromRotation: true);
     });
   }
 
@@ -72,12 +93,19 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     context.pushReplacement('/player/$contentId');
   }
 
+  /// Back, from the on-screen button or the system gesture.
+  ///
+  /// Dropping out of fullscreen first is only the right answer when the
+  /// device's orientation is what put us there, because then there is a
+  /// portrait layout to go back to. Fullscreen the student entered by pressing
+  /// the button should not eat their back press: they get the screen they came
+  /// from, which is what pressing back means everywhere else.
   void _leave(PlayerController controller) {
-    if (controller.fullscreen) {
+    if (controller.fullscreen && controller.fullscreenFromRotation) {
       controller.setFullscreen(false);
       return;
     }
-    context.pop();
+    if (context.canPop()) context.pop();
   }
 
   @override
@@ -97,9 +125,17 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     }
 
     if (controller.fullscreen) {
-      return Scaffold(
-        backgroundColor: AppColors.black,
-        body: _buildStage(controller, fill: true),
+      // The system back gesture goes through the same door as the button, so
+      // the two cannot disagree about what back means in fullscreen.
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _leave(controller);
+        },
+        child: Scaffold(
+          backgroundColor: AppColors.black,
+          body: _buildStage(controller, fill: true),
+        ),
       );
     }
 

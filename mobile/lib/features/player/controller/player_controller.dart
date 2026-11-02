@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../../core/logging/app_log.dart';
 import '../../../core/models/content.dart';
 import '../../../core/offline/local_library.dart';
 import '../../../core/providers/content_provider.dart';
@@ -99,6 +100,7 @@ class PlayerController extends ChangeNotifier {
   bool _controlsVisible = true;
   bool _locked = false;
   bool _fullscreen = false;
+  bool _fullscreenFromRotation = false;
   bool _playingLocalCopy = false;
 
   int _resumeFromSeconds = 0;
@@ -151,6 +153,10 @@ class PlayerController extends ChangeNotifier {
   bool get controlsVisible => _controlsVisible;
   bool get locked => _locked;
   bool get fullscreen => _fullscreen;
+
+  /// Whether the device's orientation put us in fullscreen rather than the
+  /// student pressing the button. The back press behaves differently for each.
+  bool get fullscreenFromRotation => _fullscreenFromRotation;
   bool get playingLocalCopy => _playingLocalCopy;
 
   Duration get seekBadge => _pendingSeekBadge;
@@ -217,16 +223,13 @@ class PlayerController extends ChangeNotifier {
       await _loadSavedPosition();
       if (_disposed) return;
 
-      // One play is claimed before anything is fetched. Claiming it after the
-      // video loaded would let a student spend their last replay on a lesson
-      // that then failed to play.
-      final allowed = await _claimPlay();
-      if (_disposed) return;
-      if (!allowed) {
-        _set(() => _phase = PlayerPhase.limitReached);
-        return;
-      }
-
+      // No play is claimed here. It used to be, before the source had even
+      // resolved and before the resume prompt below, so a student who opened
+      // the wrong lesson, read "Resume from 12:34" and pressed back had spent
+      // a replay on four minutes of nothing -- and `retry()` comes back
+      // through here, so a failure that needed retrying spent another. The
+      // claim now happens when the video actually starts playing, once per
+      // controller. See [_ensurePlayClaimed].
       await _resolveSource();
       if (_disposed) return;
 
@@ -248,7 +251,7 @@ class PlayerController extends ChangeNotifier {
       });
     } catch (err) {
       if (_disposed) return;
-      debugPrint('player: load failed: $err');
+      _log('load failed: $err');
       _set(() {
         _phase = PlayerPhase.failed;
         _error = 'Could not load this lesson.';
@@ -264,7 +267,7 @@ class PlayerController extends ChangeNotifier {
       if (_disposed) return;
       _set(() => _siblings = siblings);
     } catch (err) {
-      debugPrint('player: lesson list unavailable: $err');
+      _log('lesson list unavailable: $err');
     }
   }
 
@@ -281,7 +284,7 @@ class PlayerController extends ChangeNotifier {
 
       _resumeFromSeconds = saved.isCompleted ? 0 : saved.lastPositionSeconds;
     } catch (err) {
-      debugPrint('player: saved position unavailable: $err');
+      _log('saved position unavailable: $err');
     }
   }
 
@@ -291,33 +294,76 @@ class PlayerController extends ChangeNotifier {
     return _resumeFromSeconds >= total - 10;
   }
 
-  /// Claims one play against the lesson's replay limit.
+  /// Claims one play against the lesson's replay limit, at most once.
+  ///
+  /// Called when the video actually starts, not when the screen opens. A play
+  /// is what the student watched; opening a lesson, reading the resume prompt
+  /// and backing out is not one, and neither is a retry after a stream broke --
+  /// that is the same play having another go at reaching the student.
   ///
   /// The count lives on `student_progress` server-side, because counting on
   /// the device would hand every replay back on a reinstall.
-  Future<bool> _claimPlay() async {
-    if (_playLimit <= 0) return true;
+  Future<bool> _ensurePlayClaimed() async {
+    if (_playLimit <= 0 || _playClaimed) return true;
 
     try {
       final result = await _ref
           .read(supabaseClientProvider)
           .rpc('register_content_play', params: {
-        'p_content_item_id': contentId,
-      });
+            'p_content_item_id': contentId,
+          });
 
-      if (result is Map) {
-        _playsUsed = (result['plays'] as num?)?.toInt() ?? 0;
-        final limit = (result['limit'] as num?)?.toInt() ?? 0;
-        if (limit > 0) _playLimit = limit;
-        return result['allowed'] == true;
+      if (result is! Map) return true;
+
+      _playsUsed = (result['plays'] as num?)?.toInt() ?? 0;
+      final limit = (result['limit'] as num?)?.toInt() ?? 0;
+      if (limit > 0) _playLimit = limit;
+
+      if (result['allowed'] == true) {
+        _playClaimed = true;
+        return true;
       }
-      return true;
+
+      // `allowed: false` is not always a replay limit. The function answers
+      // the same way when it cannot resolve the caller to a student and when
+      // the item is not published -- and the player used to render all three
+      // as "you have reached the replay limit", sending a student to their
+      // mentor over an expired session. `reason` says which it is.
+      _refusalReason = result['reason'] as String?;
+      return false;
     } catch (err) {
       // A counter that cannot be reached must not lock a paying student out of
-      // a lesson they are entitled to.
-      debugPrint('player: play count unavailable: $err');
+      // a lesson they are entitled to. This is also the offline case: the
+      // limit is enforced server-side and a downloaded lesson has no server to
+      // ask.
+      _log('play count unavailable: $err');
       return true;
     }
+  }
+
+  /// Why the server refused the play, when it did. Null for a genuine limit.
+  String? _refusalReason;
+
+  bool _playClaimed = false;
+
+  /// Shows the right screen for a refused play.
+  void _onPlayRefused() {
+    final reason = _refusalReason;
+
+    // A limit the student has genuinely spent gets the replay-limit screen. A
+    // session or catalogue problem is a failure, and says so, because "contact
+    // your mentor" is useless advice for a sign-in that has lapsed.
+    if (reason == null || reason == 'limit_reached') {
+      _set(() => _phase = PlayerPhase.limitReached);
+      return;
+    }
+
+    _set(() {
+      _phase = PlayerPhase.failed;
+      _error = reason == 'no_student'
+          ? 'Please sign in again to play this lesson.'
+          : 'This lesson is not available right now.';
+    });
   }
 
   /// Decides whether this lesson plays from the device or from the network.
@@ -372,7 +418,7 @@ class PlayerController extends ChangeNotifier {
     try {
       await controller.initialize();
     } catch (err) {
-      debugPrint('player: initialise failed: $err');
+      _log('initialise failed: $err');
       await controller.dispose();
       _onPlaybackBroken();
       return;
@@ -447,6 +493,14 @@ class PlayerController extends ChangeNotifier {
     final controller = _video;
     if (controller == null) return;
 
+    // The play is claimed here, where the student is actually about to watch
+    // something, and only the first time for this controller.
+    if (!await _ensurePlayClaimed()) {
+      _onPlayRefused();
+      return;
+    }
+    if (_disposed) return;
+
     _cancelAutoNext();
     await controller.play();
     await WakelockPlus.enable();
@@ -481,6 +535,31 @@ class PlayerController extends ChangeNotifier {
     await controller.seekTo(clamped);
     _showControls();
     notifyListeners();
+  }
+
+  /// Where the student is dragging the scrubber to, while they are dragging.
+  ///
+  /// It lives here rather than inside the scrubber's own state because the
+  /// clock under the scrubber has to show it. It used to be private to the
+  /// slider, so the only number on screen during a drag was the live playback
+  /// position -- which keeps advancing from where the video still is. On a
+  /// 50-minute lesson that means dragging blind.
+  Duration? get scrubTarget => _scrubTarget;
+  Duration? _scrubTarget;
+
+  /// The time to put on screen: the drag destination if there is one,
+  /// otherwise where the video actually is.
+  Duration get displayPosition => _scrubTarget ?? position;
+
+  void scrubTo(Duration target) {
+    _scrubTarget = target;
+    _showControls(sticky: true);
+    notifyListeners();
+  }
+
+  Future<void> endScrub(Duration target) async {
+    _scrubTarget = null;
+    await seekTo(target);
   }
 
   /// A relative seek, with the badge that accumulates while taps keep coming.
@@ -536,9 +615,17 @@ class PlayerController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setFullscreen(bool value) async {
+  /// Enters or leaves fullscreen.
+  ///
+  /// [fromRotation] records whether the device's orientation put us here or
+  /// the student pressed the button, because back means different things in
+  /// the two cases: a rotation-driven fullscreen has a portrait layout to drop
+  /// back to, while one the student asked for explicitly should give them the
+  /// screen they came from.
+  Future<void> setFullscreen(bool value, {bool fromRotation = false}) async {
     if (_fullscreen == value) return;
     _fullscreen = value;
+    _fullscreenFromRotation = value && fromRotation;
 
     if (value) {
       await SystemChrome.setPreferredOrientations([
@@ -657,6 +744,12 @@ class PlayerController extends ChangeNotifier {
   /// it gives up. If the lesson has been downloaded, it switches to that copy
   /// instead of making the student watch a spinner -- they already have the
   /// file.
+  ///
+  /// It also re-mints the token, which it used to not do. Streaming URLs last
+  /// six hours, so a student who started a lesson in the morning and came back
+  /// to it in the evening had a controller holding dead URLs: every segment
+  /// 403'd, all three retries re-attached against the identical dead URL, and
+  /// the student was told to check a connection that was fine.
   void _onPlaybackBroken() {
     if (_disposed) return;
 
@@ -667,17 +760,7 @@ class PlayerController extends ChangeNotifier {
       _retryAttempt++;
 
       _retryTimer?.cancel();
-      _retryTimer = Timer(delay, () async {
-        if (_disposed) return;
-        final local = await _ref.read(localLibraryProvider).find(contentId);
-        if (local != null && !_playingLocalCopy) {
-          _playingLocalCopy = true;
-          _localPath = local.path;
-          _quality = local.quality ?? kAutoQuality;
-          _payload = null;
-        }
-        await _attach(resumeAt, autoPlay: true);
-      });
+      _retryTimer = Timer(delay, () => unawaited(_recover(resumeAt)));
 
       _set(() => _phase = PlayerPhase.loading);
       return;
@@ -685,13 +768,86 @@ class PlayerController extends ChangeNotifier {
 
     _set(() {
       _phase = PlayerPhase.failed;
-      _error = 'Playback stopped. Check your connection and try again.';
+      _error = _authFailure ?? 'Playback stopped. Check your connection and try again.';
     });
   }
 
+  /// Set when the last recovery attempt failed for a reason the network cannot
+  /// explain, so the final message says that instead of blaming the signal.
+  String? _authFailure;
+
+  /// One recovery attempt: the downloaded copy if there is one, otherwise a
+  /// fresh token and a fresh player.
+  Future<void> _recover(Duration resumeAt) async {
+    if (_disposed) return;
+
+    // The file beats anything over the air. It is already paid for and already
+    // here, so there is no token to expire and no signal to wait for.
+    final local = await _ref.read(localLibraryProvider).find(contentId);
+    if (_disposed) return;
+
+    if (local != null && !_playingLocalCopy) {
+      _playingLocalCopy = true;
+      _localPath = local.path;
+      _quality = local.quality ?? kAutoQuality;
+      _payload = null;
+      await _attach(resumeAt, autoPlay: true);
+      return;
+    }
+
+    if (!_playingLocalCopy && _shouldRefreshToken()) {
+      final service = _ref.read(playbackServiceProvider);
+      service.forget(contentId);
+
+      try {
+        _payload = await service.getStreaming(contentId);
+        _authFailure = null;
+      } on PlaybackException catch (failure) {
+        if (_disposed) return;
+
+        // A refused token is not a dropped connection, and must not be
+        // reported as one. Signing in again or enrolling is something the
+        // student can act on; "check your connection" is not.
+        if (failure.failure == PlaybackFailure.notSignedIn ||
+            failure.failure == PlaybackFailure.notEntitled) {
+          _authFailure = failure.message;
+          _retryAttempt = _retryDelays.length;
+          _set(() {
+            _phase = PlayerPhase.failed;
+            _error = failure.message;
+          });
+          return;
+        }
+
+        _authFailure = failure.message;
+      }
+    }
+
+    if (_disposed) return;
+    await _attach(resumeAt, autoPlay: true);
+  }
+
+  /// Whether the token is worth re-minting before the next attempt.
+  ///
+  /// Always on the last attempt, and sooner when the payload has run out of
+  /// usable life -- which is the case the six-hour TTL actually produces.
+  /// Re-minting on every attempt would turn a two-second signal drop into
+  /// three Edge Function calls.
+  bool _shouldRefreshToken() {
+    final payload = _payload;
+    if (payload == null) return true;
+    if (!payload.isUsable) return true;
+    return _retryAttempt >= _retryDelays.length;
+  }
+
   /// Retries from the start of the chain: a fresh token, then a fresh player.
+  ///
+  /// This comes back through [load], which no longer claims a play -- so the
+  /// student pressing Retry after a failure is not charged a second replay for
+  /// the lesson they have not managed to watch yet.
   Future<void> retry() async {
     _retryAttempt = 0;
+    _authFailure = null;
     _ref.read(playbackServiceProvider).forget(contentId);
     await load();
   }
@@ -738,6 +894,8 @@ class PlayerController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
+
+  void _log(String message) => logDebug('player', message);
 
   void _set(VoidCallback change) {
     if (_disposed) return;
