@@ -125,7 +125,11 @@ comment on table public.exam_events is
 -- the display order changes, the identity of an option does not.
 -- ----------------------------------------------------------------------------
 
-create or replace function public.get_test_questions(p_test_id uuid)
+-- CREATE OR REPLACE cannot widen an existing function's RETURNS TABLE, and this
+-- version adds is_required to it, so the old signature has to go first.
+drop function if exists public.get_test_questions(uuid);
+
+create function public.get_test_questions(p_test_id uuid)
 returns table(
   id             uuid,
   type           question_type,
