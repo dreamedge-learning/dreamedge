@@ -98,6 +98,21 @@ class DocumentService {
       if (body != null && body['url'] is String) {
         final rawValidUntil = body['validUntil'] as String?;
         final rawServerNow = body['serverNow'] as String?;
+        final serverNow = rawServerNow == null
+            ? null
+            : DateTime.tryParse(rawServerNow);
+
+        // A missing or unparseable server clock has to fail here. The earlier
+        // shape fell back to DateTime.now(), which turned the whole
+        // clock-tampering defence into a device-side setting whenever a stale
+        // deployment forgot the field. Fail the open rather than anchor a
+        // licence against the handset's clock.
+        if (serverNow == null) {
+          throw const DocumentException(
+            DocumentFailure.unavailable,
+            'This file is temporarily unavailable.',
+          );
+        }
 
         return DocumentSource(
           url: body['url'] as String,
@@ -108,15 +123,7 @@ class DocumentService {
           validUntil: rawValidUntil == null
               ? null
               : DateTime.tryParse(rawValidUntil)?.toUtc(),
-          // An answer from a deployment that predates this field falls back to
-          // the device clock. A weaker anchor than the server's, but refusing
-          // to open a booklet over it would be the worse failure.
-          serverNow:
-              (rawServerNow == null
-                      ? null
-                      : DateTime.tryParse(rawServerNow))
-                  ?.toUtc() ??
-              DateTime.now().toUtc(),
+          serverNow: serverNow.toUtc(),
         );
       }
       throw const DocumentException(

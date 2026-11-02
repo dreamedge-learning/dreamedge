@@ -716,22 +716,6 @@ class OfflineStore {
     await batch.commit(noResult: true);
   }
 
-  /// Remembers the furthest forward this device's clock has ever read, so a
-  /// rollback is still detectable after the app has been restarted.
-  Future<void> raiseClockHighWater(DateTime deviceNow) async {
-    final existing = int.tryParse(
-      await _state(_clockHighWaterKey, _deviceOwner) ?? '',
-    );
-    if (existing != null && existing >= deviceNow.millisecondsSinceEpoch) {
-      return;
-    }
-    await _putState(
-      _clockHighWaterKey,
-      '${deviceNow.millisecondsSinceEpoch}',
-      _deviceOwner,
-    );
-  }
-
   Future<String?> _state(String key, String owner) async {
     final db = await _db;
     final rows = await db.query(

@@ -392,6 +392,18 @@ class PlaybackPayload {
         ? null
         : DateTime.tryParse(rawServerNow);
 
+    // A missing or unparseable server clock has to fail here, not be
+    // substituted with the handset's own. A stale deployment that omitted
+    // the field would otherwise anchor every licence against DateTime.now(),
+    // which turns the whole clock-tampering defence into a setting in the
+    // student's hands. Refuse the payload instead; the player's retry path
+    // is a better outcome than a licence anchored on a lying clock.
+    if (serverNow == null) {
+      throw const FormatException(
+        'Playback token missing serverNow. Retry so the server can anchor it.',
+      );
+    }
+
     return PlaybackPayload(
       provider: json['provider'] as String? ?? 'none',
       hls: json['hls'] as String?,
@@ -409,11 +421,7 @@ class PlaybackPayload {
       expiresAt: expires != null
           ? DateTime.tryParse(expires) ?? DateTime.now()
           : DateTime.now(),
-      // An answer that carried no server clock falls back to the device's.
-      // That is a weaker anchor, but refusing to play a lesson because the
-      // function has not been redeployed yet would be worse, and the expiry
-      // above still caps how long such a payload is usable.
-      serverNow: (serverNow ?? DateTime.now()).toUtc(),
+      serverNow: serverNow.toUtc(),
     );
   }
 }
