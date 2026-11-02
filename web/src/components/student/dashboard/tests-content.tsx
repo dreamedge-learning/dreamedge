@@ -461,8 +461,8 @@ function UpcomingCard({ test }: { test: UpcomingTestRow }) {
           disabled={!canAttempt || !hasStarted}
           className="shrink-0 bg-brand-orange text-white hover:bg-brand-orange-dark"
           render={
-            canAttempt && hasStarted && test.course?.slug ? (
-              <Link href={`/courses/${test.course.slug}/learn?test=${test.id}`} />
+            canAttempt && hasStarted ? (
+              <Link href={`/dashboard/tests/${test.id}/take`} />
             ) : undefined
           }
         >

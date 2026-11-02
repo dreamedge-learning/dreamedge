@@ -20,6 +20,7 @@ import '../features/player/video_player_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile_setup/profile_setup_screen.dart';
 import '../features/reader/pdf_reader_screen.dart';
+import '../features/tests/test_run_screen.dart';
 import '../features/shell/app_shell.dart';
 import '../features/splash/splash_screen.dart';
 
@@ -160,6 +161,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/reader/:contentId',
         builder: (context, state) => PdfReaderScreen(
           contentId: state.pathParameters['contentId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/tests/:id/run',
+        builder: (context, state) => TestRunScreen(
+          testId: state.pathParameters['id']!,
         ),
       ),
       GoRoute(
