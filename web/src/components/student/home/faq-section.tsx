@@ -3,9 +3,13 @@
 import { useState } from "react";
 import { ChevronDown, HelpCircle } from "lucide-react";
 import Link from "next/link";
-import { SUPPORT_EMAIL } from "@/lib/site";
 
-const FAQS = [
+/**
+ * Built per render from the live support address, so the FAQ never tells a
+ * parent to write to an inbox the panel has since replaced.
+ */
+function faqs(supportEmail: string) {
+  return [
   {
     q: "Which classes does Dream Edge cover?",
     a: "Classes 6, 7, 8, 9, and 10 — CBSE and State Board — across Maths, Science, Social Science, and English. We start with Maths and roll out other subjects course by course.",
@@ -36,11 +40,14 @@ const FAQS = [
   },
   {
     q: "I have more questions.",
-    a: `Email ${SUPPORT_EMAIL} or use the contact form. We respond within one working day.`,
+    a: `Email ${supportEmail} or use the contact form. We respond within one working day.`,
   },
-];
+  ];
+}
 
-export function FaqSection() {
+export function FaqSection({ supportEmail }: { supportEmail: string }) {
+  const FAQS = faqs(supportEmail);
+
   const [open, setOpen] = useState<number | null>(0);
   return (
     <section className="bg-muted/30 py-16 sm:py-20 lg:py-24 dark:bg-white/[0.02]">

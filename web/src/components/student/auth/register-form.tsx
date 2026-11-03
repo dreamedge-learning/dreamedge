@@ -27,7 +27,13 @@ const CLASS_OPTIONS = [
   "Class 10",
 ];
 
-export function RegisterForm() {
+export function RegisterForm({
+  /** Hides the referral field when the system is switched off, so nobody
+      types a code that the server action is going to discard. */
+  referralEnabled,
+}: {
+  referralEnabled: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [password, setPassword] = useState("");
@@ -212,17 +218,19 @@ export function RegisterForm() {
                     />
                   </div>
 
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="referral_code">
-                      Referral Code (optional)
-                    </Label>
-                    <Input
-                      id="referral_code"
-                      name="referral_code"
-                      placeholder="Have a referral code?"
-                      disabled={pending}
-                    />
-                  </div>
+                  {referralEnabled && (
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="referral_code">
+                        Referral Code (optional)
+                      </Label>
+                      <Input
+                        id="referral_code"
+                        name="referral_code"
+                        placeholder="Have a referral code?"
+                        disabled={pending}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <Button

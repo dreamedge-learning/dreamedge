@@ -5,10 +5,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getAdminSession, hasPermission } from "@/lib/admin";
 import { absoluteUrl } from "@/lib/site";
 import { SettingsPageClient } from "./client";
+import { getSiteSettings } from "@/lib/settings";
 import {
   getAdminApplications,
   getAdminGateStatus,
 } from "./applications-actions";
+import { getLegalDocuments } from "./legal-actions";
 import {
   getAdminTeam,
   getRoles,
@@ -27,7 +29,7 @@ interface PageProps {
   searchParams: Promise<{ tab?: string }>;
 }
 
-const TABS = ["team", "applications", "roles", "audit", "platform"];
+const TABS = ["team", "applications", "roles", "audit", "platform", "legal"];
 
 export default async function SettingsPage({ searchParams }: PageProps) {
   // Read here rather than in a client hook so the tab is right on first paint:
@@ -71,6 +73,8 @@ async function SettingsContent({ initialTab }: { initialTab: string }) {
     adminUsersResult,
     applicationsResult,
     gateResult,
+    legalResult,
+    liveSettings,
   ] = await Promise.all([
     getAdminTeam({ page: 1, pageSize: 10 }),
     getRoles(),
@@ -79,6 +83,8 @@ async function SettingsContent({ initialTab }: { initialTab: string }) {
     getAdminUsersLite(),
     isSuperAdmin ? getAdminApplications("pending") : null,
     isSuperAdmin ? getAdminGateStatus() : null,
+    isSuperAdmin ? getLegalDocuments() : null,
+    getSiteSettings(),
   ]);
 
   const applications = applicationsResult?.data ?? null;
@@ -98,6 +104,10 @@ async function SettingsContent({ initialTab }: { initialTab: string }) {
         applications?.filter((row) => row.status === "pending").length ?? 0
       }
       applyUrl={absoluteUrl("/admin/apply")}
+      legalDocuments={legalResult?.data ?? null}
+      supportEmail={liveSettings.support_email}
+      supportPhone={liveSettings.support_phone}
+      platformName={liveSettings.platform_name}
       initialTab={initialTab}
     />
   );

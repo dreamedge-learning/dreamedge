@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { RegistrationSheet } from "@/components/admin/students/registration-sheet";
 import { getAdminSession } from "@/lib/admin";
+import { getSiteSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: "Printable registration form",
@@ -20,5 +21,7 @@ export default async function RegistrationFormPage() {
     admin.role_name === "super_admin" || admin.role_name === "support_staff";
   if (!canRegister) redirect("/admin/students");
 
-  return <RegistrationSheet />;
+  const settings = await getSiteSettings();
+
+  return <RegistrationSheet supportPhone={settings.support_phone} />;
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { assertAdmin } from "@/lib/auth-guard";
+import { getSiteSettings } from "@/lib/settings";
 import { sanitizeSearch } from "@/lib/search";
 import { rangeEnd, rangeStart } from "@/lib/date-range";
 import { describeFailure, firstIssue, uuid } from "@/lib/validations/form";
@@ -371,6 +372,19 @@ export async function recordManualPayment(formData: FormData) {
   try {
     const { adminUser } = await assertAdmin(["super_admin", "accountant"]);
     const supabase = await createClient();
+
+    // `manual_payment_enabled` is a private setting, which is fine here: the
+    // caller is an admin, and an admin may read every row. A student-side
+    // caller would silently get the default instead, so this check belongs on
+    // this side of the panel and nowhere else.
+    const settings = await getSiteSettings();
+    if (!settings.manual_payment_enabled) {
+      return {
+        error:
+          "Manual payments are switched off in Settings. Turn them back on to "
+          + "record a cash or UPI enrolment.",
+      };
+    }
 
     const parsed = manualPaymentSchema.safeParse(manualPaymentInput(formData));
     if (!parsed.success) {

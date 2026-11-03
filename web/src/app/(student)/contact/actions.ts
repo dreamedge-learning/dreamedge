@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/service";
-import { SUPPORT_EMAIL } from "@/lib/site";
+import { getSiteSettings } from "@/lib/settings";
 import { RATE_LIMITS, describeRetryAfter, rateLimit } from "@/lib/rate-limit";
 
 const contactSchema = z.object({
@@ -46,6 +46,11 @@ export async function submitContact(formData: FormData): Promise<ContactResult> 
     return { ok: false, error: "Please fix the highlighted fields.", fieldErrors };
   }
 
+  // Read once, here: the address goes into three different failure messages,
+  // and telling a stuck visitor to write to an inbox nobody reads any more is
+  // the exact failure a hardcoded constant produces.
+  const { support_email: supportEmail } = await getSiteSettings();
+
   const limit = await rateLimit({
     bucket: "contact",
     key: parsed.data.email.toLowerCase(),
@@ -54,7 +59,7 @@ export async function submitContact(formData: FormData): Promise<ContactResult> 
   if (!limit.allowed) {
     return {
       ok: false,
-      error: `You have sent several messages already. Please try again ${describeRetryAfter(limit.retryAfter)}, or email ${SUPPORT_EMAIL} directly.`,
+      error: `You have sent several messages already. Please try again ${describeRetryAfter(limit.retryAfter)}, or email ${supportEmail} directly.`,
     };
   }
 
@@ -74,7 +79,7 @@ export async function submitContact(formData: FormData): Promise<ContactResult> 
       return {
         ok: false,
         error:
-          `We couldn't record your message. Please try again, or email ${SUPPORT_EMAIL}.`,
+          `We couldn't record your message. Please try again, or email ${supportEmail}.`,
       };
     }
     return { ok: true };
@@ -83,7 +88,7 @@ export async function submitContact(formData: FormData): Promise<ContactResult> 
     return {
       ok: false,
       error:
-        `Something went wrong on our end. Please try again, or email ${SUPPORT_EMAIL}.`,
+        `Something went wrong on our end. Please try again, or email ${supportEmail}.`,
     };
   }
 }

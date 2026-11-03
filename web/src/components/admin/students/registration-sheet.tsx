@@ -7,7 +7,6 @@ import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SUPPORT_PHONE } from "@/lib/site";
 
 /**
  * The sheet handed across the counter at Kalmeshwar.
@@ -89,7 +88,14 @@ const PRINT_CSS = `
 }
 `;
 
-export function RegistrationSheet() {
+export function RegistrationSheet({
+  /** The centre's number, as the panel currently has it. This sheet is
+      printed and handed over, so a stale number here is a parent who cannot
+      reach anyone. */
+  supportPhone,
+}: {
+  supportPhone: string;
+}) {
   const [copies, setCopies] = useState(5);
 
   const count = Math.min(Math.max(copies || 1, 1), 50);
@@ -147,7 +153,7 @@ export function RegistrationSheet() {
 
       <div className="de-sheet-stack space-y-8">
         {Array.from({ length: count }, (_, index) => (
-          <Sheet key={index} preview={index === 0} />
+          <Sheet key={index} preview={index === 0} supportPhone={supportPhone} />
         ))}
       </div>
     </div>
@@ -155,7 +161,13 @@ export function RegistrationSheet() {
 }
 
 /** The first copy is the on-screen preview; the rest only ever print. */
-function Sheet({ preview }: { preview: boolean }) {
+function Sheet({
+  preview,
+  supportPhone,
+}: {
+  preview: boolean;
+  supportPhone: string;
+}) {
   return (
     <div
       className={
@@ -179,7 +191,7 @@ function Sheet({ preview }: { preview: boolean }) {
           {CENTRE_ADDRESS.map((line) => (
             <p key={line}>{line}</p>
           ))}
-          <p>{SUPPORT_PHONE}</p>
+          <p>{supportPhone}</p>
         </div>
       </div>
 

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Mail, Phone, MapPin, Clock } from "lucide-react";
 import { ContactForm } from "@/components/student/contact-form";
-import { SUPPORT_EMAIL, SUPPORT_HOURS, SUPPORT_PHONE, SUPPORT_PHONE_HREF } from "@/lib/site";
+import { SUPPORT_HOURS } from "@/lib/site";
+import { getSiteSettings, telHref } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: "Contact Dream Edge",
@@ -9,19 +10,27 @@ export const metadata: Metadata = {
     "Get in touch with the Dream Edge team. Reach us by email, phone, or drop a message — we respond within one working day.",
 };
 
-const CHANNELS = [
+/**
+ * Built per request from the settings, not from a module constant.
+ *
+ * The support email and phone are editable in the admin panel. While this page
+ * read the constants, changing them there changed nothing a student could see
+ * -- which is the whole reason this page is wired up now.
+ */
+function channels(supportEmail: string, supportPhone: string) {
+  return [
   {
     icon: Mail,
     label: "Email us",
-    value: SUPPORT_EMAIL,
-    href: `mailto:${SUPPORT_EMAIL}`,
+    value: supportEmail,
+    href: `mailto:${supportEmail}`,
     note: "Fastest route for course or payment questions.",
   },
   {
     icon: Phone,
     label: "Call us",
-    value: SUPPORT_PHONE,
-    href: SUPPORT_PHONE_HREF,
+    value: supportPhone,
+    href: telHref(supportPhone),
     note: `${SUPPORT_HOURS}.`,
   },
   {
@@ -38,9 +47,13 @@ const CHANNELS = [
     href: null,
     note: "Weekends and holidays may take longer.",
   },
-];
+  ];
+}
 
-export default function ContactPage() {
+export default async function ContactPage() {
+  const settings = await getSiteSettings();
+  const CHANNELS = channels(settings.support_email, settings.support_phone);
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
       <header className="text-center">

@@ -267,13 +267,26 @@ function FeatureTogglesSection({
 }) {
   const [isPending, startTransition] = useTransition();
 
-  const toggles: { key: string; label: string; warning?: string }[] = [
-    { key: "maintenance_mode", label: "Maintenance Mode", warning: "Site will show maintenance page to students" },
+  // `inert` marks a switch with nothing behind it yet. It is labelled rather
+  // than hidden, because the row already exists and the feature is planned --
+  // but an unlabelled switch that does nothing is worse than no switch, which
+  // is what every one of these was until the settings were wired up.
+  const toggles: {
+    key: string;
+    label: string;
+    warning?: string;
+    inert?: string;
+  }[] = [
+    { key: "maintenance_mode", label: "Maintenance Mode", warning: "Students will see the maintenance page" },
     { key: "student_registration_open", label: "Student Registration Open" },
     { key: "razorpay_enabled", label: "Razorpay Payments Enabled" },
     { key: "manual_payment_enabled", label: "Manual Payments Enabled" },
     { key: "referral_system_enabled", label: "Referral System Enabled" },
-    { key: "watermark_enabled", label: "Video Watermark Enabled" },
+    {
+      key: "watermark_enabled",
+      label: "Video Watermark Enabled",
+      inert: "No watermark is built yet — this has no effect",
+    },
   ];
 
   function handleSave() {
@@ -302,10 +315,15 @@ function FeatureTogglesSection({
             <div key={t.key} className="flex items-center justify-between gap-4 py-1">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-sm">{t.label}</span>
-                {t.warning && checked && (
+                {t.warning && checked && !t.inert && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700 shrink-0">
                     <AlertTriangle className="mr-0.5 h-3 w-3" />
                     {t.warning}
+                  </Badge>
+                )}
+                {t.inert && (
+                  <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] text-muted-foreground">
+                    {t.inert}
                   </Badge>
                 )}
               </div>
@@ -358,7 +376,14 @@ function LimitsSection({
 
   return (
     <Card className="p-5 space-y-4">
-      <h3 className="font-semibold text-base">Limits</h3>
+      <div>
+        <h3 className="text-base font-semibold">Limits</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Saved, but not enforced anywhere yet — there is no free trial, no
+          device limit and no player default reading these. They are here for
+          when those land.
+        </p>
+      </div>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-2">
           <Label htmlFor="s-trial">Free Trial Days</Label>

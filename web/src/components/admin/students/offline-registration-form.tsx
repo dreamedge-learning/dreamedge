@@ -20,7 +20,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { INDIAN_STATES } from "@/lib/constants/indian-states";
 import { formatINR } from "@/lib/format";
-import { SUPPORT_PHONE } from "@/lib/site";
 import {
   GENDER_OPTIONS,
   STUDENT_BOARDS,
@@ -53,6 +52,8 @@ interface Props {
   courses: Course[];
   canRecordPayment: boolean;
   adminName: string;
+  /** Printed on the tear-off receipt, so it has to be the live number. */
+  supportPhone: string;
 }
 
 const SELECT_CLASS =
@@ -68,6 +69,7 @@ export function OfflineRegistrationForm({
   courses,
   canRecordPayment,
   adminName,
+  supportPhone,
 }: Props) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -150,6 +152,7 @@ export function OfflineRegistrationForm({
       <RegistrationComplete
         result={result}
         adminName={adminName}
+        supportPhone={supportPhone}
         onRegisterAnother={registerAnother}
         onOpenStudent={() => router.push("/admin/students")}
       />
@@ -594,11 +597,13 @@ const RECEIPT_PRINT_CSS = `
 function RegistrationComplete({
   result,
   adminName,
+  supportPhone,
   onRegisterAnother,
   onOpenStudent,
 }: {
   result: OfflineRegistrationResult;
   adminName: string;
+  supportPhone: string;
   onRegisterAnother: () => void;
   onOpenStudent: () => void;
 }) {
@@ -740,7 +745,11 @@ function RegistrationComplete({
       </div>
 
       <style>{RECEIPT_PRINT_CSS}</style>
-      <PrintableReceipt result={result} adminName={adminName} />
+      <PrintableReceipt
+        result={result}
+        adminName={adminName}
+        supportPhone={supportPhone}
+      />
     </div>
   );
 }
@@ -762,9 +771,11 @@ function RegistrationComplete({
 function PrintableReceipt({
   result,
   adminName,
+  supportPhone,
 }: {
   result: OfflineRegistrationResult;
   adminName: string;
+  supportPhone: string;
 }) {
   const today = new Date().toLocaleDateString("en-IN", {
     day: "2-digit",
@@ -783,7 +794,7 @@ function PrintableReceipt({
             DREAM EDGE
           </p>
           <p className="text-[10px] leading-tight text-white/75">
-            Dream IIT Institute · Kalmeshwar · {SUPPORT_PHONE}
+            Dream IIT Institute · Kalmeshwar · {supportPhone}
           </p>
         </div>
       </div>

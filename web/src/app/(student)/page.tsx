@@ -6,6 +6,7 @@ import { MentorStrip } from "@/components/student/home/mentor-strip";
 import { FeaturesSection } from "@/components/student/home/features-section";
 import { TestimonialsSection } from "@/components/student/home/testimonials-section";
 import { FaqSection } from "@/components/student/home/faq-section";
+import { getSiteSettings } from "@/lib/settings";
 import { CtaSection } from "@/components/student/home/cta-section";
 
 
@@ -68,10 +69,11 @@ async function fetchTestimonials() {
 }
 
 export default async function HomePage() {
-  const [courses, testimonials, liveClassTitle] = await Promise.all([
+  const [courses, testimonials, liveClassTitle, settings] = await Promise.all([
     fetchCourses(),
     fetchTestimonials(),
     fetchLiveClassTitle(),
+    getSiteSettings(),
   ]);
 
   return (
@@ -82,7 +84,7 @@ export default async function HomePage() {
       <MentorStrip />
       <FeaturesSection />
       <TestimonialsSection testimonials={testimonials} />
-      <FaqSection />
+      <FaqSection supportEmail={settings.support_email} />
       <CtaSection />
     </>
   );

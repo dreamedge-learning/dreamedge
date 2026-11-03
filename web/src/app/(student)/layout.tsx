@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 export const dynamic = "force-dynamic";
 import { StudentShell } from "@/components/student/student-shell";
-import { createClient } from "@/lib/supabase/server";
+import { MaintenanceNotice } from "@/components/student/maintenance-notice";
+import { getAdminSession } from "@/lib/admin";
+import { getSiteSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: {
@@ -10,55 +12,32 @@ export const metadata: Metadata = {
   },
 };
 
-type SocialLinks = {
-  youtube?: string;
-  instagram?: string;
-  telegram?: string;
-};
-
-/**
- * Social handles live in a single `social_links` jsonb row, not one row per
- * network. Empty strings are treated as unset so the footer can fall back
- * rather than render a dead link.
- */
-async function getSocialLinks(): Promise<SocialLinks | undefined> {
-  try {
-    const supabase = await createClient();
-    const { data } = await supabase
-      .from("site_settings")
-      .select("value")
-      .eq("key", "social_links")
-      .maybeSingle();
-
-    const links = data?.value as Record<string, unknown> | null | undefined;
-    if (!links || typeof links !== "object") return undefined;
-
-    const pick = (name: string): string | undefined => {
-      const raw = links[name];
-      if (typeof raw !== "string") return undefined;
-      const trimmed = raw.trim();
-      return trimmed.length > 0 ? trimmed : undefined;
-    };
-
-    const resolved: SocialLinks = {
-      youtube: pick("youtube"),
-      instagram: pick("instagram"),
-      telegram: pick("telegram"),
-    };
-
-    const hasAny = Object.values(resolved).some(Boolean);
-    return hasAny ? resolved : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export default async function StudentLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const socialLinks = await getSocialLinks();
+  const settings = await getSiteSettings();
 
-  return <StudentShell socialLinks={socialLinks}>{children}</StudentShell>;
+  // Maintenance closes the student site, not the panel: /admin sits outside
+  // this layout, so the team can still work while students see the notice.
+  // An admin browsing the student side is let through, because the person who
+  // turned maintenance on is usually the person who needs to check the fix.
+  if (settings.maintenance_mode) {
+    const admin = await getAdminSession();
+
+    if (!admin) {
+      return (
+        <MaintenanceNotice
+          platformName={settings.platform_name}
+          supportEmail={settings.support_email}
+          supportPhone={settings.support_phone}
+        />
+      );
+    }
+  }
+
+  return (
+    <StudentShell socialLinks={settings.social_links}>{children}</StudentShell>
+  );
 }

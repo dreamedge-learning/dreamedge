@@ -16,11 +16,18 @@ import {
   findStudentByEmail,
   findStudentByUserId,
 } from "@/lib/students/create-student";
+import { getSiteSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 interface ResolvedStudent {
   profileCompleted: boolean;
+  /**
+   * Set when registration is closed and this sign-in would have created a
+   * brand-new student. An existing student is never blocked: closing sign-ups
+   * must not lock out the people who already paid.
+   */
+  registrationClosed?: boolean;
 }
 
 /**
@@ -65,6 +72,15 @@ async function resolveStudent(user: {
         return { profileCompleted: byEmail.profile_completed };
       }
     }
+  }
+
+  // Both lookups failed, so this is a genuinely new student -- which is the
+  // only case the registration switch should stop. Google sign-in bypassed it
+  // entirely before, so closing registrations closed the form and left the
+  // Continue-with-Google button creating accounts beside it.
+  const settings = await getSiteSettings();
+  if (!settings.student_registration_open) {
+    return { profileCompleted: false, registrationClosed: true };
   }
 
   const meta = user.user_metadata ?? {};
@@ -112,6 +128,7 @@ export async function GET(request: Request) {
   }
 
   let profileCompleted = false;
+  let registrationClosed = false;
 
   try {
     const student = await resolveStudent({
@@ -121,8 +138,18 @@ export async function GET(request: Request) {
       user_metadata: data.user.user_metadata,
     });
     profileCompleted = student.profileCompleted;
+    registrationClosed = student.registrationClosed ?? false;
   } catch (err) {
     console.error("[auth/callback] failed to resolve student row", err);
+  }
+
+  // Signed out again, because the exchange above already minted a session for
+  // an auth user with no student row behind it. Sent to /register rather than
+  // /login with an error code: that page explains why and carries the number
+  // to call, which a query parameter nobody renders would not.
+  if (registrationClosed) {
+    await supabase.auth.signOut();
+    return NextResponse.redirect(`${origin}/register`);
   }
 
   // A student with an unfinished profile goes to the form, carrying the

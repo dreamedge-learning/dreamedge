@@ -2,6 +2,7 @@
 
 import { normalizeIndianPhone } from "@/lib/phone";
 import { RATE_LIMITS, describeRetryAfter, rateLimit } from "@/lib/rate-limit";
+import { getSiteSettings } from "@/lib/settings";
 import { SITE_URL } from "@/lib/site";
 import {
   createStudentProfile,
@@ -36,6 +37,23 @@ export async function registerStudent(
   if (!password || password.length < 8) {
     return { error: "Password must be at least 8 characters." };
   }
+
+  // Two admin switches, enforced here rather than only in the form: the form
+  // is the half a caller can skip, and both of these had no effect anywhere
+  // until now.
+  const settings = await getSiteSettings();
+
+  if (!settings.student_registration_open) {
+    return {
+      error:
+        "New registrations are closed at the moment. Please contact us at "
+        + `${settings.support_email} and we will enrol you.`,
+    };
+  }
+
+  // A referral code typed into a form that still had the field, while the
+  // system was switched off, would otherwise be stored and credited.
+  const referralCode = settings.referral_system_enabled ? referredBy : null;
 
   const limit = await rateLimit({
     bucket: "register",
@@ -79,7 +97,7 @@ export async function registerStudent(
       email,
       phone,
       class: studentClass,
-      referred_by: referredBy,
+      referred_by: referralCode,
     },
   });
 

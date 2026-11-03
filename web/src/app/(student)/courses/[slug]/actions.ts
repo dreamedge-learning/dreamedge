@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getSiteSettings } from "@/lib/settings";
 
 // ---------------------------------------------------------------------------
 // Payment flow — Edge Function backed (2026-10-30)
@@ -256,6 +257,18 @@ export async function createPaymentOrder(
   try {
     const auth = await getAuthContext();
     if ("error" in auth) return { error: auth.error };
+
+    // The admin panel's Razorpay switch, enforced. It had no effect at all
+    // until now: turning payments off left every Buy button working, which is
+    // the opposite of what an admin reaches for it to do.
+    const settings = await getSiteSettings();
+    if (!settings.razorpay_enabled) {
+      return {
+        error:
+          "Online payment is temporarily unavailable. Please contact us at "
+          + `${settings.support_email} to enrol.`,
+      };
+    }
 
     // The Edge Function is the single source of truth for price, publication
     // state, double-enrolment and the orders row. We deliberately do not

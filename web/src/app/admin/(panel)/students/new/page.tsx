@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { OfflineRegistrationForm } from "@/components/admin/students/offline-registration-form";
 import { getAdminSession } from "@/lib/admin";
 import { fetchCoursesForRegistration } from "./actions";
+import { getSiteSettings } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: "Register a student",
@@ -23,7 +24,10 @@ export default async function NewStudentPage() {
     admin.role_name === "super_admin" || admin.role_name === "support_staff";
   if (!canRegister) redirect("/admin/students");
 
-  const courses = await fetchCoursesForRegistration();
+  const [courses, settings] = await Promise.all([
+    fetchCoursesForRegistration(),
+    getSiteSettings(),
+  ]);
 
   return (
     <OfflineRegistrationForm
@@ -33,6 +37,7 @@ export default async function NewStudentPage() {
       // what was paid.
       canRecordPayment={admin.role_name === "super_admin"}
       adminName={admin.full_name}
+      supportPhone={settings.support_phone}
     />
   );
 }

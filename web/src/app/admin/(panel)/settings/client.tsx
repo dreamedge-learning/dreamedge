@@ -1,12 +1,13 @@
 "use client";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Users, Shield, ScrollText, Settings, UserPlus } from "lucide-react";
+import { Users, Shield, ScrollText, Settings, UserPlus, Scale } from "lucide-react";
 import { AdminTeamTable } from "@/components/admin/settings/admin-team-table";
 import { RolesPermissions } from "@/components/admin/settings/roles-permissions";
 import { AuditLogTable } from "@/components/admin/settings/audit-log-table";
 import { PlatformSettings } from "@/components/admin/settings/platform-settings";
 import { ApplicationsTable } from "@/components/admin/settings/applications-table";
+import { LegalEditor } from "@/components/admin/settings/legal-editor";
 import type {
   AdminTeamRow,
   RoleRow,
@@ -18,6 +19,7 @@ import type {
   AdminApplicationRow,
   AdminGateStatus,
 } from "./applications-actions";
+import type { LegalDocument } from "@/lib/legal";
 
 interface SettingsPageClientProps {
   initialTeam: AdminTeamRow[];
@@ -32,6 +34,11 @@ interface SettingsPageClientProps {
   gate: AdminGateStatus | null;
   pendingApplications: number;
   applyUrl: string;
+  /** Policy pages are super-admin-only, so this is absent for `technical`. */
+  legalDocuments: LegalDocument[] | null;
+  supportEmail: string;
+  supportPhone: string;
+  platformName: string;
   initialTab: string;
 }
 
@@ -47,9 +54,14 @@ export function SettingsPageClient({
   gate,
   pendingApplications,
   applyUrl,
+  legalDocuments,
+  supportEmail,
+  supportPhone,
+  platformName,
   initialTab,
 }: SettingsPageClientProps) {
   const showApplications = applications !== null && gate !== null;
+  const showLegal = legalDocuments !== null;
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -89,6 +101,12 @@ export function SettingsPageClient({
             <Settings className="mr-1.5 h-4 w-4" />
             Platform
           </TabsTrigger>
+          {showLegal && (
+            <TabsTrigger value="legal">
+              <Scale className="mr-1.5 h-4 w-4" />
+              Legal Pages
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="team" className="mt-6">
@@ -124,6 +142,17 @@ export function SettingsPageClient({
         <TabsContent value="platform" className="mt-6">
           <PlatformSettings initialData={initialSettings} />
         </TabsContent>
+
+        {showLegal && (
+          <TabsContent value="legal" className="mt-6">
+            <LegalEditor
+              documents={legalDocuments}
+              supportEmail={supportEmail}
+              supportPhone={supportPhone}
+              platformName={platformName}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
