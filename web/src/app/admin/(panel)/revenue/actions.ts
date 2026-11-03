@@ -1171,14 +1171,14 @@ export async function fetchCourseRevenue(limit = 10) {
     // this call site, so the two move together.
     const raw = (data ?? []) as unknown as Array<{
       id: string;
-      name: string;
+      title: string;
       enrollment_count: number | string;
       total_revenue: number | string;
     }>;
 
     const rows: CourseRevenue[] = raw.map((r) => ({
       id: r.id,
-      name: r.name,
+      name: r.title,
       enrollmentCount: Number(r.enrollment_count),
       totalRevenue: Number(r.total_revenue),
     }));

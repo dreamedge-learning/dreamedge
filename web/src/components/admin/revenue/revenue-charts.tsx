@@ -203,11 +203,14 @@ interface CourseRevenueChartProps {
 export function CourseRevenueChart({ data }: CourseRevenueChartProps) {
   const chartData = data
     .slice(0, 8)
-    .map((d) => ({
-      name: d.name.length > 20 ? d.name.slice(0, 20) + "…" : d.name,
-      revenue: d.totalRevenue,
-      enrollments: d.enrollmentCount,
-    }));
+    .map((d) => {
+      const label = d.name ?? "";
+      return {
+        name: label.length > 20 ? label.slice(0, 20) + "…" : label,
+        revenue: d.totalRevenue,
+        enrollments: d.enrollmentCount,
+      };
+    });
 
   return (
     <Card>
