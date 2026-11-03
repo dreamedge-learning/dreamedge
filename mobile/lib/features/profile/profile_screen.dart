@@ -10,6 +10,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/providers/offline_provider.dart';
 import '../../core/models/student.dart';
 import '../../core/providers/student_provider.dart';
+import '../../core/providers/theme_provider.dart';
 import '../../core/providers/supabase_provider.dart';
 import '../../core/utils/extensions.dart';
 import '../../shared/theme/colors.dart';
@@ -85,6 +86,8 @@ class ProfileScreen extends ConsumerWidget {
             _ProfileFacts(student: student),
           ],
           const SizedBox(height: 24),
+          const Divider(height: 1),
+          const _AppearanceSection(),
           const Divider(height: 1),
           const _DownloadsSection(),
           const Divider(height: 1),
@@ -239,6 +242,98 @@ class _ProfileFacts extends StatelessWidget {
 /// bought by the gigabyte, and a 700 MB lesson that helps itself to a data
 /// pack is a complaint rather than a feature. Wi-Fi-only is therefore on
 /// until the student turns it off.
+class _AppearanceSection extends ConsumerWidget {
+  const _AppearanceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
+          child: Text(
+            'APPEARANCE',
+            style: AppTypography.caption.copyWith(
+              color: AppColors.gray,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ),
+        ListTile(
+          leading: Icon(_iconFor(mode), color: AppColors.gray),
+          title: Text('Theme', style: AppTypography.bodyMedium),
+          subtitle: Text(themeModeLabel(mode), style: AppTypography.caption),
+          trailing: const Icon(Icons.chevron_right, color: AppColors.gray),
+          onTap: () => _pickTheme(context, ref, mode),
+        ),
+      ],
+    );
+  }
+
+  IconData _iconFor(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.light:
+        return Icons.light_mode_outlined;
+      case ThemeMode.dark:
+        return Icons.dark_mode_outlined;
+      case ThemeMode.system:
+        return Icons.brightness_auto_outlined;
+    }
+  }
+
+  Future<void> _pickTheme(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeMode current,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
+              child: Text('Theme', style: AppTypography.heading3),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Text(
+                'Match device follows your phone\'s own light or dark setting.',
+                style: AppTypography.bodySmall,
+              ),
+            ),
+            for (final mode in ThemeMode.values)
+              ListTile(
+                dense: true,
+                leading: Icon(_iconFor(mode), color: AppColors.gray, size: 20),
+                title: Text(themeModeLabel(mode),
+                    style: AppTypography.bodyMedium),
+                trailing: mode == current
+                    ? const Icon(Icons.check_rounded,
+                        color: AppColors.orange, size: 20)
+                    : null,
+                onTap: () {
+                  ref.read(themeModeProvider.notifier).setMode(mode);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DownloadsSection extends ConsumerWidget {
   const _DownloadsSection();
 
@@ -298,7 +393,6 @@ class _DownloadsSection extends ConsumerWidget {
   ) {
     return showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
