@@ -124,6 +124,11 @@ export default async function LiveClassesListPage() {
     );
   }
 
+  // This is an async Server Component, not a client render: it runs once per
+  // request on the server, so reading the clock here is correct and there is
+  // no re-render for an impure value to make inconsistent. The React Compiler
+  // purity rule does not model Server Components and flags it anyway.
+  // eslint-disable-next-line react-hooks/purity
   const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
     .toISOString();
 

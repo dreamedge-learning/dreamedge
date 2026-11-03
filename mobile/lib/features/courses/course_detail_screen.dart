@@ -28,7 +28,7 @@ class CourseDetailScreen extends ConsumerWidget {
 
     return courseAsync.when(
       data: (course) => Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         body: CustomScrollView(
           slivers: [
             SliverAppBar(
@@ -177,7 +177,7 @@ class CourseDetailScreen extends ConsumerWidget {
         ),
       ),
       loading: () => Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
@@ -189,7 +189,7 @@ class CourseDetailScreen extends ConsumerWidget {
         ),
       ),
       error: (error, _) => Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),

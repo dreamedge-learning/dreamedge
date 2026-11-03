@@ -62,17 +62,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${playfair.variable} h-full antialiased`}
+      className={`${inter.variable} ${playfair.variable} dark h-full antialiased`}
+      style={{ colorScheme: "dark" }}
     >
       <body className="min-h-full flex flex-col">
+        {/* Dream Edge is dark only. forcedTheme pins the `dark` class on
+            <html> and ignores both the system setting and anything left in
+            localStorage from when the toggle existed, so there is no light
+            flash on first paint and no way back to a light screen. */}
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          forcedTheme="dark"
           disableTransitionOnChange
         >
           {children}
-          <Toaster richColors position="top-right" />
+          <Toaster richColors theme="dark" position="top-right" />
         </ThemeProvider>
       </body>
     </html>

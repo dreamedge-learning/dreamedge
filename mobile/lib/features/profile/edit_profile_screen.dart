@@ -81,7 +81,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final studentAsync = ref.watch(currentStudentProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Edit Profile')),
       body: SafeArea(
         child: studentAsync.when(

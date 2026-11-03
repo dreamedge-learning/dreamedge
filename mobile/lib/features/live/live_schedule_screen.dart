@@ -15,10 +15,10 @@ class LiveScheduleScreen extends ConsumerWidget {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         appBar: AppBar(
           title: Text('Live Classes', style: AppTypography.heading3),
-          backgroundColor: AppColors.white,
+          backgroundColor: AppColors.background,
           foregroundColor: AppColors.textPrimary,
           elevation: 0,
           bottom: TabBar(

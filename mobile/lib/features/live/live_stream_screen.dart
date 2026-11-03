@@ -175,9 +175,9 @@ class _LiveStreamScreenState extends State<LiveStreamScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         elevation: 0,
         foregroundColor: AppColors.textPrimary,
         title: Text(
@@ -231,7 +231,7 @@ class _LiveBadge extends StatelessWidget {
             width: 8,
             height: 8,
             decoration: const BoxDecoration(
-              color: AppColors.white,
+              color: AppColors.surfaceElevated,
               shape: BoxShape.circle,
             ),
           ),

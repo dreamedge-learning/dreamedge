@@ -26,7 +26,7 @@ class PaymentHistoryScreen extends ConsumerWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),
@@ -146,7 +146,7 @@ class _OrderTileState extends State<_OrderTile> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.surfaceElevated,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(

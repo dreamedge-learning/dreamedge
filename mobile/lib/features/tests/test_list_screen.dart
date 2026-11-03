@@ -40,7 +40,7 @@ class _TestListScreenState extends ConsumerState<TestListScreen>
     final attemptsAsync = ref.watch(myTestAttemptsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       body: Column(
         children: [
           Container(
@@ -231,7 +231,7 @@ class _UpcomingTestCard extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.surfaceElevated,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.border),
         ),
@@ -337,7 +337,7 @@ class _AttemptCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.surfaceElevated,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: AppColors.border),
         ),

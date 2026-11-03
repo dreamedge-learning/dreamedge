@@ -151,7 +151,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     final studentAsync = ref.watch(currentStudentProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: studentAsync.when(
           loading: () => const Center(child: LoadingIndicator()),

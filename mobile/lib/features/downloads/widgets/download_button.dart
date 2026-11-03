@@ -196,7 +196,7 @@ Future<void> showDownloadSheet(
 ) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.white,
+    backgroundColor: AppColors.background,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
     ),

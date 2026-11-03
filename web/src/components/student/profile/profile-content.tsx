@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import {
   Loader2,
   Pencil,
-  Lock,
   Camera,
   Copy,
   Check,

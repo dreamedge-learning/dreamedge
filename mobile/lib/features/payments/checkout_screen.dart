@@ -270,7 +270,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 color: AppColors.textPrimary,
               ),
             ),
-            backgroundColor: AppColors.white,
+            backgroundColor: AppColors.background,
             surfaceTintColor: Colors.transparent,
             elevation: 0,
             leading: IconButton(
@@ -286,7 +286,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: AppColors.white,
+                    color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -357,7 +357,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.white,
+                    color: AppColors.surfaceElevated,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
@@ -473,7 +473,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
           title: Text('Checkout',
               style: GoogleFonts.playfairDisplay(
                   fontWeight: FontWeight.w700, fontSize: 20)),
-          backgroundColor: AppColors.white,
+          backgroundColor: AppColors.background,
         ),
         body: const Center(
           child: CircularProgressIndicator(color: AppColors.orange),

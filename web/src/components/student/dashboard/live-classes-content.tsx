@@ -32,7 +32,7 @@ export function LiveClassesContent({ upcoming, past }: Props) {
           Live classes
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Join the ones running now, see what's coming up, and rewatch the
+          Join the ones running now, see what&apos;s coming up, and rewatch the
           ones that have finished.
         </p>
       </header>

@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'config/router.dart';
 import 'config/theme.dart';
-import 'core/providers/theme_provider.dart';
 
 class DreamEdgeApp extends ConsumerWidget {
   const DreamEdgeApp({super.key});
@@ -11,14 +10,15 @@ class DreamEdgeApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
-    final themeMode = ref.watch(themeModeProvider);
 
+    // Dark only, with no themeMode and no light ThemeData to fall back to:
+    // the phone's own light setting must not be able to reach this app.
     return MaterialApp.router(
       title: 'Dream Edge',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
+      theme: AppTheme.dark,
       darkTheme: AppTheme.dark,
-      themeMode: themeMode,
+      themeMode: ThemeMode.dark,
       routerConfig: router,
     );
   }

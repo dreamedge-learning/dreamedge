@@ -16,7 +16,7 @@ class NotificationInboxScreen extends ConsumerWidget {
     final notificationsAsync = ref.watch(notificationsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: const Text('Notifications'),
         actions: [

@@ -110,7 +110,7 @@ class _AppShellState extends ConsumerState<AppShell>
             color: AppColors.textPrimary,
           ),
         ),
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         actions: const [NotificationBell(), SizedBox(width: 4)],

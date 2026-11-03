@@ -71,7 +71,7 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(

@@ -24,7 +24,7 @@ class EnrolledCourseCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.white,
+          color: AppColors.surfaceElevated,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.border),
         ),

@@ -142,7 +142,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
     return PopScope(
       canPop: true,
       child: Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         body: SafeArea(
           top: false,
           child: Column(

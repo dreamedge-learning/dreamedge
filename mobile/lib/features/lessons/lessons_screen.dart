@@ -26,9 +26,9 @@ class LessonsScreen extends ConsumerWidget {
     final contentsAsync = ref.watch(topicContentsProvider(topicId));
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(

@@ -71,10 +71,10 @@ class LiveClassDetailScreen extends ConsumerWidget {
     final classAsync = ref.watch(liveClassDetailProvider(classId));
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text('Class Details', style: AppTypography.heading3),
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
       ),

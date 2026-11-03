@@ -17,7 +17,6 @@ import {
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sheet,
   SheetContent,
@@ -95,7 +94,6 @@ export function Navbar() {
 
         {/* Desktop auth actions */}
         <div className="hidden items-center gap-3 md:flex">
-          <ThemeToggle />
           {isLoading ? (
             <div className="h-9 w-24 animate-pulse rounded-lg bg-muted" />
           ) : user ? (
@@ -188,7 +186,6 @@ export function Navbar() {
 
         {/* Mobile hamburger */}
         <div className="flex items-center gap-1 md:hidden">
-          <ThemeToggle />
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger render={<Button variant="ghost" size="icon" />}>
               {mobileOpen ? (

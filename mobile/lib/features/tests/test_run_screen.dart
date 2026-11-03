@@ -296,16 +296,16 @@ class _TestRunScreenState extends ConsumerState<TestRunScreen>
 
     if (_loading) {
       return const Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         body: Center(child: CircularProgressIndicator(color: AppColors.orange)),
       );
     }
 
     if (_loadError != null) {
       return Scaffold(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         appBar: AppBar(
-          backgroundColor: AppColors.white,
+          backgroundColor: AppColors.background,
           elevation: 0,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_rounded,
@@ -354,7 +354,7 @@ class _TestRunScreenState extends ConsumerState<TestRunScreen>
       child: Scaffold(
         backgroundColor: AppColors.surface,
         appBar: AppBar(
-          backgroundColor: AppColors.white,
+          backgroundColor: AppColors.background,
           surfaceTintColor: Colors.transparent,
           elevation: 1,
           titleSpacing: 0,
@@ -397,7 +397,7 @@ class _TestRunScreenState extends ConsumerState<TestRunScreen>
           ),
         ),
         endDrawer: Drawer(
-          backgroundColor: AppColors.white,
+          backgroundColor: AppColors.background,
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -788,7 +788,7 @@ class _QuestionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.white,
+        color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
@@ -1282,7 +1282,7 @@ class _ResultsPanel extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        backgroundColor: AppColors.white,
+        backgroundColor: AppColors.background,
         elevation: 0,
         automaticallyImplyLeading: false,
         title: Text(
@@ -1301,7 +1301,7 @@ class _ResultsPanel extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.white,
+                  color: AppColors.surfaceElevated,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
