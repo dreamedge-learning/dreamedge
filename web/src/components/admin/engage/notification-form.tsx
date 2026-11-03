@@ -75,11 +75,52 @@ export function NotificationFormDialog({
       }
 
       const count = result?.recipientCount ?? 0;
-      toast.success(
-        count > 0
-          ? `Sent to ${count} student${count === 1 ? "" : "s"}.`
-          : "Saved to the notification log."
-      );
+      const push = result?.push;
+
+      // Three cases now that push is wired:
+      //   * push channel + FCM configured   → "Sent to N, delivered to M devices"
+      //   * push channel + no FCM creds yet → warn that FCM is not configured
+      //                                       but the inbox row was written
+      //   * everything else                 → just the inbox count
+      if (push?.notConfigured) {
+        toast.success(
+          count > 0
+            ? `Saved to ${count} student${count === 1 ? "" : "s"} inbox.`
+            : "Saved to the notification log.",
+          {
+            description:
+              "FCM is not configured yet, so no push was delivered. Set FCM_PROJECT_ID and FCM_SERVICE_ACCOUNT_JSON on the Edge Function to turn it on.",
+            duration: 8000,
+          },
+        );
+      } else if (push && push.sent !== undefined) {
+        toast.success(
+          `Sent to ${count} student${count === 1 ? "" : "s"}.`,
+          {
+            description: `Push delivered to ${push.sent} device${
+              push.sent === 1 ? "" : "s"
+            }${push.failed ? ` · ${push.failed} failed` : ""}${
+              push.pruned ? ` · ${push.pruned} stale token${push.pruned === 1 ? "" : "s"} removed` : ""
+            }.`,
+          },
+        );
+      } else if (push?.error) {
+        toast.success(
+          count > 0
+            ? `Saved to ${count} student${count === 1 ? "" : "s"} inbox.`
+            : "Saved to the notification log.",
+          {
+            description: `Push dispatch failed: ${push.error}`,
+            duration: 8000,
+          },
+        );
+      } else {
+        toast.success(
+          count > 0
+            ? `Sent to ${count} student${count === 1 ? "" : "s"}.`
+            : "Saved to the notification log.",
+        );
+      }
       onSent();
       close();
     });

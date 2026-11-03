@@ -14,7 +14,14 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
-  String? _pendingRoute;
+  /// A pending route the router pushes once the app is live.
+  ///
+  /// The router listens on this notifier -- a plain field like the old
+  /// `_pendingRoute` had no way of reaching the router after a background
+  /// tap, so a notification that opened the app from cold start never
+  /// navigated anywhere. Setting a non-null value here notifies the
+  /// router; it then reads and clears via `consumePendingRoute`.
+  final ValueNotifier<String?> pendingRouteNotifier = ValueNotifier<String?>(null);
 
   /// Called when the student presses a button on a notification rather than
   /// the notification itself.
@@ -115,8 +122,8 @@ class NotificationService {
 
   void _handleNotificationTap(RemoteMessage message) {
     final route = message.data['route'];
-    if (route != null && route is String && route.isNotEmpty) {
-      _pendingRoute = route;
+    if (route is String && route.isNotEmpty) {
+      pendingRouteNotifier.value = route;
     }
   }
 
@@ -129,13 +136,15 @@ class NotificationService {
 
     final route = response.payload;
     if (route != null && route.isNotEmpty) {
-      _pendingRoute = route;
+      pendingRouteNotifier.value = route;
     }
   }
 
+  /// Reads the pending route and clears it. The router calls this once it
+  /// has navigated so the same route is not pushed twice on a hot restart.
   String? consumePendingRoute() {
-    final route = _pendingRoute;
-    _pendingRoute = null;
+    final route = pendingRouteNotifier.value;
+    pendingRouteNotifier.value = null;
     return route;
   }
 

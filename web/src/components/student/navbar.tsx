@@ -13,6 +13,7 @@ import {
   FileText,
   UserCircle,
   Receipt,
+  Bell,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,13 @@ export function Navbar() {
                   My Tests
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  render={<Link href="/dashboard/notifications" />}
+                  className="flex items-center gap-2"
+                >
+                  <Bell className="h-4 w-4" />
+                  Notifications
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   render={<Link href="/dashboard/payment-history" />}
                   className="flex items-center gap-2"
                 >
@@ -228,6 +236,13 @@ export function Navbar() {
                       className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
                     >
                       My Dashboard
+                    </Link>
+                    <Link
+                      href="/dashboard/notifications"
+                      onClick={() => setMobileOpen(false)}
+                      className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
+                    >
+                      Notifications
                     </Link>
                     <Link
                       href="/dashboard/payment-history"

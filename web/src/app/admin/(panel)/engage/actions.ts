@@ -16,12 +16,23 @@ import {
 const ENGAGE_ROLES = ["super_admin", "support_staff"] as const;
 
 /**
- * Only in-app notifications fan out to `student_notifications`; that table is
- * what the student notification centre reads. Push, email and SMS are recorded
- * here but not delivered — FCM, Resend and the SMS provider are not wired up
- * yet, so the UI says so rather than implying a send that never happened.
+ * Channels that write to `student_notifications` -- that table is what the
+ * in-app inbox reads on both platforms. `in_app` is the obvious one; `push`
+ * also fans out here because a push notification should land in the inbox
+ * too, so a student who taps-dismisses a push can still find the message.
+ *
+ * `email` and `sms` are left out until Resend and the SMS provider are
+ * wired up; the UI says as much.
  */
-const DELIVERABLE_CHANNELS = new Set(["in_app"]);
+const INBOX_CHANNELS = new Set(["in_app", "push"]);
+
+/**
+ * Channels that invoke the `send-push` Edge Function. The function
+ * returns 503 with `push_not_configured` when the FCM project id or
+ * service account secret is missing, which we surface to the sender
+ * rather than pretending the push went out.
+ */
+const PUSH_CHANNELS = new Set(["push"]);
 
 // ---------------------------------------------------------------------------
 // Notifications
@@ -132,8 +143,15 @@ export async function sendNotification(formData: FormData) {
     }
 
     let recipientCount = 0;
+    let pushResult: {
+      sent?: number;
+      failed?: number;
+      pruned?: number;
+      notConfigured?: boolean;
+      error?: string;
+    } | null = null;
 
-    if (DELIVERABLE_CHANNELS.has(values.channel)) {
+    if (INBOX_CHANNELS.has(values.channel)) {
       const recipientIds = await resolveRecipients(supabase, values.target_type, {
         courseId,
         studentId,
@@ -162,8 +180,19 @@ export async function sendNotification(formData: FormData) {
       recipientCount = recipientIds.length;
     }
 
+    if (PUSH_CHANNELS.has(values.channel)) {
+      // Fire the Edge Function. The inbox row already exists, so a push
+      // failure is a delivery warning, not a lost send.
+      pushResult = await invokeSendPush(created.id);
+    }
+
     revalidatePath("/admin/engage");
-    return { success: true, recipientCount, channel: values.channel };
+    return {
+      success: true,
+      recipientCount,
+      channel: values.channel,
+      push: pushResult,
+    };
   } catch (err) {
     console.error("sendNotification failed:", err);
     return { error: describeFailure(err) };
@@ -171,6 +200,87 @@ export async function sendNotification(formData: FormData) {
 }
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+/**
+ * POSTs to the `send-push` Edge Function with the admin's own JWT, so FCM
+ * dispatch is gated by the same role check the admin UI already enforces.
+ *
+ * Returns a readable summary for the UI. `notConfigured` is the one
+ * failure the sender can act on -- it means the Firebase project id and
+ * service account have not been uploaded as Supabase secrets yet, so the
+ * push did not go out even though the inbox row did.
+ */
+async function invokeSendPush(
+  notificationId: string,
+): Promise<{
+  sent?: number;
+  failed?: number;
+  pruned?: number;
+  notConfigured?: boolean;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: session } = await supabase.auth.getSession();
+    const accessToken = session.session?.access_token;
+    if (!accessToken) return { error: "No session." };
+
+    const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!baseUrl || !anonKey) {
+      return { error: "Push service is not configured." };
+    }
+
+    const response = await fetch(
+      `${baseUrl.replace(/\/+$/, "")}/functions/v1/send-push`,
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ notification_id: notificationId }),
+      },
+    );
+
+    const raw = await response.text().catch(() => "");
+    let parsed: Record<string, unknown> = {};
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        // Non-JSON body -- treated as a generic failure below.
+      }
+    }
+
+    if (!response.ok) {
+      if (parsed.error === "push_not_configured") {
+        return { notConfigured: true };
+      }
+      return { error: typeof parsed.error === "string" ? parsed.error : `Push dispatch failed (${response.status}).` };
+    }
+
+    return {
+      sent: toInt(parsed.sent),
+      failed: toInt(parsed.failed),
+      pruned: toInt(parsed.pruned),
+    };
+  } catch (err) {
+    console.error("[invokeSendPush] unexpected error:", err);
+    return { error: "Could not reach the push service." };
+  }
+}
+
+function toInt(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) ? n : 0;
+  }
+  return 0;
+}
 
 async function resolveRecipients(
   supabase: SupabaseClient,

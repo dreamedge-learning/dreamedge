@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../core/providers/student_provider.dart';
 import '../core/providers/supabase_provider.dart';
+import '../core/services/notification_service.dart';
 import '../core/services/storage_service.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
@@ -55,7 +56,36 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   final storage = ref.read(storageServiceProvider);
 
-  return GoRouter(
+  late final GoRouter router;
+
+  // A notification tap sets `pendingRouteNotifier`; we listen here so the
+  // deep-link reaches the router whether the tap happened on a cold start
+  // (consumed below as initialMessage) or while the app was running. The
+  // route is only pushed once the student is signed in and the profile is
+  // complete -- a push targeting `/dashboard/notifications` must not shove
+  // a logged-out user past the login screen.
+  final notifications = NotificationService();
+  void drainPendingRoute() {
+    final route = notifications.consumePendingRoute();
+    if (route == null) return;
+    final session = ref.read(currentSessionProvider);
+    final student = ref.read(currentStudentProvider).valueOrNull;
+    if (session == null || student == null || !student.profileCompleted) {
+      // Not ready yet. Put it back; the next refresh will drain again.
+      notifications.pendingRouteNotifier.value = route;
+      return;
+    }
+    router.push(route);
+  }
+
+  notifications.pendingRouteNotifier.addListener(drainPendingRoute);
+  ref.listen<Object?>(currentSessionProvider, (_, __) => drainPendingRoute());
+  ref.listen<Object?>(currentStudentProvider, (_, __) => drainPendingRoute());
+  ref.onDispose(() {
+    notifications.pendingRouteNotifier.removeListener(drainPendingRoute);
+  });
+
+  router = GoRouter(
     initialLocation: '/splash',
     debugLogDiagnostics: false,
     refreshListenable: refresh,
@@ -204,4 +234,5 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ),
   );
+  return router;
 });
