@@ -351,7 +351,13 @@ export async function updateContentItem(
     if (parsed.data.offline_license_days !== undefined) {
       update.offline_license_days = parsed.data.offline_license_days;
     }
+    if (parsed.data.publish_at !== undefined) update.publish_at = parsed.data.publish_at;
     if (parsed.data.weight !== undefined) update.weight = parsed.data.weight;
+
+    // Publishing by hand retires the date. Leaving it set would show a live
+    // lesson as "scheduled" forever, and the job would never clear it because
+    // it only looks at drafts.
+    if (update.status === "published") update.publish_at = null;
 
     const { data, error } = await supabase
       .from("content_items")
@@ -596,6 +602,148 @@ export async function fetchCourseTree(courseId: string) {
     return { data: tree };
   } catch (err) {
     console.error("fetchCourseTree failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+// ─── Bulk create, for the uploader ───
+
+/**
+ * Creates one draft content item per file in a batch.
+ *
+ * Separate from `createContentItem` because the weights have to be contiguous
+ * across the whole batch: calling the single version in a loop would read the
+ * same count every time on a fast connection and land twenty lessons on the
+ * same weight, leaving the tree in an order nobody chose.
+ *
+ * Everything lands as a draft. Thirty lessons appearing live the moment their
+ * files finish uploading is not something anyone would ask for.
+ */
+export async function bulkCreateContentItems(
+  topicId: string,
+  entries: { title: string; type: string }[]
+) {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return { error: "No files to add." };
+    }
+    if (entries.length > 50) {
+      return { error: "Add at most 50 files at a time." };
+    }
+
+    const parsedEntries = [];
+    for (const entry of entries) {
+      const parsed = contentItemCreateSchema.safeParse({
+        topic_id: topicId,
+        title: entry.title,
+        type: entry.type,
+      });
+      if (!parsed.success) {
+        return { error: firstIssue(parsed.error) };
+      }
+      parsedEntries.push(parsed.data);
+    }
+
+    const { count } = await supabase
+      .from("content_items")
+      .select("id", { count: "exact", head: true })
+      .eq("topic_id", parsedEntries[0].topic_id);
+
+    const base = count ?? 0;
+
+    const { data, error } = await supabase
+      .from("content_items")
+      .insert(
+        parsedEntries.map((entry, index) => ({
+          topic_id: entry.topic_id,
+          title: entry.title,
+          type: entry.type,
+          weight: base + index,
+        }))
+      )
+      .select();
+
+    if (error) {
+      console.error("bulkCreateContentItems failed:", error);
+      return { error: "Could not create the lessons. Please try again." };
+    }
+
+    // Returned in the order they were asked for, not the order Postgres chose,
+    // so the caller can pair each row with the file it came from.
+    const byTitle = new Map((data ?? []).map((row) => [row.id, row]));
+    const ordered = (data ?? [])
+      .slice()
+      .sort((a, b) => a.weight - b.weight)
+      .map((row) => byTitle.get(row.id)!);
+
+    revalidatePath("/admin/content/manager");
+    return { data: ordered };
+  } catch (err) {
+    console.error("bulkCreateContentItems failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+// ─── Scheduled publishing ───
+
+export interface SchedulerHealth {
+  job_exists: boolean;
+  schedule: string | null;
+  last_run_at: string | null;
+  last_status: string | null;
+  overdue: number;
+  next_due_at: string | null;
+}
+
+/**
+ * Whether the publishing job is actually running.
+ *
+ * Surfaced in the panel rather than left to trust: a cron job that stops
+ * firing does so silently, and the first sign would otherwise be a lesson that
+ * never went live.
+ */
+export async function getSchedulerHealth() {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    const { data, error } = await supabase.rpc("scheduled_publish_health");
+
+    if (error) {
+      console.error("getSchedulerHealth failed:", error);
+      return { error: "Could not read the scheduler status." };
+    }
+
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row) return { error: "Could not read the scheduler status." };
+
+    return { data: row as unknown as SchedulerHealth };
+  } catch (err) {
+    console.error("getSchedulerHealth failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+/** Runs the publishing pass now, for anything already due. */
+export async function publishDueNow() {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    const { data, error } = await supabase.rpc("publish_due_content");
+
+    if (error) {
+      console.error("publishDueNow failed:", error);
+      return { error: "Could not publish the due lessons." };
+    }
+
+    revalidatePath("/admin/content/manager");
+    return { data: { published: Number(data) || 0 } };
+  } catch (err) {
+    console.error("publishDueNow failed:", err);
     return { error: describeFailure(err) };
   }
 }

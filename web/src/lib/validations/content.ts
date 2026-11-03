@@ -55,6 +55,20 @@ export const contentItemUpdateSchema = z
     title: requiredText("Title", 200).optional(),
     type: contentTypeSchema.optional(),
     status: contentStatusSchema.optional(),
+    // A draft with a date on it is what "scheduled" means here -- there is no
+    // fourth status. Null clears the date. Required to be in the future: a
+    // mistyped year on a paid lesson would otherwise publish it on the next
+    // run of the job, minutes later, with nobody watching.
+    publish_at: z
+      .string()
+      .refine((value) => !Number.isNaN(Date.parse(value)), "Publish date is not a valid date.")
+      .refine(
+        (value) => Date.parse(value) > Date.now(),
+        "The publish date has to be in the future."
+      )
+      .transform((value) => new Date(value).toISOString())
+      .nullable()
+      .optional(),
     description: z.string().max(5000, "Description is too long.").nullable().optional(),
     file_url: z.string().max(2000, "File URL is too long.").nullable().optional(),
     video_id: z.string().max(200, "Video id is too long.").nullable().optional(),

@@ -481,6 +481,7 @@ export type Database = {
           metadata: Json | null
           offline_license_days: number
           play_limit: number | null
+          publish_at: string | null
           status: Database["public"]["Enums"]["content_status"]
           title: string
           topic_id: string
@@ -508,6 +509,7 @@ export type Database = {
           metadata?: Json | null
           offline_license_days?: number
           play_limit?: number | null
+          publish_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]
           title: string
           topic_id: string
@@ -535,6 +537,7 @@ export type Database = {
           metadata?: Json | null
           offline_license_days?: number
           play_limit?: number | null
+          publish_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]
           title?: string
           topic_id?: string
@@ -2170,6 +2173,7 @@ export type Database = {
       next_student_code: { Args: never; Returns: string }
       offline_check_in: { Args: { p_device_id?: string }; Returns: Json }
       prune_rate_limit_hits: { Args: never; Returns: undefined }
+      publish_due_content: { Args: never; Returns: number }
       record_admin_login_attempt: {
         Args: { p_email: string; p_ip?: string; p_succeeded?: boolean }
         Returns: undefined
@@ -2186,6 +2190,17 @@ export type Database = {
           expires_at: string
           saved_at: string
           server_now: string
+        }[]
+      }
+      scheduled_publish_health: {
+        Args: never
+        Returns: {
+          job_exists: boolean
+          last_run_at: string
+          last_status: string
+          next_due_at: string
+          overdue: number
+          schedule: string
         }[]
       }
       set_admin_gate: { Args: { p_password: string }; Returns: undefined }

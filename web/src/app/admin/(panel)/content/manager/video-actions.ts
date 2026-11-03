@@ -10,6 +10,7 @@ import {
   getVideo,
   isBunnyConfigured,
   signExistingUrl,
+  signPlayback,
   signTusUpload,
   type TusTicket,
 } from "@/lib/bunny";
@@ -24,6 +25,10 @@ type ContentItemUpdate =
 // is a recording nobody trimmed, and it costs storage and delivery on every
 // student who ever opens it.
 const MAX_VIDEO_BYTES = 4 * 1024 * 1024 * 1024;
+
+// Long enough to watch a take through, short enough that the link is dead
+// before it could be passed on.
+const PREVIEW_TTL_SECONDS = 60 * 10;
 
 // Long enough that the thumbnail is still loading when the admin looks at it,
 // short enough that a copied panel URL is not a shareable video link.
@@ -557,6 +562,55 @@ export async function removeVideo(contentItemId: string) {
     return { data };
   } catch (err) {
     console.error("removeVideo failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+/**
+ * A short-lived playback URL so an admin can watch the lesson before publishing.
+ *
+ * Deliberately not the student route: that one answers to
+ * `check_offline_entitlements`, and an admin has bought nothing. It is also
+ * deliberately not a longer-lived URL than it needs to be -- ten minutes is
+ * enough to check a take, and a preview link that outlives the review is a
+ * paid lesson sitting unprotected in somebody's history.
+ *
+ * `register_content_play` is not called: a review is not a play, and counting
+ * it would spend a student-facing play limit the admin does not own.
+ */
+export async function getVideoPreviewUrl(contentItemId: string) {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    const parsed = uuid("Content item").safeParse(contentItemId);
+    if (!parsed.success) return { error: firstIssue(parsed.error) };
+
+    if (!isBunnyConfigured()) {
+      return { error: "Video hosting is not configured yet." };
+    }
+
+    const { data: item, error } = await supabase
+      .from("content_items")
+      .select("bunny_video_guid, video_provider, video_status")
+      .eq("id", parsed.data)
+      .single();
+
+    if (error || !item) return { error: "That content item no longer exists." };
+
+    if (item.video_provider !== "bunny" || !item.bunny_video_guid) {
+      return { error: "There is no hosted video on this lesson." };
+    }
+
+    if (item.video_status !== "ready") {
+      return { error: "Bunny is still processing this video." };
+    }
+
+    return {
+      data: { url: signPlayback(item.bunny_video_guid, PREVIEW_TTL_SECONDS) },
+    };
+  } catch (err) {
+    console.error("getVideoPreviewUrl failed:", err);
     return { error: describeFailure(err) };
   }
 }

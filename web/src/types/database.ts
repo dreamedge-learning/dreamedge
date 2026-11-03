@@ -88,6 +88,8 @@ export interface ContentItem {
   is_printable: boolean;
   play_limit: number | null;
   status: string;
+  /** When a draft should go live. Null means no date set; cleared once published. */
+  publish_at: string | null;
   weight: number;
   metadata: unknown;
 

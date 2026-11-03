@@ -19,6 +19,7 @@ import { Upload as TusUpload } from "tus-js-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { VideoPreview } from "@/components/admin/content-manager/video-preview";
 import { cn } from "@/lib/utils";
 
 import {
@@ -618,15 +619,18 @@ export function VideoUploadPanel({ item, onItemChange }: VideoUploadPanelProps) 
             </p>
           )}
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => fileRef.current?.click()}
-          >
-            <UploadCloud className="mr-2 h-3.5 w-3.5" />
-            Replace video
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {video.status === "ready" && <VideoPreview contentItemId={item.id} />}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileRef.current?.click()}
+            >
+              <UploadCloud className="mr-2 h-3.5 w-3.5" />
+              Replace video
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">
             The current video keeps playing until the replacement has finished
             uploading.

@@ -23,6 +23,39 @@ import { VideoUploadPanel } from "@/components/admin/content-manager/video-uploa
 import { useContentTree } from "@/stores/content-tree";
 import type { ContentItem } from "@/types/database";
 
+/**
+ * An ISO timestamp as a `datetime-local` value, in the admin's own timezone.
+ *
+ * `toISOString` would render the UTC instant, so an admin in IST setting 6 pm
+ * would reopen the lesson and read 12:30 pm. The input has no timezone of its
+ * own, so the conversion has to happen on both edges.
+ */
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
+}
+
+/**
+ * The chosen moment, written out in the admin's own timezone.
+ *
+ * An absolute date rather than "in 3 days": a relative string needs the
+ * current time, and reading the clock while rendering is impure -- the React
+ * compiler refuses it, and rightly, because the output would differ between
+ * two renders with identical props. It also reads better on a paid lesson,
+ * where "in 3 days" leaves the actual hour to be worked out.
+ */
+function describeMoment(value: string): string | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+}
+
 export function ContentItemForm({ item }: { item: ContentItem }) {
   const [isPending, startTransition] = useTransition();
   const updateContentInTree = useContentTree((s) => s.updateContentItem);
@@ -32,6 +65,10 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
   // trigger can fall out of step with the row. Both selects are controlled.
   const [type, setType] = useState<string>(item.type);
   const [status, setStatus] = useState<string>(item.status);
+
+  // A draft carrying a date is what "scheduled" means -- there is no fourth
+  // status. Held in local-input form because that is what the control reads.
+  const [publishAt, setPublishAt] = useState<string>(toLocalInput(item.publish_at));
 
   // The licence field only means anything while offline is on, so the switch
   // has to be state rather than an uncontrolled input.
@@ -62,6 +99,14 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
       status,
       description: (fd.get("description") as string) || null,
       is_paid: fd.get("is_paid") === "on",
+      // Only a draft can be waiting for a date. Anything else clears it, so a
+      // published lesson never shows a stale "goes live" time -- and the
+      // server applies the same rule, because this form is not the only
+      // caller of the updater.
+      publish_at:
+        status === "draft" && publishAt
+          ? new Date(publishAt).toISOString()
+          : null,
     };
 
     const playLimit = fd.get("play_limit") as string;
@@ -241,6 +286,29 @@ export function ContentItemForm({ item }: { item: ContentItem }) {
               </SelectContent>
             </Select>
           </div>
+
+          {status === "draft" && (
+            <div className="space-y-2">
+              <Label htmlFor="ci-publish-at">
+                Go live at{" "}
+                <span className="font-normal text-muted-foreground">
+                  (empty = stays a draft)
+                </span>
+              </Label>
+              <Input
+                id="ci-publish-at"
+                type="datetime-local"
+                value={publishAt}
+                onChange={(event) => setPublishAt(event.target.value)}
+              />
+              {publishAt && describeMoment(publishAt) && (
+                <p className="text-xs text-brand-orange">
+                  Publishes automatically on {describeMoment(publishAt)}. The
+                  date has to be in the future.
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="ci-play-limit">

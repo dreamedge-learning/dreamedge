@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 
+import { BulkUploadPanel } from "@/components/admin/content-manager/bulk-upload-panel";
 import { updateTopic } from "@/app/admin/(panel)/content/manager/actions";
 import { useContentTree } from "@/stores/content-tree";
 import type { Topic } from "@/types/database";
@@ -41,7 +42,8 @@ export function TopicForm({ topic }: { topic: Topic }) {
   }
 
   return (
-    <form onSubmit={handleSave} className="space-y-5">
+    <div className="space-y-6">
+      <form onSubmit={handleSave} className="space-y-5">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Edit Topic</h2>
         <p className="text-xs text-muted-foreground">
@@ -78,6 +80,11 @@ export function TopicForm({ topic }: { topic: Topic }) {
         {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Save Changes
       </Button>
-    </form>
+      </form>
+
+      {/* Bulk upload belongs to a topic: the files become lessons inside it,
+          so there is nowhere else it could sensibly live. */}
+      <BulkUploadPanel topicId={topic.id} />
+    </div>
   );
 }
