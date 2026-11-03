@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,11 +14,13 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { ImagePlus, Loader2, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   createTestimonial,
   updateTestimonial,
+  uploadTestimonialPhoto,
+  removeTestimonialPhoto,
 } from "@/app/admin/(panel)/students/actions";
 import type { Testimonial } from "@/types/database";
 
@@ -26,6 +29,15 @@ interface TestimonialFormDialogProps {
   onClose: () => void;
   editData?: Testimonial | null;
 }
+
+/** Mirrors the server action, so a bad file is rejected before it is sent. */
+const ACCEPTED_PHOTO_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+];
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 
 export function TestimonialFormDialog({
   open,
@@ -36,7 +48,41 @@ export function TestimonialFormDialog({
   const [isTopper, setIsTopper] = useState(editData?.is_topper ?? false);
   const [isPending, startTransition] = useTransition();
 
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(
+    editData?.student_photo_url ?? null
+  );
+  // Set when the admin clears an existing photo: the row is only updated once
+  // they save, so a cleared photo must not leave storage before then.
+  const [photoCleared, setPhotoCleared] = useState(false);
+
   if (!open) return null;
+
+  function handlePhotoPick(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!ACCEPTED_PHOTO_TYPES.includes(file.type)) {
+      toast.error("Only JPEG, PNG, WebP and AVIF images are allowed.");
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      toast.error("Photo must be under 2MB.");
+      return;
+    }
+
+    setPhotoFile(file);
+    setPhotoCleared(false);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
+
+  function clearPhoto() {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+    setPhotoCleared(Boolean(editData?.student_photo_url));
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  }
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -51,10 +97,35 @@ export function TestimonialFormDialog({
 
       if (result.error) {
         toast.error(result.error);
-      } else {
-        toast.success(editData ? "Testimonial updated" : "Testimonial added");
-        onClose();
+        return;
       }
+
+      const testimonialId = "id" in result ? result.id : editData?.id;
+
+      // The photo is a second round trip on purpose: a new testimonial has no
+      // id until the row exists, and the storage path is keyed by that id.
+      if (testimonialId && photoFile) {
+        const photoData = new FormData();
+        photoData.set("photo", photoFile);
+        const photoResult = await uploadTestimonialPhoto(testimonialId, photoData);
+        if (photoResult.error) {
+          toast.error(`Saved, but the photo failed: ${photoResult.error}`);
+          onClose();
+          return;
+        }
+      } else if (testimonialId && photoCleared) {
+        const removeResult = await removeTestimonialPhoto(testimonialId);
+        if (removeResult.error) {
+          toast.error(
+            `Saved, but the photo could not be removed: ${removeResult.error}`
+          );
+          onClose();
+          return;
+        }
+      }
+
+      toast.success(editData ? "Testimonial updated" : "Testimonial added");
+      onClose();
     });
   };
 
@@ -72,6 +143,67 @@ export function TestimonialFormDialog({
               </div>
 
               <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Photo</Label>
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full border border-border bg-muted">
+                      {photoPreview ? (
+                        <Image
+                          src={photoPreview}
+                          alt={editData?.student_name ?? "Student photo"}
+                          fill
+                          sizes="80px"
+                          className="object-cover"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                          <UserRound className="h-7 w-7" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={isPending}
+                        onClick={() => photoInputRef.current?.click()}
+                      >
+                        <ImagePlus className="mr-1.5 h-4 w-4" />
+                        {photoPreview ? "Replace photo" : "Upload photo"}
+                      </Button>
+
+                      {photoPreview ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-500 hover:text-red-600"
+                          disabled={isPending}
+                          onClick={clearPhoto}
+                        >
+                          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                          Remove
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          JPEG, PNG, WebP or AVIF. Up to 2MB.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/avif"
+                    onChange={handlePhotoPick}
+                    className="hidden"
+                  />
+                </div>
+
                 <div>
                   <Label htmlFor="t-name">Student Name *</Label>
                   <Input
@@ -150,10 +282,7 @@ export function TestimonialFormDialog({
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Switch
-                    checked={isTopper}
-                    onCheckedChange={setIsTopper}
-                  />
+                  <Switch checked={isTopper} onCheckedChange={setIsTopper} />
                   <Label>Mark as Topper</Label>
                 </div>
               </div>

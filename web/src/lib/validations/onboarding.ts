@@ -20,8 +20,6 @@ export const STUDENT_BOARDS = ["CBSE", "State", "ICSE", "Other"] as const;
 export const GENDER_OPTIONS = [
   { value: "male", label: "Male" },
   { value: "female", label: "Female" },
-  { value: "other", label: "Other" },
-  { value: "prefer_not_to_say", label: "Prefer not to say" },
 ] as const;
 
 /** Required text that reports its own field name. */
@@ -94,7 +92,7 @@ export const onboardingStudentSchema = z.object({
   ),
   date_of_birth: dateOfBirth,
   gender: z
-    .enum(["male", "female", "other", "prefer_not_to_say"])
+    .enum(["male", "female"])
     .optional()
     .or(z.literal("").transform(() => undefined)),
 });

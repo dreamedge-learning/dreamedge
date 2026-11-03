@@ -5,129 +5,147 @@ import { SUPPORT_EMAIL } from "@/lib/site";
 export const metadata: Metadata = {
   title: "Refund & Cancellation Policy",
   description:
-    "How refunds and cancellations work on Dream Edge Online — eligibility, timelines, and how to request one.",
+    "How refunds work on Dream Edge Online — paid enrolments are final, and refunds are issued only when Dream Edge cancels a course.",
 };
 
 export default function RefundPolicyPage() {
   return (
-    <LegalPage title="Refund & Cancellation Policy" effectiveDate="22 October 2026">
+    <LegalPage title="Refund & Cancellation Policy" effectiveDate="3 November 2026">
       <p>
-        This policy explains when and how you can cancel a Dream Edge Online
-        subscription and request a refund. By completing a purchase on
-        dreamedgelearning.com or the Dream Edge mobile app, you agree to the terms
-        on this page.
+        This policy explains when a refund is possible on Dream Edge Online. By
+        completing a purchase on dreamedgelearning.com or the Dream Edge mobile
+        app, you agree to the terms on this page. Please read it before you pay.
       </p>
 
-      <h2>1. 7-day refund window</h2>
+      <h2>1. Paid enrolments are final</h2>
       <p>
-        We offer a <strong>7-day refund window</strong> on every paid course,
-        starting from the day of purchase. If you decide the course is not
-        right for you within those first 7 days and you have not consumed more
-        than 20% of the course content (as measured by lessons marked complete
-        or watched in full), you are eligible for a full refund of the amount
-        paid.
+        <strong>
+          Once you enrol in a paid course, the enrolment is final and no refund
+          is available.
+        </strong>{" "}
+        A course gives you immediate access to recorded lessons, notes, past
+        papers, downloadable material and test series. That access cannot be
+        returned once it has been granted, so we do not offer a trial window, a
+        cooling-off period, or refunds for change of mind.
+      </p>
+      <p>In particular, a refund is not available because:</p>
+      <ul>
+        <li>You changed your mind after paying.</li>
+        <li>You did not start the course, or did not use it as much as you planned.</li>
+        <li>You enrolled in the wrong class, board or subject by mistake.</li>
+        <li>You are dissatisfied with teaching style, pace, or difficulty level.</li>
+        <li>Your schedule, school timetable or personal circumstances changed.</li>
+        <li>You could not attend live classes, which remain available as recordings.</li>
+        <li>
+          Your device, internet connection or storage was not sufficient to use
+          the course.
+        </li>
+      </ul>
+      <p>
+        We publish detailed syllabus, sample lessons and pricing on every course
+        page so you can decide before you pay. If you are unsure whether a
+        course is right for you, contact us at{" "}
+        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> before
+        purchasing — we are happy to advise.
+      </p>
+
+      <h2>2. The one case where a refund is issued</h2>
+      <p>
+        <strong>
+          If Dream Edge cancels a course, a refund is issued for that course.
+        </strong>{" "}
+        This applies when our team withdraws or discontinues a course you are
+        enrolled in and we are unable to deliver the remaining content.
       </p>
       <ul>
-        <li>Request must be made within 7 calendar days of the purchase date.</li>
         <li>
-          Course consumption must be below 20% at the time of request.
+          The refund is calculated on the amount you actually paid for that
+          course, after any discount or referral code.
         </li>
         <li>
-          Refunds are processed to the original payment method only.
-        </li>
-      </ul>
-
-      <h2>2. What is not refundable</h2>
-      <ul>
-        <li>
-          Courses purchased more than 7 days ago, regardless of consumption.
+          Where a course is cancelled partway through, the refund is calculated
+          on a pro-rata basis for the undelivered portion of the course.
         </li>
         <li>
-          Courses where more than 20% of the lessons have been accessed.
+          You do not need to apply. We identify every affected enrolment and
+          initiate the refund ourselves, and we notify you by email and in-app
+          notification when we do.
         </li>
         <li>
-          Live-class seats where the class has already been held, or where
-          you have joined any live session on the schedule.
-        </li>
-        <li>
-          Downloaded notes, PDFs, printables, or any other digital assets
-          whose files have already been downloaded to your device.
-        </li>
-        <li>
-          Promotional, discounted, or referral-code purchases where the
-          original invoice value was less than ₹1 (one rupee) after discount.
+          Refunds are returned to the original payment method only. We cannot
+          redirect a refund to a different card, account or UPI ID.
         </li>
       </ul>
-
-      <h2>3. How to request a refund</h2>
       <p>
-        Email <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>{" "}
-        from the email address registered on your Dream Edge account with the
-        following:
+        Rescheduling a live class, replacing a teacher, or changing the order in
+        which topics are taught is not a cancellation. Only the withdrawal of
+        the course itself is.
       </p>
-      <ul>
-        <li>Your full name and registered phone number.</li>
-        <li>The course name and the Razorpay order ID shown on your invoice.</li>
-        <li>A short reason — we read every one of these and use them to improve.</li>
-      </ul>
+
+      <h2>3. Payment debited but access not granted</h2>
       <p>
-        We will confirm receipt within 1 working day, review eligibility
-        against the rules above, and respond with the decision within 3
-        working days.
+        This is not a refund of a course — it is the correction of a failed
+        transaction, and it is always put right. If money left your account but
+        the course did not appear in your dashboard (for example, the payment
+        callback failed), write to{" "}
+        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> with the
+        Razorpay payment ID and the registered phone number on your account. We
+        will either grant the access or return the full amount within{" "}
+        <strong>2 working days</strong> of confirming the payment with Razorpay.
+      </p>
+      <p>
+        The same applies to a duplicate payment: if you were charged twice for
+        the same course, the duplicate charge is returned in full.
       </p>
 
       <h2>4. Refund timelines</h2>
       <p>
-        Approved refunds are initiated on our side within 2 working days of
-        approval. Razorpay typically returns the money to the original payment
-        method within <strong>5 to 7 working days</strong> of that initiation.
-        Some banks and card networks take up to 10 working days — this part is
-        outside our control, and we are happy to share the Razorpay refund
-        reference ID so you can trace it with your bank.
+        Where a refund is due under section 2 or 3, we initiate it on our side
+        within <strong>2 working days</strong>. Razorpay then typically returns
+        the money to the original payment method within{" "}
+        <strong>5 to 7 working days</strong>. Some banks and card networks take
+        up to 10 working days — that part is outside our control, and we will
+        share the Razorpay refund reference ID so you can trace it with your
+        bank.
       </p>
 
-      <h2>5. Cancellations before purchase</h2>
+      <h2>5. Cancelling before you pay</h2>
       <p>
-        You can abandon the checkout at any point before you complete payment.
-        Nothing is charged until Razorpay confirms the payment and we grant
-        access to the course. If a payment was debited from your account but
-        access was not granted (for example, the Razorpay callback failed),
-        write to us at the email above and we will either grant the access or
-        issue a full refund within 2 working days.
+        You can leave the checkout at any point before completing payment, and
+        nothing is charged. Access is granted only after Razorpay confirms the
+        payment.
       </p>
 
-      <h2>6. Exceptional cases</h2>
+      <h2>6. Offline and counter payments</h2>
       <p>
-        We reserve the right to approve refund requests outside the 7-day
-        window in genuinely exceptional circumstances — bereavement, serious
-        illness, prolonged medical emergency, documented account compromise,
-        or a technical issue on our side that materially prevented you from
-        using the course. These decisions are made case by case.
+        Fees collected in cash, by UPI or by cheque at the Dream IIT centre in
+        Kalmeshwar follow this same policy. Where a refund is due, it is paid
+        back through the same channel it was collected, against the receipt
+        issued at the counter.
       </p>
 
       <h2>7. Chargebacks</h2>
       <p>
-        We encourage you to reach out to us before initiating a chargeback
-        with your bank or card issuer. In most cases we can resolve the issue
-        within 1–2 working days. Chargebacks initiated without first
-        contacting support may result in loss of access to all courses on
-        your account while the dispute is reviewed.
+        Please contact us before raising a chargeback with your bank or card
+        issuer. In most cases we can resolve the matter within 1–2 working
+        days. A chargeback raised without contacting support first may result
+        in suspension of access to all courses on your account while the
+        dispute is reviewed.
       </p>
 
       <h2>8. Changes to this policy</h2>
       <p>
-        We may update this policy from time to time. The effective date at
-        the top of this page always reflects the current version. Material
-        changes will be communicated by email to the address on your account.
+        We may update this policy from time to time. The effective date at the
+        top of this page always reflects the current version, and the policy
+        that applies to your purchase is the one in force on the day you paid.
+        Material changes will be communicated by email to the address on your
+        account.
       </p>
 
       <h2>9. Contact</h2>
       <p>
         For anything related to refunds or cancellations:{" "}
-        <a href={`mailto:${SUPPORT_EMAIL}`}>
-          {SUPPORT_EMAIL}
-        </a>
-        .
+        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
       </p>
     </LegalPage>
   );

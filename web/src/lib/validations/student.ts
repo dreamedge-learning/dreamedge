@@ -118,6 +118,12 @@ export const testimonialSchema = z
       .string()
       .regex(/^\d{4}$/, "Year must be a 4-digit year.")
       .optional(),
+    course_name: z.string().max(120, "Course name is too long.").optional(),
+    marks_or_rank: z.string().max(60, "Marks or rank is too long.").optional(),
+    is_topper: z
+      .union([z.literal("true"), z.literal("false")])
+      .default("false")
+      .transform((value) => value === "true"),
   })
   .refine(
     (value) => value.type !== "video" || value.video_url !== undefined,
@@ -135,6 +141,9 @@ export function testimonialInput(formData: FormData) {
     video_url: formText(formData, "video_url"),
     type: formText(formData, "type") ?? "text",
     year: formText(formData, "year"),
+    course_name: formText(formData, "course_name"),
+    marks_or_rank: formText(formData, "marks_or_rank"),
+    is_topper: formText(formData, "is_topper") === "true" ? "true" : "false",
   };
 }
 

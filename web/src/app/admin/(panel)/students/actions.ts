@@ -714,23 +714,33 @@ export async function createTestimonial(formData: FormData) {
       .from("testimonials")
       .select("id", { count: "exact", head: true });
 
-    const { error } = await supabase.from("testimonials").insert({
-      student_name: parsed.data.student_name,
-      content: parsed.data.content ?? null,
-      video_url: parsed.data.video_url ?? null,
-      type: parsed.data.type,
-      year: parsed.data.year ?? String(new Date().getFullYear()),
-      is_visible: true,
-      weight: (count ?? 0) + 1,
-    });
+    const { data: created, error } = await supabase
+      .from("testimonials")
+      .insert({
+        student_name: parsed.data.student_name,
+        content: parsed.data.content ?? null,
+        video_url: parsed.data.video_url ?? null,
+        type: parsed.data.type,
+        year: parsed.data.year ?? String(new Date().getFullYear()),
+        course_name: parsed.data.course_name ?? null,
+        marks_or_rank: parsed.data.marks_or_rank ?? null,
+        is_topper: parsed.data.is_topper,
+        is_visible: true,
+        weight: (count ?? 0) + 1,
+      })
+      .select("id")
+      .single();
 
-    if (error) {
+    if (error || !created) {
       console.error("createTestimonial failed:", error);
       return { error: "Something went wrong. Please try again." };
     }
 
     revalidatePath("/admin/students/testimonials");
-    return { success: true };
+    revalidatePath("/");
+    // The id goes back so the caller can attach a photo, which needs a row to
+    // hang the storage path off.
+    return { success: true, id: created.id as string };
   } catch (err) {
     console.error("createTestimonial failed:", err);
     return { error: describeFailure(err) };
@@ -760,6 +770,9 @@ export async function updateTestimonial(id: string, formData: FormData) {
         video_url: parsed.data.video_url ?? null,
         type: parsed.data.type,
         year: parsed.data.year ?? String(new Date().getFullYear()),
+        course_name: parsed.data.course_name ?? null,
+        marks_or_rank: parsed.data.marks_or_rank ?? null,
+        is_topper: parsed.data.is_topper,
       })
       .eq("id", parsedId.data);
 
@@ -769,9 +782,143 @@ export async function updateTestimonial(id: string, formData: FormData) {
     }
 
     revalidatePath("/admin/students/testimonials");
-    return { success: true };
+    revalidatePath("/");
+    return { success: true, id: parsedId.data };
   } catch (err) {
     console.error("updateTestimonial failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+/**
+ * Photos for testimonial and topper cards.
+ *
+ * The bucket is public because these render on the signed-out landing page,
+ * so a signed URL would cost a round trip per card and buy nothing. The file
+ * is keyed by testimonial id, which is why a new testimonial is inserted
+ * first and the photo attached second.
+ */
+const TESTIMONIAL_PHOTO_BUCKET = "testimonial-photos";
+
+const ALLOWED_PHOTO_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+] as const;
+
+const ALLOWED_PHOTO_EXTS = ["jpg", "jpeg", "png", "webp", "avif"];
+
+export async function uploadTestimonialPhoto(
+  testimonialId: string,
+  formData: FormData
+) {
+  try {
+    await assertAdmin(["super_admin", "support_staff"]);
+    const supabase = await createClient();
+
+    const parsedId = testimonialIdSchema.safeParse(testimonialId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    const file = formData.get("photo") as File | null;
+    if (!file || file.size === 0) {
+      return { error: "No photo provided." };
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      return { error: "Photo must be under 2MB." };
+    }
+
+    if (!(ALLOWED_PHOTO_TYPES as readonly string[]).includes(file.type)) {
+      return { error: "Only JPEG, PNG, WebP and AVIF images are allowed." };
+    }
+
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    if (!ALLOWED_PHOTO_EXTS.includes(ext)) {
+      return { error: "Invalid file extension." };
+    }
+
+    const path = `testimonials/${parsedId.data}/photo.${ext}`;
+
+    // A replacement that arrives as a different format would otherwise leave
+    // the old file behind, still public and still paid for.
+    await supabase.storage
+      .from(TESTIMONIAL_PHOTO_BUCKET)
+      .remove(
+        ALLOWED_PHOTO_EXTS.filter((e) => e !== ext).map(
+          (e) => `testimonials/${parsedId.data}/photo.${e}`
+        )
+      );
+
+    const { error: uploadError } = await supabase.storage
+      .from(TESTIMONIAL_PHOTO_BUCKET)
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) {
+      console.error("uploadTestimonialPhoto failed:", uploadError);
+      return { error: "Something went wrong. Please try again." };
+    }
+
+    const { data: urlData } = supabase.storage
+      .from(TESTIMONIAL_PHOTO_BUCKET)
+      .getPublicUrl(path);
+
+    // The path is stable across replacements, so without a version marker the
+    // CDN and the browser both keep serving the previous photo.
+    const publicUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+
+    const { error: updateError } = await supabase
+      .from("testimonials")
+      .update({ student_photo_url: publicUrl })
+      .eq("id", parsedId.data);
+
+    if (updateError) {
+      console.error("uploadTestimonialPhoto failed:", updateError);
+      return { error: "Something went wrong. Please try again." };
+    }
+
+    revalidatePath("/admin/students/testimonials");
+    revalidatePath("/");
+    return { success: true, url: publicUrl };
+  } catch (err) {
+    console.error("uploadTestimonialPhoto failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+export async function removeTestimonialPhoto(testimonialId: string) {
+  try {
+    await assertAdmin(["super_admin", "support_staff"]);
+    const supabase = await createClient();
+
+    const parsedId = testimonialIdSchema.safeParse(testimonialId);
+    if (!parsedId.success) {
+      return { error: firstIssue(parsedId.error) };
+    }
+
+    await supabase.storage
+      .from(TESTIMONIAL_PHOTO_BUCKET)
+      .remove(
+        ALLOWED_PHOTO_EXTS.map((e) => `testimonials/${parsedId.data}/photo.${e}`)
+      );
+
+    const { error } = await supabase
+      .from("testimonials")
+      .update({ student_photo_url: null })
+      .eq("id", parsedId.data);
+
+    if (error) {
+      console.error("removeTestimonialPhoto failed:", error);
+      return { error: "Something went wrong. Please try again." };
+    }
+
+    revalidatePath("/admin/students/testimonials");
+    revalidatePath("/");
+    return { success: true };
+  } catch (err) {
+    console.error("removeTestimonialPhoto failed:", err);
     return { error: describeFailure(err) };
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { ChevronLeft, ChevronRight, Star, Quote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -69,13 +70,25 @@ export function TestimonialsSection({
             </p>
 
             <div className="mt-6 flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-orange/10 text-sm font-bold text-brand-orange">
-                {current.student_name
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")
-                  .slice(0, 2)}
-              </div>
+              {current.avatar_url ? (
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full ring-2 ring-brand-orange/20">
+                  <Image
+                    src={current.avatar_url}
+                    alt={current.student_name}
+                    fill
+                    sizes="48px"
+                    className="object-cover"
+                  />
+                </div>
+              ) : (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-orange/10 text-sm font-bold text-brand-orange">
+                  {current.student_name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)}
+                </div>
+              )}
               <div>
                 <p className="font-semibold">{current.student_name}</p>
                 <div className="flex items-center gap-2">

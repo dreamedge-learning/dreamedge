@@ -27,6 +27,7 @@ import {
   Target,
   Award,
   ImageIcon,
+  RotateCcw,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
 import { AdminRoleProvider } from "@/components/admin/admin-role-context";
@@ -129,6 +130,14 @@ const navItems: NavItem[] = [
     label: "Revenue",
     href: "/admin/revenue",
     icon: IndianRupee,
+    roles: ["super_admin", "accountant"],
+  },
+  {
+    // Its own section rather than a tab inside Revenue: a refund is a
+    // decision somebody has to find and act on, not a report to browse past.
+    label: "Refunds",
+    href: "/admin/refunds",
+    icon: RotateCcw,
     roles: ["super_admin", "accountant"],
   },
   {

@@ -1048,6 +1048,45 @@ export type Database = {
           },
         ]
       }
+      play_claims: {
+        Row: {
+          claimed_at: string
+          content_item_id: string
+          decision: Json
+          id: string
+          student_id: string
+        }
+        Insert: {
+          claimed_at?: string
+          content_item_id: string
+          decision: Json
+          id: string
+          student_id: string
+        }
+        Update: {
+          claimed_at?: string
+          content_item_id?: string
+          decision?: Json
+          id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "play_claims_content_item_id_fkey"
+            columns: ["content_item_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "play_claims_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       question_bank: {
         Row: {
           content: string
@@ -1706,9 +1745,12 @@ export type Database = {
         Row: {
           class: string | null
           content: string | null
+          course_name: string | null
           created_at: string
           id: string
+          is_topper: boolean
           is_visible: boolean
+          marks_or_rank: string | null
           rating: number | null
           student_name: string
           student_photo_url: string | null
@@ -1720,9 +1762,12 @@ export type Database = {
         Insert: {
           class?: string | null
           content?: string | null
+          course_name?: string | null
           created_at?: string
           id?: string
+          is_topper?: boolean
           is_visible?: boolean
+          marks_or_rank?: string | null
           rating?: number | null
           student_name: string
           student_photo_url?: string | null
@@ -1734,9 +1779,12 @@ export type Database = {
         Update: {
           class?: string | null
           content?: string | null
+          course_name?: string | null
           created_at?: string
           id?: string
+          is_topper?: boolean
           is_visible?: boolean
+          marks_or_rank?: string | null
           rating?: number | null
           student_name?: string
           student_photo_url?: string | null
@@ -2008,10 +2056,12 @@ export type Database = {
         Args: { p_email: string; p_ip?: string; p_succeeded?: boolean }
         Returns: undefined
       }
-      register_content_play: {
-        Args: { p_content_item_id: string }
-        Returns: Json
-      }
+      register_content_play:
+        | { Args: { p_content_item_id: string }; Returns: Json }
+        | {
+            Args: { p_content_item_id: string; p_idempotency_key?: string }
+            Returns: Json
+          }
       save_test_answers: {
         Args: { p_answers: Json; p_attempt_id: string }
         Returns: {

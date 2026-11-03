@@ -233,10 +233,14 @@ export interface Testimonial {
   content: string | null;
   video_url: string | null;
   type: TestimonialType;
-  year: number;
+  /** The column is `text`, not a number — a year is a label, not arithmetic. */
+  year: string | null;
+  class: string | null;
+  rating: number | null;
   course_name: string | null;
   marks_or_rank: string | null;
-  photo_url: string | null;
+  /** Public URL in the `testimonial-photos` bucket. */
+  student_photo_url: string | null;
   is_topper: boolean;
   is_visible: boolean;
   weight: number;

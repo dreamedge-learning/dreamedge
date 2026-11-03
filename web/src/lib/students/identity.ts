@@ -9,7 +9,7 @@
 
 export type StudentRegistrationSource = "self_online" | "admin_offline" | "admin_import";
 
-export type StudentGender = "male" | "female" | "other" | "prefer_not_to_say";
+export type StudentGender = "male" | "female";
 
 export const REGISTRATION_SOURCE_LABELS: Record<StudentRegistrationSource, string> = {
   self_online: "Online",

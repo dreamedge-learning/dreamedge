@@ -24,6 +24,11 @@ export default function RevenueError({
         An error occurred while loading the revenue section. Please try again or
         contact support if the problem persists.
       </p>
+      {error.digest ? (
+        <p className="font-mono text-xs text-muted-foreground">
+          Reference: {error.digest}
+        </p>
+      ) : null}
       <Button onClick={reset}>Try again</Button>
     </div>
   );

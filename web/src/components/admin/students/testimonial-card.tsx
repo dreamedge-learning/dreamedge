@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -36,14 +37,26 @@ export function TestimonialCard({
         <div className="flex-1 min-w-0">
           {/* Header */}
           <div className="flex items-center gap-2 mb-2">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-blue text-white text-xs font-medium shrink-0">
-              {testimonial.student_name
-                .split(" ")
-                .map((n) => n[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase()}
-            </div>
+            {testimonial.student_photo_url ? (
+              <div className="relative w-8 h-8 shrink-0 overflow-hidden rounded-full border border-border">
+                <Image
+                  src={testimonial.student_photo_url}
+                  alt={testimonial.student_name}
+                  fill
+                  sizes="32px"
+                  className="object-cover"
+                />
+              </div>
+            ) : (
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-brand-blue text-white text-xs font-medium shrink-0">
+                {testimonial.student_name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <p className="font-medium text-sm truncate">{testimonial.student_name}</p>

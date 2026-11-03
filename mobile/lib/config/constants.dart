@@ -38,8 +38,6 @@ class AppConstants {
   static const genders = <String, String>{
     'male': 'Male',
     'female': 'Female',
-    'other': 'Other',
-    'prefer_not_to_say': 'Prefer not to say',
   };
 
   /// States and union territories, in the same order as the website's list so
