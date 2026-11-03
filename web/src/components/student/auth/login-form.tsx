@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -17,11 +17,20 @@ import {
 import { PasswordInput } from "@/components/student/auth/password-input";
 import { PhoneAuthForm } from "@/components/student/auth/phone-auth-form";
 import { GoogleButton } from "@/components/student/auth/google-button";
+import { AdminLoginPanel } from "@/components/admin/admin-login-panel";
 import { loginStudent } from "@/app/(student)/auth/actions";
+
+type Category = "student" | "admin";
+
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: "student", label: "Student" },
+  { value: "admin", label: "Admin" },
+];
 
 export function LoginForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [category, setCategory] = useState<Category>("student");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -50,14 +59,47 @@ export function LoginForm() {
             </span>
           </div>
           <h1 className="text-2xl font-semibold text-foreground">
-            Welcome Back
+            {category === "student" ? "Welcome Back" : "Team Sign-in"}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Log in to your Dream Edge account
+            {category === "student"
+              ? "Log in to your Dream Edge account"
+              : "For Dream Edge mentors and staff"}
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        {/* Which side of the platform you are signing in to. The student side
+            below is untouched by the switch; the admin side posts to the
+            panel's own sign-in action. */}
+        <div
+          role="tablist"
+          aria-label="Account type"
+          className="mb-5 flex items-center gap-1 rounded-lg border border-border bg-card p-1"
+        >
+          {CATEGORIES.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={category === option.value}
+              onClick={() => setCategory(option.value)}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                category === option.value
+                  ? "bg-brand-orange/10 text-brand-orange"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        {category === "admin" && <AdminLoginPanel />}
+
+        <div
+          className="rounded-xl border border-border bg-card p-6 shadow-sm"
+          hidden={category !== "student"}
+        >
           <Tabs defaultValue="email" className="gap-5">
             <TabsList className="w-full">
               <TabsTrigger value="email">Email</TabsTrigger>
@@ -134,7 +176,10 @@ export function LoginForm() {
           </Tabs>
         </div>
 
-        <p className="text-center text-sm text-muted-foreground mt-6">
+        <p
+          className="text-center text-sm text-muted-foreground mt-6"
+          hidden={category !== "student"}
+        >
           Don&apos;t have an account?{" "}
           <Link
             href="/register"

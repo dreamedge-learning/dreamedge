@@ -3,7 +3,12 @@ import { connection } from "next/server";
 import type { Metadata } from "next";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAdminSession, hasPermission } from "@/lib/admin";
+import { absoluteUrl } from "@/lib/site";
 import { SettingsPageClient } from "./client";
+import {
+  getAdminApplications,
+  getAdminGateStatus,
+} from "./applications-actions";
 import {
   getAdminTeam,
   getRoles,
@@ -18,15 +23,26 @@ export const metadata: Metadata = {
   title: "Settings | Dream Edge Admin",
 };
 
-export default function SettingsPage() {
+interface PageProps {
+  searchParams: Promise<{ tab?: string }>;
+}
+
+const TABS = ["team", "applications", "roles", "audit", "platform"];
+
+export default async function SettingsPage({ searchParams }: PageProps) {
+  // Read here rather than in a client hook so the tab is right on first paint:
+  // the application email links straight to ?tab=applications.
+  const { tab } = await searchParams;
+  const initialTab = tab && TABS.includes(tab) ? tab : "team";
+
   return (
     <Suspense fallback={<SettingsPageSkeleton />}>
-      <SettingsContent />
+      <SettingsContent initialTab={initialTab} />
     </Suspense>
   );
 }
 
-async function SettingsContent() {
+async function SettingsContent({ initialTab }: { initialTab: string }) {
   await connection();
   const admin = await getAdminSession();
 
@@ -42,14 +58,30 @@ async function SettingsContent() {
     );
   }
 
-  const [teamResult, rolesResult, auditResult, settingsResult, adminUsersResult] =
-    await Promise.all([
-      getAdminTeam({ page: 1, pageSize: 10 }),
-      getRoles(),
-      getAuditLog({ page: 1, pageSize: 20 }),
-      getSettings(),
-      getAdminUsersLite(),
-    ]);
+  // Applications and the access gate are super-admin-only. `technical` gets
+  // the rest of the page and no Applications tab at all, rather than a tab
+  // that loads and then refuses.
+  const isSuperAdmin = admin.role_name === "super_admin";
+
+  const [
+    teamResult,
+    rolesResult,
+    auditResult,
+    settingsResult,
+    adminUsersResult,
+    applicationsResult,
+    gateResult,
+  ] = await Promise.all([
+    getAdminTeam({ page: 1, pageSize: 10 }),
+    getRoles(),
+    getAuditLog({ page: 1, pageSize: 20 }),
+    getSettings(),
+    getAdminUsersLite(),
+    isSuperAdmin ? getAdminApplications("pending") : null,
+    isSuperAdmin ? getAdminGateStatus() : null,
+  ]);
+
+  const applications = applicationsResult?.data ?? null;
 
   return (
     <SettingsPageClient
@@ -60,6 +92,13 @@ async function SettingsContent() {
       initialAuditLogCount={auditResult.count}
       initialSettings={settingsResult.data ?? []}
       adminUsers={adminUsersResult.data ?? []}
+      applications={applications}
+      gate={gateResult?.data ?? null}
+      pendingApplications={
+        applications?.filter((row) => row.status === "pending").length ?? 0
+      }
+      applyUrl={absoluteUrl("/admin/apply")}
+      initialTab={initialTab}
     />
   );
 }

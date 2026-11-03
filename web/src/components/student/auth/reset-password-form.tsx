@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,23 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/student/auth/password-input";
 import { resetPassword } from "@/app/(student)/auth/actions";
 
+/**
+ * Where to send someone once they have chosen a password.
+ *
+ * An approved admin arrives here with `?next=/admin/login`, because the
+ * student login they would otherwise land on is not a door they have a key
+ * for. Only a same-site path is honoured -- anything else, including a
+ * protocol-relative `//host`, would turn this into an open redirect.
+ */
+function safeNext(value: string | null): string {
+  if (!value) return "/login";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/login";
+  return value;
+}
+
 export function ResetPasswordForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -39,7 +54,7 @@ export function ResetPasswordForm() {
       }
 
       toast.success("Password updated successfully!");
-      router.push("/login");
+      router.push(safeNext(searchParams.get("next")));
     });
   }
 

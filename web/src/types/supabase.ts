@@ -14,6 +14,116 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_access_gate: {
+        Row: {
+          id: boolean
+          password_hash: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: boolean
+          password_hash: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: boolean
+          password_hash?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_access_gate_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_applications: {
+        Row: {
+          about: string | null
+          approved_admin_user_id: string | null
+          created_at: string
+          decision_reason: string | null
+          documents: Json
+          email: string
+          experience_years: number
+          full_name: string
+          id: string
+          institution: string | null
+          phone: string
+          qualification: string
+          requested_role: Database["public"]["Enums"]["user_role"]
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["admin_application_status"]
+          subjects: string[]
+          submitted_ip: string | null
+          updated_at: string
+        }
+        Insert: {
+          about?: string | null
+          approved_admin_user_id?: string | null
+          created_at?: string
+          decision_reason?: string | null
+          documents?: Json
+          email: string
+          experience_years?: number
+          full_name: string
+          id?: string
+          institution?: string | null
+          phone: string
+          qualification: string
+          requested_role: Database["public"]["Enums"]["user_role"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["admin_application_status"]
+          subjects?: string[]
+          submitted_ip?: string | null
+          updated_at?: string
+        }
+        Update: {
+          about?: string | null
+          approved_admin_user_id?: string | null
+          created_at?: string
+          decision_reason?: string | null
+          documents?: Json
+          email?: string
+          experience_years?: number
+          full_name?: string
+          id?: string
+          institution?: string | null
+          phone?: string
+          qualification?: string
+          requested_role?: Database["public"]["Enums"]["user_role"]
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["admin_application_status"]
+          subjects?: string[]
+          submitted_ip?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_applications_approved_admin_user_id_fkey"
+            columns: ["approved_admin_user_id"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "admin_applications_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_login_attempts: {
         Row: {
           created_at: string
@@ -1959,6 +2069,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_gate_status: {
+        Args: never
+        Returns: {
+          is_set: boolean
+          updated_at: string
+          updated_by_name: string
+        }[]
+      }
       admin_login_blocked: {
         Args: { p_email: string; p_ip?: string }
         Returns: Json
@@ -2070,6 +2188,7 @@ export type Database = {
           server_now: string
         }[]
       }
+      set_admin_gate: { Args: { p_password: string }; Returns: undefined }
       start_test_attempt: {
         Args: { p_test_id: string }
         Returns: {
@@ -2099,8 +2218,10 @@ export type Database = {
             Returns: Json
           }
       touch_admin_last_login: { Args: never; Returns: undefined }
+      verify_admin_gate: { Args: { p_password: string }; Returns: boolean }
     }
     Enums: {
+      admin_application_status: "pending" | "approved" | "rejected"
       banner_position: "home_top" | "home_bottom" | "course_page" | "dashboard"
       batch_status: "upcoming" | "active" | "completed" | "cancelled"
       content_status: "draft" | "published" | "archived"

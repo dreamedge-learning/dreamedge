@@ -31,7 +31,13 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/admin") && !pathname.startsWith("/admin/login")) {
+  // Signed-out visitors are allowed on exactly two admin routes: the sign-in
+  // form, and the application form behind the access gate. Everything else
+  // under /admin needs a session that belongs to an active admin.
+  const isPublicAdminPath =
+    pathname.startsWith("/admin/login") || pathname.startsWith("/admin/apply");
+
+  if (pathname.startsWith("/admin") && !isPublicAdminPath) {
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";

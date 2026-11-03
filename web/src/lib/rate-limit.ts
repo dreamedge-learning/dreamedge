@@ -113,4 +113,8 @@ export const RATE_LIMITS = {
   register: { limit: 5, windowSeconds: 60 * 60 },
   passwordReset: { limit: 4, windowSeconds: 60 * 60 },
   contact: { limit: 5, windowSeconds: 60 * 60 },
+  // The gate in front of the admin application form. One shared password
+  // is only as strong as the number of guesses allowed against it.
+  adminGate: { limit: 5, windowSeconds: 15 * 60 },
+  adminApply: { limit: 3, windowSeconds: 60 * 60 },
 } as const;

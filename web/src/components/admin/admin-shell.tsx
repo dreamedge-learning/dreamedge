@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import {
   LayoutDashboard,
   BookOpen,
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
 import { AdminRoleProvider } from "@/components/admin/admin-role-context";
+import { createClient } from "@/lib/supabase/client";
 import type { AdminSession } from "@/lib/admin";
 import type { UserRole } from "@/types/database";
 import { getInitials } from "@/lib/format";
@@ -167,14 +169,65 @@ function roleLabel(role: string): string {
 
 export function AdminShell({
   admin,
+  pendingApplications,
   children,
 }: {
   admin: AdminSession;
+  /** Admin applications waiting to be reviewed. Always 0 for other roles. */
+  pendingApplications: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [pending, setPending] = useState(pendingApplications);
+  const [serverCount, setServerCount] = useState(pendingApplications);
+
+  // The server count wins whenever the layout re-renders, so approving an
+  // application drops the badge without a reload. Adjusted here during render
+  // rather than in an effect: an effect would render once with the stale count
+  // and then again with the fresh one.
+  if (serverCount !== pendingApplications) {
+    setServerCount(pendingApplications);
+    setPending(pendingApplications);
+  }
+
+  // Live toast for a new application. Only the super admin can read the table,
+  // so only the super admin is sent the row -- postgres_changes applies RLS to
+  // the subscriber. The badge itself comes from a count on the table, so it
+  // stays right whether or not this socket is connected.
+  useEffect(() => {
+    if (admin.role_name !== "super_admin") return;
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel("admin-applications")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "admin_applications" },
+        (payload) => {
+          const row = payload.new as { full_name?: string };
+          setPending((current) => current + 1);
+          toast.info(
+            row.full_name
+              ? `New admin application from ${row.full_name}`
+              : "New admin application",
+            {
+              action: {
+                label: "Review",
+                onClick: () => router.push("/admin/settings?tab=applications"),
+              },
+            }
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [admin.role_name, router]);
 
   const filteredNav = navItems.filter((item) =>
     item.roles.includes(admin.role_name)
@@ -213,6 +266,14 @@ export function AdminShell({
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {item.label}
+                {item.href === "/admin/settings" && pending > 0 && (
+                  <span
+                    className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-xs font-medium text-white"
+                    aria-label={`${pending} application${pending === 1 ? "" : "s"} waiting`}
+                  >
+                    {pending}
+                  </span>
+                )}
               </Link>
               {item.children && active && (
                 <div className="ml-7 mt-1 space-y-0.5 border-l border-border pl-3">
