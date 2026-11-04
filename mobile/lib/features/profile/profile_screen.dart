@@ -118,6 +118,11 @@ class ProfileScreen extends ConsumerWidget {
             },
           ),
           _MenuItem(
+            icon: Icons.chat_bubble_outline,
+            title: 'Send Feedback',
+            onTap: () => context.push('/profile/feedback'),
+          ),
+          _MenuItem(
             icon: Icons.info_outline,
             title: 'About',
             subtitle: 'Version 1.0.0',

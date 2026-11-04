@@ -40,6 +40,9 @@ dependencies:
   # URL launcher
   url_launcher: ^6.3.1
 
+  # App metadata (used for stamping the running build onto student feedback).
+  package_info_plus: ^8.1.0
+
   # Video player
   #
   # No chewie. ExoPlayer plays HLS natively through video_player, and the
