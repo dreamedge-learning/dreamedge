@@ -1,22 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/enrollment.dart';
+import '../../../core/providers/course_rating_provider.dart';
 import '../../../shared/theme/colors.dart';
 import '../../../shared/theme/typography.dart';
+import 'course_rating_stars.dart';
 
-class EnrolledCourseCard extends StatelessWidget {
+class EnrolledCourseCard extends ConsumerWidget {
   final Enrollment enrollment;
 
   const EnrolledCourseCard({super.key, required this.enrollment});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final course = enrollment.course;
     final title = course?.title ?? 'Course';
     final targetClass = course?.targetClass;
     final thumbnailUrl = course?.thumbnailUrl;
+
+    // Current student's own rating for this course, if any. The provider
+    // returns an empty map while loading, which the widget reads as "not
+    // rated yet" -- correct for a brand-new load, and overwritten the
+    // instant the fetch settles.
+    final ratings = ref.watch(myCourseRatingsProvider).maybeWhen(
+          data: (map) => map,
+          orElse: () => const <String, int>{},
+        );
+    final initialStars = ratings[enrollment.courseId];
+    final canRate = enrollment.isActive;
 
     return GestureDetector(
       onTap: () => context.push('/course/${enrollment.courseId}'),
@@ -109,6 +123,17 @@ class EnrolledCourseCard extends StatelessWidget {
                       ],
                     ],
                   ),
+                  // The star control sits inside the card's info column so
+                  // a tap on it is isolated from the surrounding
+                  // GestureDetector by the IconButtons' own hit testing.
+                  if (canRate) ...[
+                    const SizedBox(height: 6),
+                    CourseRatingStars(
+                      courseId: enrollment.courseId,
+                      courseTitle: title,
+                      initialStars: initialStars,
+                    ),
+                  ],
                 ],
               ),
             ),
