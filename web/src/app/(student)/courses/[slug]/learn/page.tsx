@@ -67,6 +67,9 @@ async function fetchFiles(
     .from("content_files")
     .select("id, content_item_id, display_name, size_bytes, storage_path")
     .in("content_item_id", itemIds)
+    // RLS already withholds PowerPoint and Word originals from students; this
+    // says so where the query is, rather than relying on the reader knowing.
+    .eq("is_source_document", false)
     .order("weight", { ascending: true })
     .order("created_at", { ascending: true });
 

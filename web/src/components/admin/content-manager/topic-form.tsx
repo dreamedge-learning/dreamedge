@@ -37,7 +37,7 @@ export function TopicForm({ topic }: { topic: Topic }) {
       if (result.data) {
         updateTopicInTree(result.data);
       }
-      toast.success("Topic updated");
+      toast.success("Folder updated");
     });
   }
 
@@ -45,9 +45,9 @@ export function TopicForm({ topic }: { topic: Topic }) {
     <div className="space-y-6">
       <form onSubmit={handleSave} className="space-y-5">
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Edit Topic</h2>
+        <h2 className="text-lg font-semibold">Folder</h2>
         <p className="text-xs text-muted-foreground">
-          Topics are grouped under subjects and contain content items
+          A folder holds lessons and other folders. Hiding it hides everything inside.
         </p>
       </div>
 
@@ -57,7 +57,7 @@ export function TopicForm({ topic }: { topic: Topic }) {
           id="topic-name"
           name="name"
           defaultValue={topic.name}
-          placeholder="e.g. Number Systems"
+          placeholder="e.g. Chapter 3 — Fractions"
         />
       </div>
 
