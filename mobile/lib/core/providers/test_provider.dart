@@ -47,37 +47,3 @@ final attemptByIdProvider =
     FutureProvider.family<TestAttempt, String>((ref, id) {
   return ref.watch(testServiceProvider).getAttemptById(id);
 });
-
-/// Imperative submit API: await `ref.read(submitTestAttemptProvider)(payload)`.
-///
-/// Carries no score: `submit_test_attempt` grades server-side and the device
-/// only reports what was answered and when the attempt started.
-class SubmitTestPayload {
-  final String testId;
-  final Map<String, dynamic> answers;
-  final DateTime startedAt;
-
-  const SubmitTestPayload({
-    required this.testId,
-    required this.answers,
-    required this.startedAt,
-  });
-}
-
-typedef SubmitTestAttempt = Future<TestSubmissionResult> Function(
-    SubmitTestPayload payload);
-
-final submitTestAttemptProvider = Provider<SubmitTestAttempt>((ref) {
-  return (payload) async {
-    final result = await ref.read(testServiceProvider).submitAttempt(
-          testId: payload.testId,
-          answers: payload.answers,
-          startedAt: payload.startedAt,
-        );
-
-    // Refresh dependent lists.
-    ref.invalidate(myTestAttemptsProvider);
-    ref.invalidate(attemptsForTestProvider(payload.testId));
-    return result;
-  };
-});

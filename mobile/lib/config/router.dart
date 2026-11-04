@@ -45,8 +45,8 @@ final storageServiceProvider = Provider<StorageService>((ref) {
 /// `refreshListenable` is for.
 class _AuthGateRefresh extends ChangeNotifier {
   _AuthGateRefresh(Ref ref) {
-    ref.listen<Object?>(currentSessionProvider, (_, __) => notifyListeners());
-    ref.listen<Object?>(currentStudentProvider, (_, __) => notifyListeners());
+    ref.listen<Object?>(currentSessionProvider, (_, _) => notifyListeners());
+    ref.listen<Object?>(currentStudentProvider, (_, _) => notifyListeners());
   }
 }
 
@@ -79,8 +79,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   }
 
   notifications.pendingRouteNotifier.addListener(drainPendingRoute);
-  ref.listen<Object?>(currentSessionProvider, (_, __) => drainPendingRoute());
-  ref.listen<Object?>(currentStudentProvider, (_, __) => drainPendingRoute());
+  ref.listen<Object?>(currentSessionProvider, (_, _) => drainPendingRoute());
+  ref.listen<Object?>(currentStudentProvider, (_, _) => drainPendingRoute());
   ref.onDispose(() {
     notifications.pendingRouteNotifier.removeListener(drainPendingRoute);
   });

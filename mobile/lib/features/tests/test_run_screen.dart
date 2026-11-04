@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -234,9 +233,16 @@ class _TestRunScreenState extends ConsumerState<TestRunScreen>
         // Ignored: the submit below runs regardless.
       }
 
-      final result =
-          await ref.read(testServiceProvider).submitAttempt(attemptId: id, auto: auto);
+      final result = await ref
+          .read(testServiceProvider)
+          .submitAttempt(attemptId: id, auto: auto);
       if (!mounted) return;
+
+      // Both lists are cached, and the test list gates availability on the
+      // attempt count, so they go stale the moment this attempt closes.
+      ref.invalidate(myTestAttemptsProvider);
+      ref.invalidate(attemptsForTestProvider(widget.testId));
+
       setState(() => _result = result);
     } catch (err) {
       if (!mounted) return;
@@ -960,7 +966,7 @@ class _QuestionInput extends StatelessWidget {
           options: question.options,
           multiple: true,
           selected: answer is List
-              ? (answer).whereType<num>().map((n) => n.toInt()).toList()
+              ? (answer as List).whereType<num>().map((n) => n.toInt()).toList()
               : <int>[],
           onChange: (values) => onAnswer(values),
         );
@@ -996,8 +1002,8 @@ class _QuestionInput extends StatelessWidget {
         return _MatchPairInput(
           pairs: question.matchPairs,
           current: answer is Map
-              ? Map<String, String>.from(
-                  (answer).map((k, v) => MapEntry(k.toString(), v.toString())))
+              ? Map<String, String>.from((answer as Map)
+                  .map((k, v) => MapEntry(k.toString(), v.toString())))
               : <String, String>{},
           onChange: onAnswer,
         );
