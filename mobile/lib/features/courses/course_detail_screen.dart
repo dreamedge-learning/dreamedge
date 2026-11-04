@@ -12,6 +12,7 @@ import '../../core/providers/course_provider.dart';
 import '../../core/providers/enrollment_provider.dart';
 import '../../core/services/enrollment_service.dart';
 import '../../core/utils/extensions.dart';
+import '../../config/storefront.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
 import '../../shared/widgets/shimmer_box.dart';
@@ -251,6 +252,18 @@ class CourseDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildPriceSection(Course course) {
+    // A price is an invitation to buy, which an iOS build may not make.
+    if (!Storefront.canSell) {
+      if (course.price > 0) return const SizedBox.shrink();
+      return Text(
+        'Free',
+        style: AppTypography.heading1.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w800,
+        ),
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -434,6 +447,7 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
         }
 
         if (widget.price > 0) {
+          if (!Storefront.canSell) return const _NotInAccountNotice();
           return SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -461,7 +475,9 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
           child: _spinner(),
         ),
       ),
-      error: (_, _) => SizedBox(
+      error: (_, _) => widget.price > 0 && !Storefront.canSell
+          ? const _NotInAccountNotice()
+          : SizedBox(
         width: double.infinity,
         child: ElevatedButton(
           onPressed: widget.price > 0
@@ -586,6 +602,42 @@ class _SubjectTileState extends State<_SubjectTile> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What a paid course says on a build that does not sell.
+///
+/// Deliberately neutral: no price, no button, no link, and no hint of where
+/// the course can be bought. Apple rejects an app that points to a purchase
+/// made elsewhere. Once the student owns the course, enrolment syncs and this
+/// becomes Continue Learning.
+class _NotInAccountNotice extends StatelessWidget {
+  const _NotInAccountNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_outline_rounded,
+              size: 18, color: AppColors.gray),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'This course is not in your account yet.',
+              style: AppTypography.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+          ),
         ],
       ),
     );
