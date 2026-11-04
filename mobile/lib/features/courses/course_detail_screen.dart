@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/course.dart';
 import '../../core/models/subject.dart';
+import '../../core/models/topic.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/content_provider.dart';
 import '../../core/providers/course_provider.dart';
@@ -336,7 +337,12 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
   }
 
   /// Opens the first playable lesson of the course, falling back to the
-  /// lesson list for the first topic that has content.
+  /// lesson list of the first folder that has content.
+  ///
+  /// Folders nest, so a top-level folder may hold only subfolders. The search
+  /// goes depth first in the order the lesson list shows things -- a folder's
+  /// subfolders, then its own lessons -- which is also the order the website
+  /// steps through with Next.
   Future<void> _continueLearning() async {
     setState(() => _working = true);
 
@@ -344,21 +350,30 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
       final courseService = ref.read(courseServiceProvider);
       final contentService = ref.read(contentServiceProvider);
 
+      Future<bool> openFirstIn(Topic folder) async {
+        final subfolders = await courseService.getSubfolders(folder.id);
+        for (final child in subfolders) {
+          if (await openFirstIn(child)) return true;
+        }
+
+        final contents = await contentService.getContentsByTopic(folder.id);
+        if (contents.isEmpty) return false;
+        if (!mounted) return true;
+
+        final playable = contents.where((c) => c.hasVideo).toList();
+        if (playable.isNotEmpty) {
+          context.push('/player/${playable.first.id}');
+        } else {
+          context.push('/lessons/${folder.id}', extra: folder.name);
+        }
+        return true;
+      }
+
       final subjects = await courseService.getSubjects(widget.courseId);
       for (final subject in subjects) {
         final topics = await courseService.getTopics(subject.id);
         for (final topic in topics) {
-          final contents = await contentService.getContentsByTopic(topic.id);
-          if (contents.isEmpty) continue;
-          if (!mounted) return;
-
-          final playable = contents.where((c) => c.hasVideo).toList();
-          if (playable.isNotEmpty) {
-            context.push('/player/${playable.first.id}');
-          } else {
-            context.push('/lessons/${topic.id}', extra: topic.name);
-          }
-          return;
+          if (await openFirstIn(topic)) return;
         }
       }
 
@@ -510,8 +525,11 @@ class _SubjectTileState extends State<_SubjectTile> {
                           .copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
+                  // Counts every folder in the subject, at any depth -- which
+                  // is what the embedded count returns, so the label says so.
                   Text(
-                    '${widget.subject.topicCount} topics',
+                    '${widget.subject.topicCount} '
+                    '${widget.subject.topicCount == 1 ? 'folder' : 'folders'}',
                     style: AppTypography.caption,
                   ),
                 ],
@@ -532,7 +550,7 @@ class _SubjectTileState extends State<_SubjectTile> {
                           padding: const EdgeInsets.fromLTRB(48, 0, 16, 12),
                           child: Row(
                             children: [
-                              const Icon(Icons.play_circle_outline_rounded,
+                              const Icon(Icons.folder_outlined,
                                   size: 16, color: AppColors.orange),
                               const SizedBox(width: 10),
                               Expanded(
@@ -563,7 +581,7 @@ class _SubjectTileState extends State<_SubjectTile> {
               error: (_, _) => Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Could not load topics',
+                  'Could not load folders',
                   style: AppTypography.caption.copyWith(color: AppColors.error),
                 ),
               ),

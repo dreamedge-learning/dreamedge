@@ -169,6 +169,10 @@ class OfflineStore {
     return rows.map((row) => Subject.fromJson(_payload(row))).toList();
   }
 
+  /// Caches one list of folders. [subjectId] is the list's owner: the subject
+  /// for its top-level folders, or the parent folder for a subfolder list.
+  /// The column keeps its original name; it is only ever matched, never
+  /// joined, so it works as a key for either.
   Future<void> cacheTopics(String subjectId, List<Topic> topics) async {
     final owner = await _requireOwner();
     final db = await _db;

@@ -1,10 +1,15 @@
 import 'subject.dart' show embeddedCount;
 
-/// Maps the live `topics` table:
-/// id, subject_id, name, slug, description, weight, is_visible, created_at.
+/// Maps the live `topics` table -- a folder:
+/// id, subject_id, parent_topic_id, name, slug, description, weight,
+/// is_visible, created_at.
+///
+/// Folders nest. [parentTopicId] is null for a folder directly under its
+/// subject; [subjectId] is always the root subject, at any depth.
 class Topic {
   final String id;
   final String subjectId;
+  final String? parentTopicId;
   final String name;
   final String slug;
   final String? description;
@@ -19,6 +24,7 @@ class Topic {
   const Topic({
     required this.id,
     required this.subjectId,
+    this.parentTopicId,
     required this.name,
     required this.slug,
     this.description,
@@ -32,6 +38,7 @@ class Topic {
     return Topic(
       id: json['id'] as String,
       subjectId: json['subject_id'] as String,
+      parentTopicId: json['parent_topic_id'] as String?,
       name: json['name'] as String? ?? '',
       slug: json['slug'] as String? ?? '',
       description: json['description'] as String?,
@@ -48,6 +55,7 @@ class Topic {
     return {
       'id': id,
       'subject_id': subjectId,
+      'parent_topic_id': parentTopicId,
       'name': name,
       'slug': slug,
       'description': description,
