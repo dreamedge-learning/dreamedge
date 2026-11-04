@@ -140,6 +140,56 @@ async function fetchCourseProgress(
   }
 }
 
+interface CourseRatingRow {
+  course_id: string;
+  stars: number;
+}
+
+/**
+ * Loads the student's existing ratings for the courses on this page. One
+ * query, keyed on the enrolment list rather than fetching every row the
+ * student has ever written, so an old rating for a course they no longer
+ * see here is naturally excluded.
+ *
+ * `course_ratings` is not yet in the generated supabase.ts types -- we were
+ * explicitly asked not to regenerate the file on this change -- so the
+ * table name is cast once and the row shape is declared locally.
+ */
+async function fetchStudentRatings(
+  studentId: string,
+  courseIds: string[]
+): Promise<Record<string, number>> {
+  if (courseIds.length === 0) return {};
+  try {
+    const supabase = await createClient();
+    const q = supabase.from("course_ratings" as never) as unknown as {
+      select: (cols: string) => {
+        eq: (col: string, val: string) => {
+          in: (
+            col: string,
+            vals: string[]
+          ) => Promise<{
+            data: CourseRatingRow[] | null;
+            error: unknown;
+          }>;
+        };
+      };
+    };
+    const { data, error } = await q
+      .select("course_id, stars")
+      .eq("student_id", studentId)
+      .in("course_id", courseIds);
+    if (error || !data) return {};
+    const map: Record<string, number> = {};
+    for (const row of data) {
+      map[row.course_id] = row.stars;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 export default async function MyCoursesPage() {
   const student = await requireCompleteStudentProfile("/dashboard/my-courses");
   const enrollments = await fetchEnrollments(student.id);
@@ -148,12 +198,21 @@ export default async function MyCoursesPage() {
     .filter((e) => e.course != null)
     .map((e) => e.course_id);
 
-  const progressMap = await fetchCourseProgress(student.id, courseIds);
+  const [progressMap, ratings] = await Promise.all([
+    fetchCourseProgress(student.id, courseIds),
+    fetchStudentRatings(student.id, courseIds),
+  ]);
 
   const progressData: Record<string, CourseProgress> = {};
   for (const [courseId, summary] of progressMap) {
     progressData[courseId] = summary;
   }
 
-  return <MyCoursesContent enrollments={enrollments} progress={progressData} />;
+  return (
+    <MyCoursesContent
+      enrollments={enrollments}
+      progress={progressData}
+      ratings={ratings}
+    />
+  );
 }
