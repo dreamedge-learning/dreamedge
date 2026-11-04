@@ -29,6 +29,7 @@ import {
   Award,
   ImageIcon,
   RotateCcw,
+  MessageSquare,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
 import { AdminRoleProvider } from "@/components/admin/admin-role-context";
@@ -150,6 +151,7 @@ const navItems: NavItem[] = [
     children: [
       { label: "Notifications", href: "/admin/engage", icon: Bell },
       { label: "Banners", href: "/admin/engage/banners", icon: ImageIcon },
+      { label: "Feedback", href: "/admin/engage/feedback", icon: MessageSquare },
     ],
   },
   {
@@ -170,11 +172,14 @@ function roleLabel(role: string): string {
 export function AdminShell({
   admin,
   pendingApplications,
+  pendingFeedback,
   children,
 }: {
   admin: AdminSession;
   /** Admin applications waiting to be reviewed. Always 0 for other roles. */
   pendingApplications: number;
+  /** New feedback waiting to be triaged. Always 0 outside super_admin + support_staff. */
+  pendingFeedback: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -183,6 +188,8 @@ export function AdminShell({
   const [profileOpen, setProfileOpen] = useState(false);
   const [pending, setPending] = useState(pendingApplications);
   const [serverCount, setServerCount] = useState(pendingApplications);
+  const [feedbackPending, setFeedbackPending] = useState(pendingFeedback);
+  const [feedbackServerCount, setFeedbackServerCount] = useState(pendingFeedback);
 
   // The server count wins whenever the layout re-renders, so approving an
   // application drops the badge without a reload. Adjusted here during render
@@ -191,6 +198,13 @@ export function AdminShell({
   if (serverCount !== pendingApplications) {
     setServerCount(pendingApplications);
     setPending(pendingApplications);
+  }
+
+  // Same pattern for the feedback badge: a resolve or mark-read triggers a
+  // revalidate on the layout, which brings the fresh count down.
+  if (feedbackServerCount !== pendingFeedback) {
+    setFeedbackServerCount(pendingFeedback);
+    setFeedbackPending(pendingFeedback);
   }
 
   // Live toast for a new application. Only the super admin can read the table,
@@ -220,6 +234,38 @@ export function AdminShell({
               },
             }
           );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [admin.role_name, router]);
+
+  // Live toast for new student feedback. Audience matches the table's RLS --
+  // super admin and support staff only. The badge is still computed from the
+  // table itself, so a disconnected socket means the count is stale by a
+  // navigation, not wrong forever.
+  useEffect(() => {
+    if (admin.role_name !== "super_admin" && admin.role_name !== "support_staff") {
+      return;
+    }
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel("student-feedback-inbox")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "student_feedback" },
+        () => {
+          setFeedbackPending((current) => current + 1);
+          toast.info("New feedback from a student", {
+            action: {
+              label: "Open",
+              onClick: () => router.push("/admin/engage/feedback"),
+            },
+          });
         }
       )
       .subscribe();
@@ -272,6 +318,14 @@ export function AdminShell({
                     aria-label={`${pending} application${pending === 1 ? "" : "s"} waiting`}
                   >
                     {pending}
+                  </span>
+                )}
+                {item.href === "/admin/engage" && feedbackPending > 0 && (
+                  <span
+                    className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-xs font-medium text-white"
+                    aria-label={`${feedbackPending} feedback message${feedbackPending === 1 ? "" : "s"} waiting`}
+                  >
+                    {feedbackPending}
                   </span>
                 )}
               </Link>
