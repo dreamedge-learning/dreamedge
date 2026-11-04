@@ -97,5 +97,3 @@ export async function updateLegalDocument(formData: FormData) {
     return { error: describeFailure(err) };
   }
 }
-
-export { LEGAL_SLUGS };
