@@ -87,18 +87,18 @@ void main() {
   });
 
   group('playback retry schedule', () {
-    test('backs off 3s, 15s then 45s', () {
+    test('backs off 2s, 5s then 12s', () {
       expect(PlayerController.maxPlaybackRetries, 3);
-      expect(PlayerController.retryDelayFor(0), const Duration(seconds: 3));
-      expect(PlayerController.retryDelayFor(1), const Duration(seconds: 15));
-      expect(PlayerController.retryDelayFor(2), const Duration(seconds: 45));
+      expect(PlayerController.retryDelayFor(0), const Duration(seconds: 2));
+      expect(PlayerController.retryDelayFor(1), const Duration(seconds: 5));
+      expect(PlayerController.retryDelayFor(2), const Duration(seconds: 12));
     });
 
     test('an attempt past the end clamps instead of throwing', () {
       // This runs inside a timer callback, where a RangeError would take the
       // player down rather than surface anywhere useful.
-      expect(PlayerController.retryDelayFor(3), const Duration(seconds: 45));
-      expect(PlayerController.retryDelayFor(99), const Duration(seconds: 45));
+      expect(PlayerController.retryDelayFor(3), const Duration(seconds: 12));
+      expect(PlayerController.retryDelayFor(99), const Duration(seconds: 12));
     });
   });
 

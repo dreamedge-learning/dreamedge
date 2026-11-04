@@ -263,6 +263,7 @@ void main() {
         'validUntil': '2027-01-31T00:00:00Z',
         'expiresAt': expiresAt ??
             DateTime.now().add(const Duration(hours: 6)).toIso8601String(),
+        'serverNow': DateTime.now().toUtc().toIso8601String(),
       };
     }
 
@@ -315,6 +316,19 @@ void main() {
     test('a payload with no expiry is treated as already spent', () {
       final json = payloadJson()..remove('expiresAt');
       expect(PlaybackPayload.fromJson(json).isUsable, false);
+    });
+
+    test('a payload with no server clock is refused, not anchored locally',
+        () {
+      // Falling back to the handset's clock would let a student extend an
+      // offline licence from their date settings.
+      final json = payloadJson()..remove('serverNow');
+      expect(() => PlaybackPayload.fromJson(json), throwsFormatException);
+    });
+
+    test('an unparseable server clock is refused too', () {
+      final json = payloadJson()..['serverNow'] = 'not a date';
+      expect(() => PlaybackPayload.fromJson(json), throwsFormatException);
     });
   });
 }
