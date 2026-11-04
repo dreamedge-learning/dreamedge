@@ -95,12 +95,28 @@ export interface SyllabusContentItem {
   progress: ContentProgress | null;
 }
 
+/** A folder. Folders nest to any depth; `folders` are its subfolders. */
 export interface SyllabusTopic {
   id: string;
   name: string;
   description: string | null;
   weight: number;
+  folders: SyllabusTopic[];
   items: SyllabusContentItem[];
+}
+
+/**
+ * Every lesson in a folder and its subfolders, in the order the sidebar shows
+ * them: subfolders first, then the folder's own lessons. Previous / Next and
+ * "resume where you left off" walk this same order, so the buttons never skip
+ * a lesson the sidebar lists between two others.
+ */
+function folderItems(folder: SyllabusTopic): SyllabusContentItem[] {
+  return [...folder.folders.flatMap(folderItems), ...folder.items];
+}
+
+function subjectItems(subject: SyllabusSubject): SyllabusContentItem[] {
+  return subject.topics.flatMap(folderItems);
 }
 
 export interface SyllabusSubject {
@@ -246,8 +262,8 @@ function SyllabusTree({
   return (
     <div className="pb-6">
       {subjects.map((subject) => {
-        const subjectItems = subject.topics.flatMap((t) => t.items);
-        const subjectDone = subjectItems.filter(
+        const lessons = subjectItems(subject);
+        const subjectDone = lessons.filter(
           (i) => progressById[i.id]?.status === "completed"
         ).length;
 
@@ -262,9 +278,9 @@ function SyllabusTree({
               <h3 className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {subject.name}
               </h3>
-              {subjectItems.length > 0 && (
+              {lessons.length > 0 && (
                 <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                  {subjectDone}/{subjectItems.length}
+                  {subjectDone}/{lessons.length}
                 </span>
               )}
             </header>
@@ -275,111 +291,161 @@ function SyllabusTree({
               </p>
             )}
 
-            {subject.topics.map((topic) => {
-              const isOpen = openTopics[topic.id] ?? false;
-              const topicDone = topic.items.filter(
-                (i) => progressById[i.id]?.status === "completed"
-              ).length;
-              const allDone =
-                topic.items.length > 0 && topicDone === topic.items.length;
-
-              return (
-                <div key={topic.id} className="px-2">
-                  <button
-                    type="button"
-                    onClick={() => onToggleTopic(topic.id)}
-                    aria-expanded={isOpen}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted"
-                  >
-                    {isOpen ? (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/90">
-                      {topic.name}
-                    </span>
-                    {allDone ? (
-                      <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
-                    ) : (
-                      topic.items.length > 0 && (
-                        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                          {topicDone}/{topic.items.length}
-                        </span>
-                      )
-                    )}
-                  </button>
-
-                  {isOpen && (
-                    <ul className="mb-1 space-y-0.5 pl-3">
-                      {topic.items.length === 0 && (
-                        <li className="px-3 py-2 text-xs text-muted-foreground">
-                          Nothing published in this chapter yet.
-                        </li>
-                      )}
-                      {topic.items.map((item) => {
-                        const ItemIcon = iconFor(item.type);
-                        const progress = progressById[item.id];
-                        const isCompleted = progress?.status === "completed";
-                        const isInProgress = progress?.status === "in_progress";
-                        const isCurrent = item.id === currentItemId;
-                        const duration = formatDuration(item.duration_seconds);
-
-                        return (
-                          <li key={item.id}>
-                            <button
-                              type="button"
-                              onClick={() => onSelect(item.id)}
-                              aria-current={isCurrent ? "true" : undefined}
-                              className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                isCurrent
-                                  ? "bg-brand-orange/10 font-medium text-brand-orange"
-                                  : "text-foreground/80 hover:bg-muted"
-                              }`}
-                            >
-                              {isCompleted ? (
-                                <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
-                              ) : (
-                                <ItemIcon
-                                  className={`mt-0.5 h-4 w-4 shrink-0 ${
-                                    isCurrent
-                                      ? "text-brand-orange"
-                                      : "text-muted-foreground"
-                                  }`}
-                                />
-                              )}
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate">{item.title}</span>
-                                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                  {TYPE_LABEL[item.type]}
-                                  {duration && (
-                                    <>
-                                      <span aria-hidden="true">&middot;</span>
-                                      {duration}
-                                    </>
-                                  )}
-                                </span>
-                                {isInProgress && (progress?.progressPct ?? 0) > 0 && (
-                                  <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <span
-                                      className="block h-full rounded-full bg-brand-orange"
-                                      style={{ width: `${progress.progressPct}%` }}
-                                    />
-                                  </span>
-                                )}
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
+            {subject.topics.map((topic) => (
+              <FolderNode
+                key={topic.id}
+                folder={topic}
+                depth={0}
+                progressById={progressById}
+                currentItemId={currentItemId}
+                openTopics={openTopics}
+                onToggleTopic={onToggleTopic}
+                onSelect={onSelect}
+              />
+            ))}
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * One folder in the sidebar, with its subfolders nested beneath it and then
+ * its own lessons. Counts and the all-done tick cover the whole branch, so a
+ * chapter reads as finished only when everything inside it is.
+ */
+function FolderNode({
+  folder,
+  depth,
+  progressById,
+  currentItemId,
+  openTopics,
+  onToggleTopic,
+  onSelect,
+}: {
+  folder: SyllabusTopic;
+  depth: number;
+  progressById: Record<string, ContentProgress>;
+  currentItemId: string | null;
+  openTopics: Record<string, boolean>;
+  onToggleTopic: (topicId: string) => void;
+  onSelect: (itemId: string) => void;
+}) {
+  const isOpen = openTopics[folder.id] ?? false;
+  const lessons = folderItems(folder);
+  const done = lessons.filter((i) => progressById[i.id]?.status === "completed").length;
+  const allDone = lessons.length > 0 && done === lessons.length;
+  const isEmpty = folder.folders.length === 0 && folder.items.length === 0;
+
+  return (
+    <div className={depth === 0 ? "px-2" : "pl-3"}>
+      <button
+        type="button"
+        onClick={() => onToggleTopic(folder.id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted"
+      >
+        {isOpen ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <span
+          className={`min-w-0 flex-1 truncate text-sm text-foreground/90 ${
+            depth === 0 ? "font-medium" : ""
+          }`}
+        >
+          {folder.name}
+        </span>
+        {allDone ? (
+          <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
+        ) : (
+          lessons.length > 0 && (
+            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+              {done}/{lessons.length}
+            </span>
+          )
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="mb-1 border-l border-border/60 ml-4">
+          {folder.folders.map((child) => (
+            <FolderNode
+              key={child.id}
+              folder={child}
+              depth={depth + 1}
+              progressById={progressById}
+              currentItemId={currentItemId}
+              openTopics={openTopics}
+              onToggleTopic={onToggleTopic}
+              onSelect={onSelect}
+            />
+          ))}
+
+          <ul className="space-y-0.5 pl-1">
+            {isEmpty && (
+              <li className="px-3 py-2 text-xs text-muted-foreground">
+                Nothing published here yet.
+              </li>
+            )}
+            {folder.items.map((item) => {
+              const ItemIcon = iconFor(item.type);
+              const progress = progressById[item.id];
+              const isCompleted = progress?.status === "completed";
+              const isInProgress = progress?.status === "in_progress";
+              const isCurrent = item.id === currentItemId;
+              const duration = formatDuration(item.duration_seconds);
+
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(item.id)}
+                    aria-current={isCurrent ? "true" : undefined}
+                    className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      isCurrent
+                        ? "bg-brand-orange/10 font-medium text-brand-orange"
+                        : "text-foreground/80 hover:bg-muted"
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                    ) : (
+                      <ItemIcon
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${
+                          isCurrent ? "text-brand-orange" : "text-muted-foreground"
+                        }`}
+                      />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{item.title}</span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        {TYPE_LABEL[item.type]}
+                        {duration && (
+                          <>
+                            <span aria-hidden="true">&middot;</span>
+                            {duration}
+                          </>
+                        )}
+                      </span>
+                      {isInProgress && (progress?.progressPct ?? 0) > 0 && (
+                        <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
+                          <span
+                            className="block h-full rounded-full bg-brand-orange"
+                            style={{ width: `${progress.progressPct}%` }}
+                          />
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -806,19 +872,25 @@ export function LearnContent({
   subjects,
   initialContentId,
 }: LearnContentProps) {
-  const flatItems = useMemo(
-    () => subjects.flatMap((s) => s.topics.flatMap((t) => t.items)),
-    [subjects]
-  );
+  const flatItems = useMemo(() => subjects.flatMap(subjectItems), [subjects]);
 
-  const topicOfItem = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const subject of subjects) {
-      for (const topic of subject.topics) {
-        for (const item of topic.items) map[item.id] = topic.id;
-      }
+  // Which folder holds each lesson, which folder holds each folder, and every
+  // folder id -- so the sidebar can open exactly the chain leading to a
+  // lesson, at whatever depth it sits.
+  const { topicOfItem, parentOfFolder, allFolderIds } = useMemo(() => {
+    const itemMap: Record<string, string> = {};
+    const parentMap: Record<string, string | null> = {};
+    const ids: string[] = [];
+    function walk(folder: SyllabusTopic, parent: string | null) {
+      ids.push(folder.id);
+      parentMap[folder.id] = parent;
+      for (const item of folder.items) itemMap[item.id] = folder.id;
+      for (const child of folder.folders) walk(child, folder.id);
     }
-    return map;
+    for (const subject of subjects) {
+      for (const topic of subject.topics) walk(topic, null);
+    }
+    return { topicOfItem: itemMap, parentOfFolder: parentMap, allFolderIds: ids };
   }, [subjects]);
 
   const [progressById, setProgressById] = useState<Record<string, ContentProgress>>(
@@ -858,10 +930,17 @@ export function LearnContent({
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>(() => {
     const open: Record<string, boolean> = {};
     const focusTopic = initialItem ? topicOfItem[initialItem.id] : undefined;
-    for (const subject of subjects) {
-      for (const topic of subject.topics) {
-        open[topic.id] = focusTopic ? topic.id === focusTopic : true;
-      }
+    if (!focusTopic) {
+      for (const id of allFolderIds) open[id] = true;
+      return open;
+    }
+    // Only the folders on the way down to the lesson being resumed, so a
+    // twelve-chapter course does not open as a wall of lessons.
+    for (const id of allFolderIds) open[id] = false;
+    let cursor: string | null = focusTopic;
+    while (cursor) {
+      open[cursor] = true;
+      cursor = parentOfFolder[cursor] ?? null;
     }
     return open;
   });
@@ -994,12 +1073,23 @@ export function LearnContent({
     (itemId: string) => {
       setCurrentItemId(itemId);
       setSheetOpen(false);
-      const topicId = topicOfItem[itemId];
-      if (topicId) {
-        setOpenTopics((prev) => ({ ...prev, [topicId]: true }));
+      // Open every folder on the way down, not just the lesson's own: with
+      // nesting, Next can land in a subfolder of a folder that is closed.
+      const chain: string[] = [];
+      let cursor: string | null = topicOfItem[itemId] ?? null;
+      while (cursor) {
+        chain.push(cursor);
+        cursor = parentOfFolder[cursor] ?? null;
+      }
+      if (chain.length > 0) {
+        setOpenTopics((prev) => {
+          const next = { ...prev };
+          for (const id of chain) next[id] = true;
+          return next;
+        });
       }
     },
-    [topicOfItem]
+    [topicOfItem, parentOfFolder]
   );
 
   const toggleTopic = useCallback((topicId: string) => {
