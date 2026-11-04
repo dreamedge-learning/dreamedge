@@ -522,3 +522,82 @@ export async function fetchCourses() {
     return { error: describeFailure(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Images for image-based questions
+// ---------------------------------------------------------------------------
+
+/**
+ * Uploads the image an image-based question is built around.
+ *
+ * The editor used to call `URL.createObjectURL(file)` and hand the resulting
+ * `blob:` URL back as the image. That URL lives and dies with the tab, so the
+ * question was broken the moment the page closed -- and the editor showed an
+ * upload succeeding, so nothing said so.
+ *
+ * Uploaded through the action rather than a signed URL, like the testimonial
+ * photo path: the 2 MB cap keeps it well under the request body limit, and a
+ * question image has no business being larger.
+ */
+const QUESTION_IMAGE_BUCKET = "question-images";
+
+const ALLOWED_QUESTION_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+] as const;
+
+const EXTENSION_FOR_IMAGE_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
+};
+
+export async function uploadQuestionImage(formData: FormData) {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    const file = formData.get("image") as File | null;
+    if (!file || file.size === 0) {
+      return { error: "No image provided." };
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      return { error: "Image must be under 2 MB." };
+    }
+
+    if (!(ALLOWED_QUESTION_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+      return { error: "Only JPEG, PNG, WebP and AVIF images are allowed." };
+    }
+
+    // The extension comes from the type we accepted, not from the filename: a
+    // browser reports no type for a format it does not know, and the name is
+    // the part the caller controls.
+    const extension = EXTENSION_FOR_IMAGE_TYPE[file.type];
+
+    // Keyed on a fresh UUID rather than the question id, because the editor
+    // uploads while the question is still unsaved and has no id yet.
+    const path = `questions/${crypto.randomUUID()}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from(QUESTION_IMAGE_BUCKET)
+      .upload(path, file, { upsert: false });
+
+    if (uploadError) {
+      console.error("uploadQuestionImage failed:", uploadError);
+      return { error: "Could not upload that image. Please try again." };
+    }
+
+    const { data } = supabase.storage
+      .from(QUESTION_IMAGE_BUCKET)
+      .getPublicUrl(path);
+
+    return { data: { url: data.publicUrl } };
+  } catch (err) {
+    console.error("uploadQuestionImage failed:", err);
+    return { error: describeFailure(err) };
+  }
+}

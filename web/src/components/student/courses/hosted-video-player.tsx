@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { claimContentPlay } from "@/app/(student)/courses/[slug]/learn/actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,12 @@ interface PlaybackPayload {
   mp4: Record<string, string>;
   thumbnail: string | null;
   durationSeconds: number | null;
+
+  /**
+   * How many times this lesson may be played, or null for unlimited. The
+   * player claims one play against it when playback starts.
+   */
+  playLimit: number | null;
 
   /** When these URLs stop working. Used to re-sign before they do. */
   expiresAt: string;
@@ -98,6 +105,49 @@ export function HostedVideoPlayer({
   const [speed, setSpeed] = useState(1);
   const [quality, setQuality] = useState<string>(AUTO);
   const [resumePrompt, setResumePrompt] = useState(false);
+  const [limitNotice, setLimitNotice] = useState<string | null>(null);
+
+  // One key for the life of one viewing. The component is keyed on the
+  // content item, so a remount is a new lesson and deserves a new key, while
+  // a retry inside this viewing reuses it and gets the first decision back
+  // rather than spending a second play. Same shape as the app's
+  // `_playClaimKey ??= _newUuidV4()`.
+  const claimKeyRef = useRef<string | null>(null);
+  const claimedRef = useRef(false);
+
+  /**
+   * Claims a play the first time the student actually presses play.
+   *
+   * Not on mount: opening a lesson and not watching it must not cost a play,
+   * and the URL is fetched on mount. Not on every play event either -- one
+   * claim per viewing, like the app, so pausing and resuming is free.
+   */
+  const ensurePlayClaimed = useCallback(
+    async (video: HTMLVideoElement, limit: number | null) => {
+      if (limit === null || claimedRef.current) return;
+      claimedRef.current = true;
+
+      const key = (claimKeyRef.current ??= crypto.randomUUID());
+      const result = await claimContentPlay(contentItemId, key);
+
+      if (result.allowed) return;
+
+      // `allowed: false` is not always a spent limit -- the function answers
+      // the same way when it cannot resolve the caller to a student. Only the
+      // real limit stops playback; anything else lets the lesson run, because
+      // blocking a paying student over a bookkeeping failure is the worse
+      // mistake. The app draws the same distinction.
+      if (result.reason !== "limit_reached") return;
+
+      video.pause();
+      setLimitNotice(
+        result.limit > 0
+          ? `You have used all ${result.limit} plays of this lesson.`
+          : "You have reached the replay limit for this lesson."
+      );
+    },
+    [contentItemId]
+  );
 
   // Fetch the signed URLs, and keep them signed.
   //
@@ -320,12 +370,27 @@ export function HostedVideoPlayer({
             const { pct, position } = readProgress(event.currentTarget);
             onTick(pct, position);
           }}
+          onPlay={(event) => {
+            void ensurePlayClaimed(event.currentTarget, payload.playLimit);
+          }}
           onPause={(event) => {
             const { pct, position } = readProgress(event.currentTarget);
             onFlush(pct, position);
           }}
           onEnded={(event) => onEnded(event.currentTarget.currentTime)}
         />
+
+        {limitNotice && (
+          <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/80">
+            <div className="flex max-w-sm flex-col items-center gap-2 px-6 text-center">
+              <AlertTriangle className="h-6 w-6 text-amber-400" />
+              <p className="text-sm font-medium text-white">{limitNotice}</p>
+              <p className="text-xs text-white/70">
+                Replay limits apply per lesson on the website and in the app.
+              </p>
+            </div>
+          </div>
+        )}
 
         {resumePrompt && (
           <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/70">

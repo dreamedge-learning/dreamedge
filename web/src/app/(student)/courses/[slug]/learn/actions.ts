@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { uuid } from "@/lib/validations/form";
 
 interface ActionResult<T = unknown> {
   data?: T;
@@ -228,5 +229,66 @@ export async function markContentComplete(
     return result;
   } catch {
     return { error: "Something went wrong" };
+  }
+}
+
+/**
+ * Claims one play against a lesson's play limit.
+ *
+ * Play limits were enforced only in the Flutter app: the website read
+ * `play_limit`, displayed it, and never claimed anything, so a student could
+ * watch a two-play lesson all afternoon in a browser. This closes that.
+ *
+ * The semantics are copied from the app's `_ensurePlayClaimed` deliberately,
+ * because a play has to mean the same thing on both platforms or the limit is
+ * incoherent: claimed once when playback actually starts, not when the page
+ * opens; only when a limit exists; and keyed by an idempotency key the caller
+ * holds for the life of one viewing, so a retry after a timeout returns the
+ * first decision instead of spending a second play.
+ *
+ * Runs on the request-scoped client, not the service role:
+ * `register_content_play` resolves the student from `auth.uid()`.
+ */
+export async function claimContentPlay(
+  contentItemId: string,
+  idempotencyKey: string
+): Promise<{
+  allowed: boolean;
+  plays: number;
+  limit: number;
+  reason: string;
+}> {
+  const failOpen = { allowed: true, plays: 0, limit: 0, reason: "unavailable" };
+
+  try {
+    const parsedItem = uuid("Lesson").safeParse(contentItemId);
+    const parsedKey = uuid("Play key").safeParse(idempotencyKey);
+    if (!parsedItem.success || !parsedKey.success) return failOpen;
+
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("register_content_play", {
+      p_content_item_id: parsedItem.data,
+      p_idempotency_key: parsedKey.data,
+    });
+
+    if (error || !data || typeof data !== "object") {
+      // Fails open, like the app does. A broken counter must not stop a
+      // paying student watching a lesson they are entitled to -- and the
+      // route's own check still refuses an already-exhausted lesson on the
+      // next load, so an outage cannot be farmed for unlimited plays.
+      if (error) console.error("[play claim] failed:", error);
+      return failOpen;
+    }
+
+    const result = data as Record<string, unknown>;
+    return {
+      allowed: result.allowed === true,
+      plays: Number(result.plays) || 0,
+      limit: Number(result.limit) || 0,
+      reason: typeof result.reason === "string" ? result.reason : "ok",
+    };
+  } catch (err) {
+    console.error("[play claim] failed:", err);
+    return failOpen;
   }
 }

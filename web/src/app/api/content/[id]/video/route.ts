@@ -49,7 +49,7 @@ export async function GET(
   const { data: item } = await service
     .from("content_items")
     .select(
-      "id, status, type, file_url, video_provider, bunny_video_guid, video_status, video_thumbnail_url, video_resolutions, duration_seconds"
+      "id, status, type, file_url, video_provider, bunny_video_guid, video_status, video_thumbnail_url, video_resolutions, duration_seconds, play_limit"
     )
     .eq("id", id)
     .maybeSingle();
@@ -76,6 +76,34 @@ export async function GET(
     );
   }
 
+  // Whether this student has any plays left, checked but NOT claimed.
+  //
+  // The claim happens when playback starts, from the player, because that is
+  // when the app claims and a play has to mean the same thing on both. This
+  // is the other half: refusing to sign a URL for a lesson whose plays are
+  // already spent. Without it a crafted client could skip the claim and keep
+  // asking for fresh tokens forever. Read-only, so it cannot double-count.
+  if (item.play_limit !== null) {
+    const { data: progress } = await service
+      .from("student_progress")
+      .select("play_count")
+      .eq("student_id", caller.studentId)
+      .eq("content_item_id", id)
+      .maybeSingle();
+
+    if ((progress?.play_count ?? 0) >= item.play_limit) {
+      return NextResponse.json(
+        {
+          error: "You have reached the replay limit for this lesson.",
+          reason: "limit_reached",
+          plays: progress?.play_count ?? 0,
+          limit: item.play_limit,
+        },
+        { status: 403, headers: { "Cache-Control": "no-store, private" } }
+      );
+    }
+  }
+
   const expiresAt = new Date(
     Date.now() + PLAYBACK_TTL_SECONDS * 1000
   ).toISOString();
@@ -88,6 +116,7 @@ export async function GET(
     durationSeconds: item.duration_seconds,
     isDownloadable: entitlement.isDownloadable,
     offlineLicenseDays: entitlement.offlineLicenseDays,
+    playLimit: item.play_limit,
     expiresAt,
   };
 

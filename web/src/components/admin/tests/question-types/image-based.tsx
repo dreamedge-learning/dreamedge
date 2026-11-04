@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { ImagePlus, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { uploadQuestionImage } from "@/app/admin/(panel)/content/tests/actions";
 import { McqSingle } from "./mcq-single";
 import { McqMultiple } from "./mcq-multiple";
 import { TrueFalse } from "./true-false";
@@ -42,13 +44,32 @@ export function ImageBased({
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
+  /**
+   * Uploads the image and stores the URL it was given.
+   *
+   * This used to be `URL.createObjectURL(file)`, which produced a `blob:`
+   * URL that only resolves inside the tab that made it. It rendered perfectly
+   * in the editor and was dead in every test that used it.
+   */
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // Cleared so picking the same file again after a failure re-fires change.
+    e.target.value = "";
     if (!file) return;
+
     setUploading(true);
     try {
-      const url = URL.createObjectURL(file);
-      onImageChange(url);
+      const formData = new FormData();
+      formData.set("image", file);
+
+      const result = await uploadQuestionImage(formData);
+
+      if (result.error || !result.data) {
+        toast.error(result.error ?? "Could not upload that image.");
+        return;
+      }
+
+      onImageChange(result.data.url);
     } finally {
       setUploading(false);
     }
