@@ -139,7 +139,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   hint: 'Create a password',
                   prefixIcon: Icons.lock_outlined,
                   isPassword: true,
-                  validator: Validators.password,
+                  validator: Validators.newPassword,
                 ),
                 const SizedBox(height: 16),
                 AuthTextField(

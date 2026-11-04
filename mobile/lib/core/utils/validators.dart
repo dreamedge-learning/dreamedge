@@ -14,12 +14,27 @@ class Validators {
     return null;
   }
 
+  /// Signing in. Presence only: a length rule here would lock out anyone
+  /// whose password predates the current minimum, and the server is the one
+  /// that decides whether it matches.
   static String? password(String? value) {
     if (value == null || value.isEmpty) {
       return 'Password is required';
     }
-    if (value.length < 6) {
-      return 'Password must be at least 6 characters';
+    return null;
+  }
+
+  /// Choosing a password. Must agree with the website's register and reset
+  /// actions and with the minimum length set in Supabase Auth, or a password
+  /// accepted on one surface is refused on another.
+  static const int minPasswordLength = 8;
+
+  static String? newPassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
+    }
+    if (value.length < minPasswordLength) {
+      return 'Password must be at least $minPasswordLength characters';
     }
     return null;
   }
