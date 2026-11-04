@@ -277,6 +277,9 @@ export function TestBuilder({ courses, initialTest }: TestBuilderProps) {
         image_url: item.image_url,
         hint: item.hint,
         weight: 0,
+        // Bank items carry no required flag of their own; a question pulled
+        // into a paper is required unless the teacher says otherwise.
+        is_required: true,
       };
       addQuestion(q);
     }

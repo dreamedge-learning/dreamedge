@@ -6,6 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   GripVertical,
   Copy,
@@ -372,6 +373,24 @@ export function QuestionCard({
           )}
 
           {isEditing && (
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/30 p-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium">Required</p>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+                  {question.is_required
+                    ? "A student cannot submit the paper while this is unanswered."
+                    : "A student may leave this blank and still submit."}
+                </p>
+              </div>
+              <Switch
+                checked={question.is_required}
+                onCheckedChange={(v) => onUpdate({ is_required: v })}
+                aria-label="Required question"
+              />
+            </div>
+          )}
+
+          {isEditing && (
             <div>
               <button
                 type="button"
@@ -407,6 +426,9 @@ export function QuestionCard({
                 </span>
               )}
               <span className="capitalize">{question.difficulty}</span>
+              {!question.is_required && (
+                <span className="rounded bg-muted px-1.5 py-0.5">Optional</span>
+              )}
               {question.topic_tag && (
                 <span className="rounded bg-muted px-1.5 py-0.5">
                   {question.topic_tag}

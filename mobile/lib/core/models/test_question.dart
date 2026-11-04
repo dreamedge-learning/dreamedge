@@ -138,6 +138,10 @@ class TestQuestion {
   final String? hint;
   final int weight;
 
+  /// A required question blocks submission while it is unanswered. Defaults to
+  /// true so a paper written before the flag existed still behaves strictly.
+  final bool isRequired;
+
   const TestQuestion({
     required this.id,
     required this.testId,
@@ -151,6 +155,7 @@ class TestQuestion {
     this.imageUrl,
     this.hint,
     required this.weight,
+    this.isRequired = true,
   });
 
   bool get hasHint => hint != null && hint!.trim().isNotEmpty;
@@ -192,6 +197,7 @@ class TestQuestion {
       imageUrl: json['image_url'] as String?,
       hint: json['hint'] as String?,
       weight: (json['weight'] as num?)?.toInt() ?? 0,
+      isRequired: json['is_required'] as bool? ?? true,
     );
   }
 }

@@ -541,12 +541,19 @@ export function TestRunner({ test }: Props) {
   );
 
   function confirmSubmit(): Promise<void> {
+    // A required question is called out on its own, because leaving one blank
+    // is a different mistake from skipping an optional one.
+    const unanswered = questions.filter((q) => isEmpty(answers[q.id])).length;
     const message =
       requiredUnanswered.length > 0
         ? `You have ${requiredUnanswered.length} required question${
             requiredUnanswered.length === 1 ? "" : "s"
           } unanswered. Submit anyway?`
-        : "Submit this attempt? You cannot change your answers after this.";
+        : unanswered > 0
+          ? `You have ${unanswered} unanswered question${
+              unanswered === 1 ? "" : "s"
+            }. Submit anyway?`
+          : "Submit this attempt? You cannot change your answers after this.";
     if (!window.confirm(message)) return Promise.resolve();
     return submit(false);
   }

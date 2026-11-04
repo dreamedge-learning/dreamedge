@@ -15,6 +15,8 @@ export interface QuestionDraft {
   image_url: string | null;
   hint: string | null;
   weight: number;
+  /** A required question blocks submission while it is unanswered. */
+  is_required: boolean;
 }
 
 /**
@@ -127,6 +129,7 @@ export function createQuestionFromTemplate(type: string): QuestionDraft {
     image_url: null,
     hint: null,
     weight: 0,
+    is_required: true,
   };
 }
 

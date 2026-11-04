@@ -45,6 +45,9 @@ export const questionPayloadSchema = z.object({
     (value) => Number.isInteger(value) && value >= 0,
     "Question order must be a whole number."
   ),
+  // Required unless the teacher turns it off. Defaulted rather than demanded
+  // so a paper saved before this field existed still validates.
+  is_required: z.boolean().default(true),
 });
 
 export type QuestionPayloadValues = z.infer<typeof questionPayloadSchema>;

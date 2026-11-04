@@ -46,6 +46,7 @@ export default async function EditTestPage({
       image_url: q.image_url,
       hint: q.hint,
       weight: q.weight,
+      is_required: q.is_required ?? true,
     })),
   };
 

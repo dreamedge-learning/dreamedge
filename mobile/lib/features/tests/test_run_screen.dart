@@ -248,12 +248,27 @@ class _TestRunScreenState extends ConsumerState<TestRunScreen>
   }
 
   Future<bool> _confirmSubmit() async {
+    // A required question is called out on its own, because leaving one blank
+    // is a different mistake from skipping an optional one.
+    final requiredUnanswered = _questions
+        .where((q) => q.isRequired && _isEmpty(_answers[q.id]))
+        .length;
     final unanswered = _questions
         .where((q) => _isEmpty(_answers[q.id]))
         .length;
-    final message = unanswered > 0
-        ? 'You have $unanswered unanswered question${unanswered == 1 ? '' : 's'}. Submit anyway?'
-        : 'Submit this attempt? You cannot change your answers after this.';
+
+    final String message;
+    if (requiredUnanswered > 0) {
+      message =
+          'You have $requiredUnanswered required question'
+          '${requiredUnanswered == 1 ? '' : 's'} unanswered. Submit anyway?';
+    } else if (unanswered > 0) {
+      message =
+          'You have $unanswered unanswered question'
+          '${unanswered == 1 ? '' : 's'}. Submit anyway?';
+    } else {
+      message = 'Submit this attempt? You cannot change your answers after this.';
+    }
     final yes = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
