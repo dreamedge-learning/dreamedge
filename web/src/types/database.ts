@@ -88,6 +88,11 @@ export interface ContentItem {
   is_printable: boolean;
   play_limit: number | null;
   status: string;
+  /**
+   * The admin-chosen poster. Falls back to `video_thumbnail_url`, Bunny's
+   * auto-picked frame, when null. A video cannot be published without one.
+   */
+  poster_url: string | null;
   /** When a draft should go live. Null means no date set; cleared once published. */
   publish_at: string | null;
   weight: number;

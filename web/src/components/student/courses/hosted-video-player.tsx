@@ -43,9 +43,34 @@ interface PlaybackPayload {
    */
   playLimit: number | null;
 
+  /**
+   * Who is watching, drawn over the video. Null when the admin has the
+   * watermark switched off, or when the student has no name on file.
+   */
+  watermark: { name: string; phone: string | null } | null;
+
   /** When these URLs stop working. Used to re-sign before they do. */
   expiresAt: string;
 }
+
+/**
+ * Where the watermark can sit.
+ *
+ * It moves because a mark in a fixed corner is a mark that gets cropped out
+ * in thirty seconds. Six positions, none of them dead centre -- the point is
+ * to be unremovable, not to ruin the lesson for the student who paid.
+ */
+const WATERMARK_SPOTS = [
+  "top-[8%] left-[6%]",
+  "top-[8%] right-[6%]",
+  "top-[42%] left-[6%]",
+  "top-[42%] right-[6%]",
+  "bottom-[18%] left-[6%]",
+  "bottom-[18%] right-[6%]",
+] as const;
+
+/** Long enough not to distract, short enough that cropping is futile. */
+const WATERMARK_MOVE_MS = 25_000;
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const AUTO = "auto";
@@ -106,6 +131,7 @@ export function HostedVideoPlayer({
   const [quality, setQuality] = useState<string>(AUTO);
   const [resumePrompt, setResumePrompt] = useState(false);
   const [limitNotice, setLimitNotice] = useState<string | null>(null);
+  const [watermarkSpot, setWatermarkSpot] = useState(0);
 
   // One key for the life of one viewing. The component is keyed on the
   // content item, so a remount is a new lesson and deserves a new key, while
@@ -210,6 +236,16 @@ export function HostedVideoPlayer({
       if (timer) clearTimeout(timer);
     };
   }, [contentItemId]);
+
+  useEffect(() => {
+    if (!payload?.watermark) return;
+
+    const timer = setInterval(() => {
+      setWatermarkSpot((current) => (current + 1) % WATERMARK_SPOTS.length);
+    }, WATERMARK_MOVE_MS);
+
+    return () => clearInterval(timer);
+  }, [payload?.watermark]);
 
   const source = payload
     ? quality === AUTO
@@ -379,6 +415,23 @@ export function HostedVideoPlayer({
           }}
           onEnded={(event) => onEnded(event.currentTarget.currentTime)}
         />
+
+        {payload.watermark && (
+          /* `pointer-events-none` matters: this sits over the native controls,
+             and a watermark that swallows the play button is a bug report. */
+          <div
+            aria-hidden
+            className={`pointer-events-none absolute select-none text-[11px] font-medium leading-tight text-white/35 transition-all duration-1000 sm:text-xs ${WATERMARK_SPOTS[watermarkSpot]}`}
+            style={{ textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}
+          >
+            <span className="block">{payload.watermark.name}</span>
+            {payload.watermark.phone && (
+              <span className="block tabular-nums">
+                {payload.watermark.phone}
+              </span>
+            )}
+          </div>
+        )}
 
         {limitNotice && (
           <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/80">

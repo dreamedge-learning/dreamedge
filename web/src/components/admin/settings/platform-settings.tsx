@@ -282,11 +282,7 @@ function FeatureTogglesSection({
     { key: "razorpay_enabled", label: "Razorpay Payments Enabled" },
     { key: "manual_payment_enabled", label: "Manual Payments Enabled" },
     { key: "referral_system_enabled", label: "Referral System Enabled" },
-    {
-      key: "watermark_enabled",
-      label: "Video Watermark Enabled",
-      inert: "No watermark is built yet — this has no effect",
-    },
+    { key: "watermark_enabled", label: "Video Watermark Enabled" },
   ];
 
   function handleSave() {

@@ -368,6 +368,20 @@ export async function updateContentItem(
 
     if (error) {
       console.error("updateContentItem failed:", error);
+
+      // The poster gate lives in a database trigger, because the cron job
+      // publishes without going through here. Its message is written for an
+      // admin to read, so it is passed along rather than flattened into
+      // "something went wrong" -- which would leave them changing the status
+      // again and again with no idea what is refusing it.
+      if (error.code === "23514" && /poster/i.test(error.message)) {
+        return {
+          error:
+            "This video needs a poster image before it can be published. "
+            + "Add one in the Video panel, then publish.",
+        };
+      }
+
       return { error: "Something went wrong. Please try again." };
     }
     revalidatePath("/admin/content/manager");
@@ -696,6 +710,13 @@ export interface SchedulerHealth {
   last_status: string | null;
   overdue: number;
   next_due_at: string | null;
+  /**
+   * Overdue video lessons the publish gate is holding back for want of a
+   * poster. Counted separately because "three lessons are late" and "three
+   * lessons are late and will stay late until you add a poster" are different
+   * problems, and only one of them is the scheduler's fault.
+   */
+  blocked_no_poster: number;
 }
 
 /**
@@ -710,17 +731,32 @@ export async function getSchedulerHealth() {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
-    const { data, error } = await supabase.rpc("scheduled_publish_health");
+    // Two calls because the blocked count could not be added as a column on
+    // the health function: widening a RETURNS TABLE is a return-type change,
+    // and `create or replace` cannot do that.
+    const [health, blocked] = await Promise.all([
+      supabase.rpc("scheduled_publish_health"),
+      supabase.rpc("scheduled_publish_blocked"),
+    ]);
 
-    if (error) {
-      console.error("getSchedulerHealth failed:", error);
+    if (health.error) {
+      console.error("getSchedulerHealth failed:", health.error);
       return { error: "Could not read the scheduler status." };
     }
 
-    const row = Array.isArray(data) ? data[0] : null;
+    const row = Array.isArray(health.data) ? health.data[0] : null;
     if (!row) return { error: "Could not read the scheduler status." };
 
-    return { data: row as unknown as SchedulerHealth };
+    if (blocked.error) {
+      console.error("getSchedulerHealth: blocked count failed:", blocked.error);
+    }
+
+    return {
+      data: {
+        ...(row as unknown as Omit<SchedulerHealth, "blocked_no_poster">),
+        blocked_no_poster: Number(blocked.data) || 0,
+      } satisfies SchedulerHealth,
+    };
   } catch (err) {
     console.error("getSchedulerHealth failed:", err);
     return { error: describeFailure(err) };

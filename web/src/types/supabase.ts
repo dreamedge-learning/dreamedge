@@ -481,6 +481,7 @@ export type Database = {
           metadata: Json | null
           offline_license_days: number
           play_limit: number | null
+          poster_url: string | null
           publish_at: string | null
           status: Database["public"]["Enums"]["content_status"]
           title: string
@@ -509,6 +510,7 @@ export type Database = {
           metadata?: Json | null
           offline_license_days?: number
           play_limit?: number | null
+          poster_url?: string | null
           publish_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]
           title: string
@@ -537,6 +539,7 @@ export type Database = {
           metadata?: Json | null
           offline_license_days?: number
           play_limit?: number | null
+          poster_url?: string | null
           publish_at?: string | null
           status?: Database["public"]["Enums"]["content_status"]
           title?: string
@@ -2227,6 +2230,7 @@ export type Database = {
           server_now: string
         }[]
       }
+      scheduled_publish_blocked: { Args: never; Returns: number }
       scheduled_publish_health: {
         Args: never
         Returns: {

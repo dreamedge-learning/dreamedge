@@ -614,3 +614,166 @@ export async function getVideoPreviewUrl(contentItemId: string) {
     return { error: describeFailure(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Posters
+// ---------------------------------------------------------------------------
+
+/**
+ * The poster a student sees before pressing play, and instead of the player
+ * when they have not paid.
+ *
+ * Bunny picks a frame by itself and picks badly -- a black fade, a
+ * half-written board, the mentor mid-blink. This replaces it with a chosen
+ * one, and `content_items.poster_url` falls back to Bunny's frame while none
+ * is set.
+ *
+ * Uploaded through the action rather than a signed URL: 2 MB sits well inside
+ * the request body limit, and a poster has no business being larger.
+ */
+const POSTER_BUCKET = "lesson-posters";
+
+const ALLOWED_POSTER_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+] as const;
+
+const POSTER_EXTENSION: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
+};
+
+export async function uploadLessonPoster(
+  contentItemId: string,
+  formData: FormData
+) {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    const parsed = uuid("Content item").safeParse(contentItemId);
+    if (!parsed.success) return { error: firstIssue(parsed.error) };
+
+    const file = formData.get("poster") as File | null;
+    if (!file || file.size === 0) return { error: "No image provided." };
+
+    if (file.size > 2 * 1024 * 1024) {
+      return { error: "Poster must be under 2 MB." };
+    }
+
+    if (!(ALLOWED_POSTER_TYPES as readonly string[]).includes(file.type)) {
+      return { error: "Only JPEG, PNG, WebP and AVIF images are allowed." };
+    }
+
+    const extension = POSTER_EXTENSION[file.type];
+    const path = `lessons/${parsed.data}/poster.${extension}`;
+
+    // A replacement arriving in a different format would otherwise leave the
+    // previous file behind, still public and still billed.
+    await supabase.storage
+      .from(POSTER_BUCKET)
+      .remove(
+        Object.values(POSTER_EXTENSION)
+          .filter((ext) => ext !== extension)
+          .map((ext) => `lessons/${parsed.data}/poster.${ext}`)
+      );
+
+    const { error: uploadError } = await supabase.storage
+      .from(POSTER_BUCKET)
+      .upload(path, file, { upsert: true });
+
+    if (uploadError) {
+      console.error("uploadLessonPoster failed:", uploadError);
+      return { error: "Could not upload that poster. Please try again." };
+    }
+
+    const { data: urlData } = supabase.storage
+      .from(POSTER_BUCKET)
+      .getPublicUrl(path);
+
+    // The path is stable across replacements, so without a version marker the
+    // CDN and the browser both keep serving the previous poster.
+    const posterUrl = `${urlData.publicUrl}?v=${Date.now()}`;
+
+    const { data, error } = await supabase
+      .from("content_items")
+      .update({ poster_url: posterUrl })
+      .eq("id", parsed.data)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("uploadLessonPoster failed:", error);
+      return { error: "Could not save that poster. Please try again." };
+    }
+
+    revalidatePath("/admin/content/manager");
+    return { data };
+  } catch (err) {
+    console.error("uploadLessonPoster failed:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+/**
+ * Drops the custom poster, falling back to Bunny's frame.
+ *
+ * Refused while the lesson is published, because the gate that stops a
+ * poster-less video being published would otherwise be trivially sidestepped
+ * by publishing first and removing the poster after.
+ */
+export async function removeLessonPoster(contentItemId: string) {
+  try {
+    await assertAdmin(["super_admin", "content_creator"]);
+    const supabase = await createClient();
+
+    const parsed = uuid("Content item").safeParse(contentItemId);
+    if (!parsed.success) return { error: firstIssue(parsed.error) };
+
+    const { data: item } = await supabase
+      .from("content_items")
+      .select("id, type, status")
+      .eq("id", parsed.data)
+      .maybeSingle();
+
+    if (!item) return { error: "That content item no longer exists." };
+
+    if (item.type === "video" && item.status === "published") {
+      return {
+        error:
+          "Unpublish this lesson before removing its poster. A published video "
+          + "has to have one.",
+      };
+    }
+
+    await supabase.storage
+      .from(POSTER_BUCKET)
+      .remove(
+        Object.values(POSTER_EXTENSION).map(
+          (ext) => `lessons/${parsed.data}/poster.${ext}`
+        )
+      );
+
+    const { data, error } = await supabase
+      .from("content_items")
+      .update({ poster_url: null })
+      .eq("id", parsed.data)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("removeLessonPoster failed:", error);
+      return { error: "Could not remove that poster. Please try again." };
+    }
+
+    revalidatePath("/admin/content/manager");
+    return { data };
+  } catch (err) {
+    console.error("removeLessonPoster failed:", err);
+    return { error: describeFailure(err) };
+  }
+}

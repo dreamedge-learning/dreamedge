@@ -41,6 +41,8 @@ export interface SiteSettings {
   student_registration_open: boolean;
   razorpay_enabled: boolean;
   referral_system_enabled: boolean;
+  /** Draws the student's name over the video at playback time. */
+  watermark_enabled: boolean;
   /**
    * Private: only an admin may read this row, so a student-side caller would
    * silently get the default. Consult it in admin code only.
@@ -61,6 +63,9 @@ export const SETTINGS_DEFAULTS: SiteSettings = {
   student_registration_open: true,
   razorpay_enabled: true,
   referral_system_enabled: true,
+  // Defaults on: a watermark that quietly stops appearing is a leak, whereas
+  // one that appears when it was meant to be off is a cosmetic complaint.
+  watermark_enabled: true,
   manual_payment_enabled: true,
   social_links: {},
 };
@@ -125,6 +130,10 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
       referral_system_enabled: asBoolean(
         pick("referral_system_enabled"),
         SETTINGS_DEFAULTS.referral_system_enabled
+      ),
+      watermark_enabled: asBoolean(
+        pick("watermark_enabled"),
+        SETTINGS_DEFAULTS.watermark_enabled
       ),
       manual_payment_enabled: asBoolean(
         pick("manual_payment_enabled"),

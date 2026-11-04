@@ -19,6 +19,7 @@ import { Upload as TusUpload } from "tus-js-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PosterPanel } from "@/components/admin/content-manager/poster-panel";
 import { VideoPreview } from "@/components/admin/content-manager/video-preview";
 import { cn } from "@/lib/utils";
 
@@ -680,6 +681,12 @@ export function VideoUploadPanel({ item, onItemChange }: VideoUploadPanelProps) 
           </p>
         </div>
       )}
+
+      <PosterPanel
+        item={item}
+        bunnyThumbnailUrl={video?.thumbnailUrl ?? null}
+        onItemChange={onItemChange}
+      />
 
       <input
         ref={fileRef}

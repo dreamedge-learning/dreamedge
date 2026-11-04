@@ -38,6 +38,18 @@ function describe(health: SchedulerHealth): {
     };
   }
 
+  // Named before the generic overdue line, because this one has a cause and a
+  // fix rather than being a symptom of a broken job.
+  if (health.blocked_no_poster > 0) {
+    const n = health.blocked_no_poster;
+    return {
+      tone: "warn",
+      text:
+        `${n} scheduled video lesson${n === 1 ? "" : "s"} cannot publish without a poster`
+        + `${health.overdue > n ? ` (${health.overdue} overdue in total)` : ""}. Add one and it goes live on the next run.`,
+    };
+  }
+
   if (health.overdue > 0) {
     return {
       tone: "warn",
@@ -137,7 +149,7 @@ export function SchedulerStrip() {
         </span>
       )}
 
-      {health.overdue > 0 && (
+      {health.overdue > health.blocked_no_poster && (
         <Button
           type="button"
           size="sm"

@@ -7,6 +7,7 @@ import {
   signExistingUrl,
   signPlayback,
 } from "@/lib/bunny";
+import { getSiteSettings } from "@/lib/settings";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
@@ -49,7 +50,7 @@ export async function GET(
   const { data: item } = await service
     .from("content_items")
     .select(
-      "id, status, type, file_url, video_provider, bunny_video_guid, video_status, video_thumbnail_url, video_resolutions, duration_seconds, play_limit"
+      "id, status, type, file_url, video_provider, bunny_video_guid, video_status, video_thumbnail_url, video_resolutions, duration_seconds, play_limit, poster_url"
     )
     .eq("id", id)
     .maybeSingle();
@@ -108,11 +109,35 @@ export async function GET(
     Date.now() + PLAYBACK_TTL_SECONDS * 1000
   ).toISOString();
 
+  // The watermark is drawn by the player over the video, never burned into
+  // the file: burning it in would mean one encode per student, which is a
+  // bill and a queue nobody wants for a deterrent that a screen recording
+  // defeats either way. What it does do is make a leaked recording traceable.
+  //
+  // Read with the service client because this route also answers the Flutter
+  // app over a bearer token, where RLS gives no student row.
+  const settings = await getSiteSettings();
+
+  let watermark: { name: string; phone: string | null } | null = null;
+
+  if (settings.watermark_enabled) {
+    const { data: student } = await service
+      .from("students")
+      .select("full_name, phone")
+      .eq("id", caller.studentId)
+      .maybeSingle();
+
+    if (student?.full_name) {
+      watermark = { name: student.full_name, phone: student.phone ?? null };
+    }
+  }
+
   const body = {
     provider: item.video_provider,
     hls: null as string | null,
     mp4: {} as Record<string, string>,
     thumbnail: null as string | null,
+    watermark,
     durationSeconds: item.duration_seconds,
     isDownloadable: entitlement.isDownloadable,
     offlineLicenseDays: entitlement.offlineLicenseDays,
@@ -142,14 +167,19 @@ export async function GET(
       item.video_resolutions,
       PLAYBACK_TTL_SECONDS
     );
-    body.thumbnail = item.video_thumbnail_url
-      ? signExistingUrl(item.video_thumbnail_url, PLAYBACK_TTL_SECONDS)
-      : null;
+    // The admin's poster is in a public bucket, so it needs no signing and no
+    // refresh. Bunny's auto-picked frame is the fallback and does need both.
+    body.thumbnail = item.poster_url
+      ? item.poster_url
+      : item.video_thumbnail_url
+        ? signExistingUrl(item.video_thumbnail_url, PLAYBACK_TTL_SECONDS)
+        : null;
   } else if (item.video_provider === "external" && item.file_url) {
     // Someone else's hosting, someone else's rules. It goes back untouched,
     // with no renditions, because there are none to offer and nothing we can
     // sign.
     body.hls = item.file_url;
+    body.thumbnail = item.poster_url ?? null;
   } else {
     return NextResponse.json(
       { error: "This lesson has no video yet." },
