@@ -64,6 +64,67 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               const SliverToBoxAdapter(child: TodayClassesSection()),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => context.push('/leaderboard'),
+                    child: Ink(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 14),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppColors.orange
+                                    .withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.emoji_events_outlined,
+                                color: AppColors.orange,
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Weekly leaderboard',
+                                    style: AppTypography.bodyLarge
+                                        .copyWith(
+                                            fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'See how you rank in this week\'s tests',
+                                    style: AppTypography.caption,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: AppColors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               const SliverToBoxAdapter(child: CategoryChips()),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
               const SliverToBoxAdapter(child: FeaturedCoursesSection()),
