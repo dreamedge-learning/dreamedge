@@ -311,6 +311,41 @@ List<String> _stringList(Object? raw) {
   return raw.map((value) => value.toString()).toList(growable: false);
 }
 
+/// Who is watching, drawn over the video at playback time.
+///
+/// Never burned into the file: that would mean one encode per student, which
+/// is a bill and a queue for a deterrent a screen recording defeats anyway.
+/// What it buys is a leaked recording that can be traced back to an account.
+///
+/// Comes down with a download as well as a stream, because an offline copy is
+/// the one most worth marking and there is no second chance to ask once the
+/// handset is in airplane mode.
+class PlaybackWatermark {
+  final String name;
+  final String? phone;
+
+  const PlaybackWatermark({required this.name, this.phone});
+
+  /// Two short lines at most. A long name is truncated rather than wrapped
+  /// across the picture.
+  String get label => name.length <= 28 ? name : '${name.substring(0, 27)}\u2026';
+
+  static PlaybackWatermark? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+
+    final name = raw['name'];
+    if (name is! String || name.trim().isEmpty) return null;
+
+    final phone = raw['phone'];
+    return PlaybackWatermark(
+      name: name.trim(),
+      phone: phone is String && phone.trim().isNotEmpty ? phone.trim() : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'name': name, 'phone': phone};
+}
+
 /// What the server hands back when asked for a playable video.
 ///
 /// Comes from the `video-playback-token` Edge Function, which checks the
@@ -331,6 +366,11 @@ class PlaybackPayload {
   final Map<String, String> mp4;
 
   final String? thumbnail;
+
+  /// Null when the admin has the watermark switched off, or when the student
+  /// has no name on file.
+  final PlaybackWatermark? watermark;
+
   final int? durationSeconds;
   final bool isDownloadable;
   final int offlineLicenseDays;
@@ -354,6 +394,7 @@ class PlaybackPayload {
     this.hls,
     this.mp4 = const {},
     this.thumbnail,
+    this.watermark,
     this.durationSeconds,
     required this.isDownloadable,
     required this.offlineLicenseDays,
@@ -409,6 +450,7 @@ class PlaybackPayload {
       hls: json['hls'] as String?,
       mp4: mp4,
       thumbnail: json['thumbnail'] as String?,
+      watermark: PlaybackWatermark.fromJson(json['watermark']),
       durationSeconds: (json['durationSeconds'] as num?)?.toInt(),
       isDownloadable: json['isDownloadable'] as bool? ?? false,
       offlineLicenseDays:

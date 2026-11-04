@@ -32,10 +32,20 @@ import {
   verifyPayment,
 } from "@/app/(student)/courses/[slug]/actions";
 import type { Course } from "@/types/course";
+import {
+  CourseSyllabus,
+  type SyllabusSubject,
+} from "@/components/student/courses/course-syllabus";
 
 interface CourseDetailContentProps {
   course: Course;
   isEnrolled?: boolean;
+  /**
+   * From `get_course_syllabus`, which returns titles, types, durations and
+   * posters and nothing playable -- the table itself is unreadable to anyone
+   * without an active enrolment.
+   */
+  syllabus?: SyllabusSubject[];
 }
 
 const DIFFICULTY_COLORS: Record<string, string> = {
@@ -44,7 +54,11 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   advanced: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
 };
 
-export function CourseDetailContent({ course, isEnrolled = false }: CourseDetailContentProps) {
+export function CourseDetailContent({
+  course,
+  isEnrolled = false,
+  syllabus = [],
+}: CourseDetailContentProps) {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
   const [expanded, setExpanded] = useState(false);
@@ -375,6 +389,16 @@ export function CourseDetailContent({ course, isEnrolled = false }: CourseDetail
           </div>
 
           {/* About */}
+          {syllabus.length > 0 && (
+            <div className="mt-10">
+              <CourseSyllabus
+                subjects={syllabus}
+                isEnrolled={isEnrolled}
+                onEnrol={handleEnroll}
+              />
+            </div>
+          )}
+
           {longText && (
             <div className="mt-10">
               <h2 className="text-xl font-semibold">About This Course</h2>

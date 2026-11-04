@@ -26,11 +26,11 @@
 //                video_provider (text NOT NULL), bunny_video_guid (text NULL),
 //                video_status (text NOT NULL), video_thumbnail_url (text NULL),
 //                video_resolutions (text[] NOT NULL), duration_seconds (int NULL),
-//                file_url (text NULL)
+//                file_url (text NULL), poster_url (text NULL)
 // content_downloads: student_id, content_item_id, device_id (all NOT NULL),
 //                quality (text NULL), bytes (bigint NOT NULL),
 //                unique (student_id, content_item_id, device_id)
-// students: id (uuid NOT NULL), user_id (uuid NOT NULL)
+// students: id (uuid NOT NULL), user_id (uuid NOT NULL), full_name, phone
 // RPC: check_offline_entitlements(uuid) → see migration 20261102200000
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -249,7 +249,7 @@ serve(async (req) => {
 
   const { data: student } = await service
     .from('students')
-    .select('id')
+    .select('id, full_name, phone')
     .eq('user_id', user.id)
     .maybeSingle()
 
@@ -260,7 +260,7 @@ serve(async (req) => {
   const { data: item } = await service
     .from('content_items')
     .select(
-      'id, status, file_url, video_provider, bunny_video_guid, video_status, video_thumbnail_url, video_resolutions, duration_seconds'
+      'id, status, file_url, video_provider, bunny_video_guid, video_status, video_thumbnail_url, video_resolutions, duration_seconds, poster_url'
     )
     .eq('id', contentItemId)
     .maybeSingle()
@@ -300,6 +300,32 @@ serve(async (req) => {
   const serverNow = new Date()
   const expiresAt = new Date(serverNow.getTime() + ttl * 1000).toISOString()
 
+  // Who is watching, for the player to draw over the video.
+  //
+  // Returned for a download as well as a stream: an offline copy is the one
+  // most worth marking, and the app has no second chance to ask once the
+  // handset is in airplane mode.
+  //
+  // Never burned into the file -- that would be one encode per student, which
+  // is a bill and a queue for a deterrent a screen recording beats anyway.
+  // What it buys is a leaked recording that can be traced back.
+  let watermark: { name: string; phone: string | null } | null = null
+
+  const { data: watermarkSetting } = await service
+    .from('site_settings')
+    .select('value')
+    .eq('key', 'watermark_enabled')
+    .maybeSingle()
+
+  // Defaults on, like the website's reader: a watermark that quietly stops
+  // appearing is a leak, whereas one that appears when it was meant to be off
+  // is a cosmetic complaint.
+  const watermarkEnabled = watermarkSetting?.value !== false
+
+  if (watermarkEnabled && student.full_name) {
+    watermark = { name: student.full_name, phone: student.phone ?? null }
+  }
+
   let hls: string | null = null
   let mp4: Record<string, string> = {}
   let thumbnail: string | null = null
@@ -330,9 +356,13 @@ serve(async (req) => {
 
     if (!forDownload) {
       hls = await signHls(item.bunny_video_guid, ttl)
-      thumbnail = item.video_thumbnail_url
-        ? await signExisting(item.video_thumbnail_url, ttl)
-        : null
+      // The admin's poster lives in a public bucket, so it needs no signing
+      // and no refresh. Bunny's auto-picked frame is the fallback.
+      thumbnail = item.poster_url
+        ? item.poster_url
+        : item.video_thumbnail_url
+          ? await signExisting(item.video_thumbnail_url, ttl)
+          : null
     }
   } else if (item.video_provider === 'external' && item.file_url) {
     if (forDownload) {
@@ -340,6 +370,7 @@ serve(async (req) => {
     }
     // Someone else's hosting, with no renditions and nothing we can sign.
     hls = item.file_url
+    thumbnail = item.poster_url ?? null
   } else {
     return json(req, { error: 'This lesson has no video yet.' }, 404)
   }
@@ -369,6 +400,7 @@ serve(async (req) => {
     hls,
     mp4,
     thumbnail,
+    watermark,
     durationSeconds: item.duration_seconds,
     isDownloadable: entitlement.is_downloadable,
     offlineLicenseDays: entitlement.offline_license_days,

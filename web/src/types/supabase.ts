@@ -2160,6 +2160,24 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      get_course_syllabus: {
+        Args: { p_course_id: string }
+        Returns: {
+          item_duration: number
+          item_id: string
+          item_is_paid: boolean
+          item_poster_url: string
+          item_title: string
+          item_type: Database["public"]["Enums"]["content_type"]
+          item_weight: number
+          subject_id: string
+          subject_name: string
+          subject_weight: number
+          topic_id: string
+          topic_name: string
+          topic_weight: number
+        }[]
+      }
       get_daily_orders: {
         Args: { end_date?: string; start_date?: string }
         Returns: Json

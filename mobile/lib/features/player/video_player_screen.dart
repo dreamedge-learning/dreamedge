@@ -10,6 +10,7 @@ import 'controller/player_controller.dart';
 import 'widgets/content_info_section.dart';
 import 'widgets/player_controls.dart';
 import 'widgets/player_gesture_layer.dart';
+import 'widgets/player_watermark.dart';
 import 'widgets/video_placeholder.dart';
 
 /// The lesson player.
@@ -283,6 +284,11 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
                   )
                 : VideoPlayer(video),
           ),
+
+          // Who is watching. Above the picture, below the spinner -- the
+          // spinner is feedback the student has to be able to read.
+          if (controller.payload?.watermark != null)
+            PlayerWatermark(watermark: controller.payload!.watermark!),
 
           // A spinner only while the platform says it is waiting on data, so a
           // paused video does not look busy.
