@@ -19,9 +19,9 @@ jobs:
         working-directory: web
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -29,6 +29,13 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      # LayoutProps, PageProps and the typed route helpers are generated into
+      # .next/types. A clean checkout has no .next, so tsc on its own fails on
+      # every one of them -- a local run only passes because an old .next is
+      # lying around from the last dev server.
+      - name: Generate route types
+        run: node node_modules/next/dist/bin/next typegen
 
       - name: Type check
         run: node node_modules/typescript/bin/tsc --noEmit
@@ -55,7 +62,7 @@ jobs:
         working-directory: mobile
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: subosito/flutter-action@v2
         with:
