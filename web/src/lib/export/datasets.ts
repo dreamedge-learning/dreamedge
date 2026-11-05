@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import type { AdminRole } from "@/lib/auth-guard";
+import {
+  CERTIFICATE_STATUS_LABELS,
+  certificateUrl,
+  type CertificateStatus,
+} from "@/lib/certificates";
 import { rangeEnd, rangeStart } from "@/lib/date-range";
 import {
   getDashboardKpis,
@@ -984,6 +989,119 @@ const testimonialsDataset = defineDataset({
 
       return query.range(from, to);
     });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Certificates
+// ---------------------------------------------------------------------------
+
+interface CertificateQueryRow {
+  status: string;
+  certificate_number: string | null;
+  verification_code: string;
+  requested_at: string;
+  issued_at: string | null;
+  rejected_reason: string | null;
+  revoked_at: string | null;
+  revoked_reason: string | null;
+  student_name: string | null;
+  course_title: string | null;
+  student: { full_name: string; student_code: string | null; class: string | null } | { full_name: string; student_code: string | null; class: string | null }[] | null;
+  course: { title: string } | { title: string }[] | null;
+}
+
+const certificatesDataset = defineDataset({
+  label: "Certificates",
+  requiredRoles: EXPORT_ROLES.certificates,
+  columns: [
+    { key: "certificate_number", header: "Certificate no." },
+    { key: "student_name", header: "Student" },
+    { key: "student_code", header: "Student ID" },
+    { key: "class", header: "Class" },
+    { key: "course", header: "Course" },
+    { key: "status", header: "Status" },
+    { key: "requested_at", header: "Completed", format: "date" },
+    { key: "issued_at", header: "Issued", format: "date" },
+    { key: "revoked_at", header: "Revoked", format: "date" },
+    { key: "reason", header: "Reason" },
+    { key: "verify_url", header: "Verification link" },
+  ],
+  filters: z.object({
+    status: allOr(z.enum(["pending", "issued", "rejected", "revoked"])),
+    courseId: allOr(z.string().uuid("Course filter is invalid.")),
+    search: searchFilter,
+  }),
+  async describe(filters, supabase) {
+    return describeParts([
+      ["status", filters.status],
+      ["course", await courseLabel(supabase, filters.courseId)],
+      ["search", filters.search],
+    ]);
+  },
+  async fetcher(filters, supabase) {
+    const rows = await fetchAllRows<CertificateQueryRow>("certificate", (from, to) => {
+      let query = supabase
+        .from("certificates")
+        .select(
+          `status, certificate_number, verification_code, requested_at, issued_at,
+           rejected_reason, revoked_at, revoked_reason, student_name, course_title,
+           student:students!inner(full_name, student_code, class),
+           course:courses(title)`,
+          { count: "exact" }
+        )
+        .order("requested_at", { ascending: false })
+        .order("id", { ascending: true });
+
+      if (isApplied(filters.status)) {
+        query = query.eq("status", filters.status as string);
+      }
+
+      if (isApplied(filters.courseId)) {
+        query = query.eq("course_id", filters.courseId as string);
+      }
+
+      if (filters.search) {
+        const safe = sanitizeSearch(filters.search);
+        if (safe.length > 0) {
+          query = query.or(
+            `full_name.ilike.%${safe}%,student_code.ilike.%${safe}%`,
+            { referencedTable: "students" }
+          );
+        }
+      }
+
+      return query.range(from, to);
+    });
+
+    return rows.map((row) => {
+      const student = one(row.student);
+      const issued = row.status === "issued" || row.status === "revoked";
+      return {
+        certificate_number: row.certificate_number,
+        student_name: row.student_name ?? student?.full_name ?? null,
+        student_code: student?.student_code ?? null,
+        class: student?.class ?? null,
+        course: row.course_title ?? one(row.course)?.title ?? null,
+        status: CERTIFICATE_STATUS_LABELS[row.status as CertificateStatus] ?? row.status,
+        requested_at: row.requested_at,
+        issued_at: row.issued_at,
+        revoked_at: row.revoked_at,
+        reason: row.status === "revoked" ? row.revoked_reason : row.rejected_reason,
+        // Only an issued certificate has a public page to link to.
+        verify_url: issued ? certificateUrl(row.verification_code) : null,
+      };
+    });
+  },
+  summary(rows) {
+    return [
+      { label: "Certificates", value: rows.length, format: "number" },
+      {
+        label: "Issued",
+        value: rows.filter((row) => row.status === CERTIFICATE_STATUS_LABELS.issued).length,
+        format: "number",
+      },
+    ];
   },
 });
 
@@ -1973,6 +2091,8 @@ const notificationsDataset = defineDataset({
            student_notifications(is_read)`,
           { count: "exact" }
         )
+        // Matches the Engage log: per-reply doubt notices are not broadcasts.
+        .neq("target_type", "doubt")
         .order("sent_at", { ascending: false })
         .order("id", { ascending: true });
 
@@ -2299,6 +2419,7 @@ export const EXPORT_DATASETS: Record<string, ExportDataset> = {
   "student-progress": progressDataset,
   leads: leadsDataset,
   testimonials: testimonialsDataset,
+  certificates: certificatesDataset,
   orders: ordersDataset,
   "manual-payments": manualPaymentsDataset,
   refunds: refundsDataset,

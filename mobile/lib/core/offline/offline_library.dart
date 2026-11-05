@@ -64,4 +64,24 @@ class OfflineLibrary implements LocalLibrary {
       licenceExpiresAt: record.licenceExpiresAt,
     );
   }
+
+  @override
+  Future<List<SavedFile>> attachments(String contentItemId) async {
+    // The lesson's own licence decides, so every check above applies to the
+    // worksheets exactly as it does to the video: owner, status, the server's
+    // clock, the main file still being there.
+    if (await find(contentItemId) == null) return const [];
+
+    final saved = await _store.savedFiles(contentItemId);
+    final present = <SavedFile>[];
+    for (final file in saved) {
+      try {
+        if (await File(file.localPath).exists()) present.add(file);
+      } on FileSystemException {
+        // Unreadable is as good as absent; the reader falls back to the
+        // network for it.
+      }
+    }
+    return present;
+  }
 }

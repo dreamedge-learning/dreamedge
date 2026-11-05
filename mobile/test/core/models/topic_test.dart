@@ -68,4 +68,44 @@ void main() {
       expect(json.containsKey('content_items'), false);
     });
   });
+
+  group('Topic (folder)', () {
+    Map<String, dynamic> row({String? parent}) => {
+          'id': 't-2',
+          'subject_id': 's-1',
+          'parent_topic_id': parent,
+          'name': 'Concept videos',
+          'slug': 'concept-videos',
+          'weight': 2,
+          'is_visible': true,
+          'content_items': [
+            {'count': 4},
+          ],
+        };
+
+    test('a top-level folder has no parent', () {
+      final topic = Topic.fromJson(row());
+      expect(topic.parentTopicId, isNull);
+      expect(topic.subjectId, 's-1');
+    });
+
+    test('a subfolder keeps its parent and its root subject', () {
+      final topic = Topic.fromJson(row(parent: 't-1'));
+      expect(topic.parentTopicId, 't-1');
+      expect(topic.subjectId, 's-1');
+      expect(topic.contentCount, 4);
+    });
+
+    test('the parent survives the offline cache round trip', () {
+      // Cached folders are stored as toJson() and read back with fromJson();
+      // losing the parent there would flatten the tree when offline.
+      final cached = Topic.fromJson(Topic.fromJson(row(parent: 't-1')).toJson());
+      expect(cached.parentTopicId, 't-1');
+    });
+
+    test('a row from before nesting existed still parses', () {
+      final legacy = row()..remove('parent_topic_id');
+      expect(Topic.fromJson(legacy).parentTopicId, isNull);
+    });
+  });
 }

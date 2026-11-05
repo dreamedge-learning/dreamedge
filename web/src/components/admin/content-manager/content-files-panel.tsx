@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   FileText,
   GripVertical,
   Loader2,
@@ -368,6 +369,21 @@ export function ContentFilesPanel({ contentId }: { contentId: string }) {
         </div>
       ))}
 
+      {/* A lesson whose only documents are PowerPoint or Word originals shows
+          students nothing at all, since those are never served to them. Said
+          here, where the files are, instead of discovered by a student. */}
+      {!loading &&
+        files.some((f) => f.is_source_document) &&
+        !files.some((f) => !f.is_source_document) && (
+          <div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-200">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>
+              Students can&rsquo;t see this lesson&rsquo;s files yet. PowerPoint and Word files are
+              kept for teachers only &mdash; export the same file as PDF and upload that too.
+            </span>
+          </div>
+        )}
+
       {/* The list */}
       {loading ? (
         <p className="text-xs text-muted-foreground">Loading files…</p>
@@ -423,6 +439,14 @@ export function ContentFilesPanel({ contentId }: { contentId: string }) {
                   <span className="min-w-0 flex-1 truncate text-sm">
                     {file.display_name}
                   </span>
+                  {file.is_source_document && (
+                    <span
+                      className="shrink-0 rounded border border-zinc-500/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      title="Students never receive this file. Upload a PDF export for them."
+                    >
+                      Teachers only
+                    </span>
+                  )}
                   <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                     {formatSize(file.size_bytes)}
                   </span>

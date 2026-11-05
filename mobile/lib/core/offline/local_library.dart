@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/offline_provider.dart';
+import 'download_record.dart';
 import 'offline_library.dart';
 
 /// A copy of one content item sitting on this device.
@@ -41,6 +42,12 @@ abstract class LocalLibrary {
   /// that is the whole mechanism stopping a paid lesson from becoming free
   /// forever once it has been downloaded once.
   Future<LocalCopy?> find(String contentItemId);
+
+  /// The attachments saved with [contentItemId] that are on this device and
+  /// may be opened, in the admin's order. Empty when the lesson has no usable
+  /// copy, under exactly the rules [find] applies, or was saved before
+  /// attachments were recorded.
+  Future<List<SavedFile>> attachments(String contentItemId);
 }
 
 /// The answer before anything can be downloaded: nothing is here.
@@ -49,6 +56,9 @@ class EmptyLocalLibrary implements LocalLibrary {
 
   @override
   Future<LocalCopy?> find(String contentItemId) async => null;
+
+  @override
+  Future<List<SavedFile>> attachments(String contentItemId) async => const [];
 }
 
 final localLibraryProvider = Provider<LocalLibrary>((ref) {

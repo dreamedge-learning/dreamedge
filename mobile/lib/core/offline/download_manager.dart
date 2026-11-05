@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/content.dart';
+import '../models/lesson_file.dart';
 import '../services/document_service.dart';
 import '../services/playback_service.dart';
 import 'connectivity_service.dart';
@@ -13,6 +14,7 @@ import 'disk_space.dart';
 import 'download_notifier.dart';
 import 'download_record.dart';
 import 'download_settings.dart';
+import 'offline_paths.dart';
 import 'offline_store.dart';
 import 'server_clock.dart';
 
@@ -49,6 +51,12 @@ class DownloadRefused implements Exception {
 /// because they are scored on the server, and a downloaded test could be
 /// re-attempted with nothing recording it. Videos and documents are the whole
 /// of the offline surface for now.
+///
+/// A lesson is downloaded whole. Beside its video or main document come the
+/// attachments the app can open -- every PDF and image on it -- into the same
+/// folder, under the same licence, counted in the same progress ring. The
+/// lesson is not marked done until the last of them has arrived, so a student
+/// on a train never finds the video saved and the worksheet missing.
 class DownloadManager {
   DownloadManager({
     required this._store,
@@ -274,7 +282,7 @@ class DownloadManager {
     _active.remove(contentItemId)?.cancel('removed');
 
     final record = await _store.download(contentItemId);
-    await _deleteFile(record?.localPath);
+    if (record != null) await _deleteLesson(record);
     await _store.removeDownload(contentItemId);
 
     await _notifier.sync(await _store.pendingDownloads());
@@ -284,7 +292,7 @@ class DownloadManager {
     final records = await _store.allDownloads();
     for (final record in records) {
       _active.remove(record.contentItemId)?.cancel('removed');
-      await _deleteFile(record.localPath);
+      await _deleteLesson(record);
       await _store.removeDownload(record.contentItemId);
     }
     await _notifier.cancel();
@@ -317,7 +325,7 @@ class DownloadManager {
   Future<void> purgeUnowned() async {
     final orphans = await _store.unownedDownloads();
     for (final record in orphans) {
-      await _deleteFile(record.localPath);
+      await _deleteLesson(record);
       await _store.removeDownload(record.contentItemId, studentId: '');
     }
   }
@@ -448,8 +456,9 @@ class DownloadManager {
 
     try {
       final target = await _resolveTarget(record);
-      await _transfer(record, target, token);
-      await _finish(record, target);
+      final main = await _transfer(record, target, token);
+      await _fetchAttachments(record, target, main.bytes, token);
+      await _finish(record, target, main);
     } on DownloadRefused catch (refused) {
       await _fail(id, refused.message, retryable: false);
     } on PlaybackException catch (failure) {
@@ -508,6 +517,10 @@ class DownloadManager {
         url: payload.mp4[chosen]!,
         quality: chosen,
         extension: 'mp4',
+        // Notes and worksheets attached to a video lesson come with it.
+        attachments: LessonFile.viewable(
+          await _documents.listFiles(record.contentItemId),
+        ),
         licenceExpiresAt: _licenceEnd(
           serverNow: payload.serverNow,
           licenceDays: payload.offlineLicenseDays,
@@ -518,11 +531,24 @@ class DownloadManager {
       );
     }
 
+    // The first file the app can open is the main one; the rest of the
+    // viewable files come after it. Asking for it by id, rather than taking
+    // whatever the route serves first, keeps an ePub that happens to sort
+    // first from becoming the one file the reader is handed.
+    //
+    // A lesson with no listed files is an older one whose document is a bare
+    // link on the item, and goes through the route exactly as it always did.
+    final files = LessonFile.viewable(
+      await _documents.listFiles(record.contentItemId),
+    );
+    final primary = files.isEmpty ? null : files.first;
+
     // The device id goes to the document endpoint for the same reason it goes
     // to the video one: a downloaded booklet is a copy that has to be
     // auditable and revocable, and a row with no device on it is neither.
     final document = await _documents.getSource(
       record.contentItemId,
+      fileId: primary?.id,
       deviceId: deviceId,
     );
     if (!document.isDownloadable) {
@@ -534,7 +560,11 @@ class DownloadManager {
     return _Target(
       url: document.url,
       quality: null,
-      extension: _extensionOf(document.fileName) ?? 'pdf',
+      extension: primary?.extension.isNotEmpty == true
+          ? primary!.extension
+          : _extensionOf(document.fileName) ?? 'pdf',
+      primary: primary,
+      attachments: files.skip(1).toList(),
       // The same cap the video path uses. Without it a student with ten days
       // of enrolment left downloaded every booklet and past paper and kept
       // them for thirty -- twenty days of readable paid content past the
@@ -585,11 +615,18 @@ class DownloadManager {
     return validUntil.isBefore(byPolicy) ? validUntil : byPolicy;
   }
 
-  Future<void> _transfer(
+  /// Fetches the main file -- the video, or the lesson's first document --
+  /// and reports where it went and how big it is.
+  ///
+  /// The row's totals include the attachments still to come from the start,
+  /// so the ring climbs once from empty to full rather than filling for the
+  /// video and then dropping back for the worksheets.
+  Future<({String path, int bytes})> _transfer(
     DownloadRecord record,
     _Target target,
     CancelToken token,
   ) async {
+    final extra = target.attachmentBytes;
     final path = record.localPath ?? await _pathFor(record, target.extension);
     final file = File(path);
     await file.parent.create(recursive: true);
@@ -625,10 +662,10 @@ class DownloadManager {
     // a resumed download means it was already complete.
     if (response.statusCode == 416) {
       await _store.patchDownload(record.contentItemId, {
-        'bytes_total': existing,
+        'bytes_total': existing + extra,
         'bytes_done': existing,
       }, announce: false);
-      return;
+      return (path: path, bytes: existing);
     }
 
     // A server that ignored the Range header sent the file from the start, so
@@ -641,7 +678,7 @@ class DownloadManager {
 
     final total = _totalBytes(response, startAt);
     await _store.patchDownload(record.contentItemId, {
-      'bytes_total': total,
+      'bytes_total': total + extra,
       'bytes_done': startAt,
     }, announce: false);
 
@@ -674,8 +711,155 @@ class DownloadManager {
 
     await _store.patchDownload(record.contentItemId, {
       'bytes_done': written,
-      'bytes_total': written > total ? written : total,
+      'bytes_total': (written > total ? written : total) + extra,
     }, announce: false);
+
+    return (path: path, bytes: written);
+  }
+
+  /// Fetches every attachment after the main file, into the lesson's folder.
+  ///
+  /// Each one resumes from where its own file ends, so a dropped connection
+  /// on the third worksheet does not fetch the first two again. One already
+  /// complete on disk is not even asked for.
+  Future<void> _fetchAttachments(
+    DownloadRecord record,
+    _Target target,
+    int mainBytes,
+    CancelToken token,
+  ) async {
+    if (target.attachments.isEmpty) return;
+
+    final id = record.contentItemId;
+    final base = (await getApplicationSupportDirectory()).path;
+    final deviceId = await _device.id();
+    final saved = {
+      for (final file in await _store.savedFiles(id)) file.fileId: file,
+    };
+
+    var done = mainBytes;
+    var total = mainBytes + target.attachmentBytes;
+
+    for (final attachment in target.attachments) {
+      final path = OfflinePaths.attachmentPath(
+        base,
+        id,
+        attachment.id,
+        attachment.extension,
+      );
+
+      final already = saved[attachment.id];
+      if (already != null &&
+          already.localPath == path &&
+          await _lengthOf(path) == already.bytes &&
+          already.bytes > 0) {
+        done += already.bytes;
+        continue;
+      }
+
+      // A fresh signed address per file: each expires in minutes, and the
+      // route checks the paywall and records the copy against this device
+      // every time, exactly as it does for the main file.
+      final source = await _documents.getSource(
+        id,
+        fileId: attachment.id,
+        deviceId: deviceId,
+      );
+      if (!source.isDownloadable) {
+        throw const DownloadRefused('This lesson is not available offline.');
+      }
+
+      final before = done;
+      final bytes = await _fetchFile(
+        source.url,
+        path,
+        token,
+        (written) => _store.patchDownload(id, {'bytes_done': before + written}),
+      );
+      done += bytes;
+      if (done > total) total = done;
+
+      await _store.putSavedFile(SavedFile(
+        contentItemId: id,
+        fileId: attachment.id,
+        name: attachment.name,
+        extension: attachment.extension,
+        localPath: path,
+        bytes: bytes,
+        weight: attachment.weight,
+      ));
+    }
+
+    await _store.patchDownload(id, {
+      'bytes_done': done,
+      'bytes_total': total,
+    }, announce: false);
+  }
+
+  /// Streams one attachment to [path], resuming by Range from where the file
+  /// already ends. Returns the file's final size.
+  ///
+  /// Kept apart from [_transfer] on purpose: that one also keeps the lesson
+  /// row's path and quality in step, and the video path is not worth putting
+  /// at risk to share twenty lines.
+  Future<int> _fetchFile(
+    String url,
+    String path,
+    CancelToken token,
+    Future<void> Function(int written) onProgress,
+  ) async {
+    final file = File(path);
+    await file.parent.create(recursive: true);
+    final existing = await file.exists() ? await file.length() : 0;
+
+    final response = await _dio.get<ResponseBody>(
+      url,
+      cancelToken: token,
+      options: Options(
+        responseType: ResponseType.stream,
+        headers: {if (existing > 0) 'Range': 'bytes=$existing-'},
+        followRedirects: true,
+        validateStatus: (status) =>
+            status == 200 || status == 206 || status == 416,
+      ),
+    );
+
+    if (response.statusCode == 416) return existing;
+
+    final resumed = response.statusCode == 206;
+    final sink = file.openWrite(
+      mode: resumed ? FileMode.append : FileMode.write,
+    );
+
+    var written = resumed ? existing : 0;
+    var lastReport = DateTime.fromMillisecondsSinceEpoch(0);
+
+    try {
+      await for (final chunk in response.data!.stream) {
+        sink.add(chunk);
+        written += chunk.length;
+
+        final now = DateTime.now();
+        if (now.difference(lastReport) > const Duration(milliseconds: 250)) {
+          lastReport = now;
+          await onProgress(written);
+        }
+      }
+    } finally {
+      await sink.flush();
+      await sink.close();
+    }
+
+    return written;
+  }
+
+  Future<int> _lengthOf(String path) async {
+    try {
+      final file = File(path);
+      return await file.exists() ? await file.length() : -1;
+    } on FileSystemException {
+      return -1;
+    }
   }
 
   int _totalBytes(Response<ResponseBody> response, int startAt) {
@@ -691,7 +875,26 @@ class DownloadManager {
     return 0;
   }
 
-  Future<void> _finish(DownloadRecord record, _Target target) async {
+  Future<void> _finish(
+    DownloadRecord record,
+    _Target target,
+    ({String path, int bytes}) main,
+  ) async {
+    // The main document is listed with the attachments, so the reader can
+    // name it and offer it beside them with no network to ask.
+    final primary = target.primary;
+    if (primary != null) {
+      await _store.putSavedFile(SavedFile(
+        contentItemId: record.contentItemId,
+        fileId: primary.id,
+        name: primary.name,
+        extension: primary.extension,
+        localPath: main.path,
+        bytes: main.bytes,
+        weight: primary.weight,
+      ));
+    }
+
     await _store.patchDownload(record.contentItemId, {
       'status': DownloadStatus.done.name,
       'paused_reason': null,
@@ -754,22 +957,19 @@ class DownloadManager {
     return '${base.path}/offline/${record.contentItemId}/$name.$extension';
   }
 
-  Future<void> _deleteFile(String? path) async {
-    if (path == null) return;
-    try {
-      final file = File(path);
-      if (await file.exists()) await file.delete();
+  /// Deletes everything saved for a lesson: the main file, every attachment,
+  /// and the folder they shared.
+  Future<void> _deleteLesson(DownloadRecord record) async {
+    // An unowned row predates attachments and has none recorded.
+    final saved = record.studentId.isEmpty
+        ? const <SavedFile>[]
+        : await _store.savedFiles(record.contentItemId);
 
-      // Take the per-item folder with it, so a deleted download leaves nothing
-      // behind at all.
-      final folder = file.parent;
-      if (await folder.exists() && folder.listSync().isEmpty) {
-        await folder.delete();
-      }
-    } on FileSystemException {
-      // The bytes outliving the record costs storage; it does not make
-      // anything playable, because the record is what the player reads.
-    }
+    await OfflinePaths.deleteLesson(
+      contentItemId: record.contentItemId,
+      mainPath: record.localPath,
+      others: saved.map((file) => file.localPath),
+    );
   }
 
   /// Free space where downloads land, or null when the platform will not say.
@@ -796,6 +996,16 @@ class _Target {
   final String url;
   final String? quality;
   final String extension;
+
+  /// The attachment the main file is, for a document lesson that lists its
+  /// files. Null for a video, and for an older lesson whose document is a
+  /// bare link on the item.
+  final LessonFile? primary;
+
+  /// Everything else on the lesson the app can open, fetched after the main
+  /// file into the same folder.
+  final List<LessonFile> attachments;
+
   final DateTime? licenceExpiresAt;
 
   /// The licence length the server granted, kept so the expiry can be checked
@@ -809,8 +1019,16 @@ class _Target {
     required this.url,
     required this.quality,
     required this.extension,
+    this.primary,
+    this.attachments = const [],
     required this.licenceExpiresAt,
     required this.licenceDays,
     required this.verifiedAt,
   });
+
+  /// What the attachments are expected to weigh, from the sizes recorded at
+  /// upload. Zero when none are known; the real figures replace it as each
+  /// file arrives.
+  int get attachmentBytes =>
+      attachments.fold(0, (sum, file) => sum + file.sizeBytes);
 }

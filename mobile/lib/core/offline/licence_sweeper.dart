@@ -1,9 +1,9 @@
-import 'dart:io';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'device_identity.dart';
 import 'download_record.dart';
+import 'offline_paths.dart';
 import 'offline_store.dart';
 import 'server_clock.dart';
 
@@ -287,17 +287,18 @@ class LicenceSweeper {
   /// boolean would make revocation a matter of trusting the app, and it would
   /// go on costing the student storage for something they cannot watch.
   Future<void> _revoke(DownloadRecord record) async {
-    final path = record.localPath;
-    if (path != null) {
-      try {
-        final file = File(path);
-        if (await file.exists()) await file.delete();
-      } on FileSystemException {
-        // The bytes outliving the record is a storage leak, not a paywall
-        // hole: the record is what the player checks, and it is about to say
-        // expired.
-      }
-    }
+    // Every file saved with the lesson goes, not only the main one: an
+    // attachment left behind would be a paid worksheet outliving the licence
+    // it came under. Failures are swallowed inside -- bytes outliving the
+    // record are a storage leak, not a paywall hole, because the record is
+    // what the player and the reader check, and it is about to say expired.
+    final saved = await _store.savedFiles(record.contentItemId);
+    await OfflinePaths.deleteLesson(
+      contentItemId: record.contentItemId,
+      mainPath: record.localPath,
+      others: saved.map((file) => file.localPath),
+    );
+    await _store.forgetSavedFiles(record.contentItemId);
 
     await _store.patchDownload(record.contentItemId, {
       'status': DownloadStatus.expired.name,
