@@ -69,6 +69,7 @@ class AppNotification {
 
     final action = (broadcast['action_url'] as String?) ?? '';
     if (action.startsWith('/live')) return 'live_class';
+    if (action.startsWith('/doubts')) return 'doubt';
     if (broadcast['course_id'] != null) return 'course_update';
     return 'promo';
   }
@@ -81,6 +82,8 @@ class AppNotification {
         return Icons.school_outlined;
       case 'course_update':
         return Icons.update_outlined;
+      case 'doubt':
+        return Icons.question_answer_outlined;
       default:
         return Icons.campaign_outlined;
     }
@@ -94,6 +97,8 @@ class AppNotification {
         return const Color(0xFF22C55E);
       case 'course_update':
         return const Color(0xFF3B82F6);
+      case 'doubt':
+        return const Color(0xFF22C55E);
       default:
         return const Color(0xFFF26A21);
     }

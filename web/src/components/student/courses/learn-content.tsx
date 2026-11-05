@@ -34,6 +34,7 @@ import {
 import type { Course } from "@/types/course";
 import { getYouTubeId, isVideoFile } from "@/lib/video";
 import { HostedVideoPlayer } from "@/components/student/courses/hosted-video-player";
+import { LessonDoubtsPanel } from "@/components/student/doubts/lesson-doubts-panel";
 import {
   markContentComplete,
   updateContentProgress,
@@ -1222,6 +1223,10 @@ export function LearnContent({
                   </div>
                 </div>
               )}
+
+              {/* Keyed on the lesson so switching lessons starts a fresh
+                  load instead of flashing the last lesson's doubts. */}
+              <LessonDoubtsPanel key={currentItem.id} contentItemId={currentItem.id} />
             </>
           ) : (
             <div className="flex flex-col items-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-16 text-center">

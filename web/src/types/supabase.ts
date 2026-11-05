@@ -735,6 +735,138 @@ export type Database = {
         }
         Relationships: []
       }
+      doubt_replies: {
+        Row: {
+          author_admin_id: string | null
+          author_kind: string
+          author_name: string
+          author_student_id: string | null
+          body: string
+          created_at: string
+          doubt_id: string
+          id: string
+          image_path: string | null
+        }
+        Insert: {
+          author_admin_id?: string | null
+          author_kind?: string
+          author_name?: string
+          author_student_id?: string | null
+          body: string
+          created_at?: string
+          doubt_id: string
+          id?: string
+          image_path?: string | null
+        }
+        Update: {
+          author_admin_id?: string | null
+          author_kind?: string
+          author_name?: string
+          author_student_id?: string | null
+          body?: string
+          created_at?: string
+          doubt_id?: string
+          id?: string
+          image_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doubt_replies_author_admin_id_fkey"
+            columns: ["author_admin_id"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubt_replies_author_student_id_fkey"
+            columns: ["author_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubt_replies_doubt_id_fkey"
+            columns: ["doubt_id"]
+            isOneToOne: false
+            referencedRelation: "doubts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doubts: {
+        Row: {
+          answered_at: string | null
+          assigned_to: string | null
+          body: string
+          closed_at: string | null
+          content_item_id: string
+          course_id: string
+          created_at: string
+          id: string
+          image_path: string | null
+          status: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          answered_at?: string | null
+          assigned_to?: string | null
+          body: string
+          closed_at?: string | null
+          content_item_id: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          image_path?: string | null
+          status?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Update: {
+          answered_at?: string | null
+          assigned_to?: string | null
+          body?: string
+          closed_at?: string | null
+          content_item_id?: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          image_path?: string | null
+          status?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doubts_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubts_content_item_id_fkey"
+            columns: ["content_item_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       enrollments: {
         Row: {
           course_id: string
@@ -2116,6 +2248,35 @@ export type Database = {
           is_set: boolean
           updated_at: string
           updated_by_name: string
+        }[]
+      }
+      admin_list_doubts: {
+        Args: {
+          p_course_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_status?: string
+        }
+        Returns: {
+          answered_at: string
+          assigned_to: string
+          assignee_name: string
+          body: string
+          content_item_id: string
+          course_id: string
+          course_title: string
+          created_at: string
+          has_image: boolean
+          id: string
+          lesson_title: string
+          reply_count: number
+          status: string
+          student_class: string
+          student_id: string
+          student_name: string
+          total_count: number
+          updated_at: string
         }[]
       }
       admin_login_blocked: {

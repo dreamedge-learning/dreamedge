@@ -94,6 +94,11 @@ class ProfileScreen extends ConsumerWidget {
             onTap: () => context.push('/profile/edit'),
           ),
           _MenuItem(
+            icon: Icons.question_answer_outlined,
+            title: 'My Doubts',
+            onTap: () => context.push('/doubts'),
+          ),
+          _MenuItem(
             icon: Icons.receipt_long_outlined,
             title: 'Payment History',
             onTap: () => context.push('/payment-history'),
