@@ -50,8 +50,16 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
       body: SafeArea(
         child: enrollmentsAsync.when(
           data: (enrollments) {
+            // The same rule the server uses to let a student see a board:
+            // an active enrolment that has not expired. A null validUntil is
+            // lifetime access. Listing an expired course here would only
+            // ever show an empty board.
+            final now = DateTime.now();
             final active = enrollments
-                .where((e) => e.isActive && e.course != null)
+                .where((e) =>
+                    e.isActive &&
+                    e.course != null &&
+                    (e.validUntil == null || e.validUntil!.isAfter(now)))
                 .toList(growable: false);
             if (active.isEmpty) {
               return _EmptyState(
@@ -277,36 +285,28 @@ class _LeaderboardBody extends ConsumerWidget {
       child: async.when(
         data: (entries) {
           if (entries.isEmpty) {
-            return const _EmptyScrollable(
+            return _EmptyScrollable(
               icon: Icons.emoji_events_outlined,
-              title: 'No tests taken this week yet',
+              title: week == LeaderboardWeek.thisWeek
+                  ? 'No tests taken this week yet'
+                  : 'No tests were taken last week',
               detail:
                   'Attempt a test from your course and come back here to see '
                   'where you stand.',
             );
           }
 
-          // Partition into "top block" (consecutive from rank 1) and "me row
-          // outside" (the caller row kept by the server when they are past
-          // rank 50). We identify the outside row by its gap from the row
-          // before it rather than hard-coding "> 50" -- the UI stays correct
-          // if the server's cap ever changes.
-          final visible = <LeaderboardEntry>[];
-          LeaderboardEntry? outside;
-          for (var i = 0; i < entries.length; i++) {
-            final e = entries[i];
-            if (i == 0 || entries[i - 1].rank + 1 >= e.rank) {
-              visible.add(e);
-            } else {
-              outside = e;
-              break;
-            }
-          }
+          final split = LeaderboardSplit.of(entries);
+          final visible = split.top;
+          final outside = split.pinned;
 
           return Column(
             children: [
               Expanded(
                 child: ListView.separated(
+                  // A short list does not scroll on its own, and without
+                  // this the pull-to-refresh above it would never fire.
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding:
                       EdgeInsets.fromLTRB(16, 8, 16, outside == null ? 24 : 8),
                   itemCount: visible.length,

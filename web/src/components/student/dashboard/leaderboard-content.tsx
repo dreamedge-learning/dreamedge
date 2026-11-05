@@ -14,18 +14,11 @@ import {
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import type { Database } from "@/types/supabase";
 import type { LeaderboardEnrollment } from "@/app/(student)/dashboard/leaderboard/page";
 
-// Narrow local types. The task forbids regenerating `types/supabase.ts`, so
-// we type the RPC row explicitly rather than relying on the generated
-// Functions map. The five columns match `get_weekly_leaderboard` exactly.
-interface LeaderboardRow {
-  rank: number;
-  display_name: string;
-  total_score: number;
-  tests_taken: number;
-  is_me: boolean;
-}
+type LeaderboardRow =
+  Database["public"]["Functions"]["get_weekly_leaderboard"]["Returns"][number];
 
 type WeekChoice = "this" | "last";
 
@@ -33,10 +26,11 @@ interface LeaderboardContentProps {
   enrollments: LeaderboardEnrollment[];
 }
 
-// IST is UTC + 05:30 and does not observe DST. The server still computes the
-// week from `now()`, so "this week" sends `p_week_start = null`. "Last week"
-// has to translate to a `date`, and the right date is the Monday *in IST*
-// one week before the current IST Monday -- never the browser's local day.
+// IST is UTC + 05:30 and does not observe DST. The server works out the
+// current week from its own clock, so "this week" leaves `p_week_start` out.
+// "Last week" has to be a `date`; the server snaps any date to the Monday of
+// its IST week, but sending that Monday keeps the request readable and means
+// the browser's own time zone never decides which week is asked for.
 function istMondayDate(whenUtc: Date): string {
   const shifted = new Date(whenUtc.getTime() + 5.5 * 60 * 60 * 1000);
   // getUTCDay returns 0 (Sun) .. 6 (Sat); ISO weekday is 1 (Mon) .. 7 (Sun).
@@ -55,8 +49,8 @@ function istMondayDate(whenUtc: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function paramForWeek(week: WeekChoice): string | null {
-  if (week === "this") return null;
+function paramForWeek(week: WeekChoice): string | undefined {
+  if (week === "this") return undefined;
   const now = new Date();
   // Shift back a full seven days first, then round down to IST Monday.
   return istMondayDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
@@ -103,7 +97,8 @@ function PageHeader() {
       </h1>
       <p className="mt-2 max-w-xl text-sm text-muted-foreground">
         Your best score on every test for the week, summed up and ranked
-        across the course. Resets Monday 00:00 IST.
+        across the course. On equal scores, whoever got there first ranks
+        higher. Resets Monday 00:00 IST.
       </p>
     </div>
   );
@@ -126,17 +121,13 @@ function LeaderboardBody({ enrollments }: { enrollments: LeaderboardEnrollment[]
       setStatus("loading");
       try {
         const supabase = createClient();
-        // The RPC is new; cast around the generated Functions type so we do
-        // not have to regenerate `types/supabase.ts` to ship this change.
-        const { data, error } = await (
-          supabase.rpc as unknown as (
-            fn: string,
-            params: Record<string, unknown>
-          ) => Promise<{ data: LeaderboardRow[] | null; error: unknown }>
-        )("get_weekly_leaderboard", {
-          p_course_id: nextCourseId,
-          p_week_start: paramForWeek(nextWeek),
-        });
+        const weekStart = paramForWeek(nextWeek);
+        const { data, error } = await supabase.rpc(
+          "get_weekly_leaderboard",
+          weekStart === undefined
+            ? { p_course_id: nextCourseId }
+            : { p_course_id: nextCourseId, p_week_start: weekStart }
+        );
         if (reqId.current !== myReq) return;
         if (error) {
           setStatus("error");
@@ -166,10 +157,11 @@ function LeaderboardBody({ enrollments }: { enrollments: LeaderboardEnrollment[]
     void load(courseId, week);
   }, [courseId, week, load]);
 
-  // Partition into visible (top block) and the caller row pinned at the
-  // bottom when the server returned them past the top block. "Past the top
-  // block" is detected by a gap in ranks rather than a hard-coded 50, so the
-  // UI stays correct if the server's cap ever changes.
+  // The server sends the top ten, each with its own rank, then the caller's
+  // row if they are further down. Anything after the first gap in the ranks
+  // is that row, and it is pinned below the list. Splitting on the gap rather
+  // than on a hard-coded ten keeps this in step with the server's cut-off; a
+  // caller at rank 11 simply continues the list, which reads the same.
   const partition = useMemo(() => {
     const visible: LeaderboardRow[] = [];
     let outside: LeaderboardRow | null = null;
@@ -242,7 +234,11 @@ function LeaderboardBody({ enrollments }: { enrollments: LeaderboardEnrollment[]
           />
         ) : partition.visible.length === 0 ? (
           <EmptyCard
-            title="No tests taken this week yet"
+            title={
+              week === "this"
+                ? "No tests taken this week yet"
+                : "No tests were taken last week"
+            }
             detail="Attempt a test from your course and come back here to see where you stand."
             cta={{ href: "/dashboard/tests", label: "Go to tests" }}
           />
@@ -250,7 +246,7 @@ function LeaderboardBody({ enrollments }: { enrollments: LeaderboardEnrollment[]
           <>
             <ul className="space-y-2">
               {partition.visible.map((row) => (
-                <Row key={`${row.rank}-${row.display_name}`} row={row} />
+                <Row key={row.rank} row={row} />
               ))}
             </ul>
             {partition.outside ? (

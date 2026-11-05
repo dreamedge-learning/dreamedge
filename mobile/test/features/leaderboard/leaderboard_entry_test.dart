@@ -37,8 +37,8 @@ void main() {
     });
 
     test('a null or false is_me never flips to true', () {
-      // Admin callers see null for is_me because current_student_id() returns
-      // null. A stray null must not highlight a random student's row.
+      // The RPC sends false for every row an admin sees, since an admin has
+      // no student row. A stray null must still not highlight anyone.
       final nulled = LeaderboardEntry.fromRpc(<String, dynamic>{
         'rank': 3,
         'display_name': 'Chirag',
@@ -87,6 +87,49 @@ void main() {
         LeaderboardService.weekStartParam(LeaderboardWeek.lastWeek, now: now),
         '2026-10-26',
       );
+    });
+  });
+
+  group('LeaderboardSplit.of', () {
+    LeaderboardEntry row(int rank, {bool me = false}) => LeaderboardEntry(
+          rank: rank,
+          displayName: 'Student $rank',
+          totalScore: 100.0 - rank,
+          testsTaken: 1,
+          isMe: me,
+        );
+
+    test('a caller inside the top block is not pinned', () {
+      final split = LeaderboardSplit.of([
+        for (var r = 1; r <= 10; r++) row(r, me: r == 4),
+      ]);
+      expect(split.top.length, 10);
+      expect(split.pinned, isNull);
+    });
+
+    test('a caller past a gap in the ranks is pinned below the list', () {
+      final split = LeaderboardSplit.of([
+        for (var r = 1; r <= 10; r++) row(r),
+        row(37, me: true),
+      ]);
+      expect(split.top.map((e) => e.rank), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      expect(split.pinned?.rank, 37);
+      expect(split.pinned?.isMe, isTrue);
+    });
+
+    test('a caller at rank 11 continues the list', () {
+      final split = LeaderboardSplit.of([
+        for (var r = 1; r <= 10; r++) row(r),
+        row(11, me: true),
+      ]);
+      expect(split.top.length, 11);
+      expect(split.pinned, isNull);
+    });
+
+    test('an empty board splits into nothing', () {
+      final split = LeaderboardSplit.of(const []);
+      expect(split.top, isEmpty);
+      expect(split.pinned, isNull);
     });
   });
 }

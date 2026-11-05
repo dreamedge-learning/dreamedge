@@ -2579,6 +2579,16 @@ export type Database = {
         }[]
       }
       get_top_courses: { Args: { result_limit?: number }; Returns: Json }
+      get_weekly_leaderboard: {
+        Args: { p_course_id: string; p_week_start?: string }
+        Returns: {
+          display_name: string
+          is_me: boolean
+          rank: number
+          tests_taken: number
+          total_score: number
+        }[]
+      }
       has_admin_role: {
         Args: { allowed_roles: Database["public"]["Enums"]["user_role"][] }
         Returns: boolean

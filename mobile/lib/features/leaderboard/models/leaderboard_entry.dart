@@ -1,9 +1,10 @@
 /// One row in the weekly leaderboard.
 ///
-/// The server redacts to first name + last initial already -- we never see
-/// a real surname, phone, email, student id or school on the device. Keeping
-/// the Dart model to the same five columns makes it impossible to leak those
-/// even if a future query starts selecting more.
+/// The server redacts every other student to first name + last initial --
+/// we never see their surname, phone, email, student id or school on the
+/// device. Only the caller's own row carries their name in full. Keeping the
+/// Dart model to the same five columns makes it impossible to leak more even
+/// if a future query starts selecting it.
 class LeaderboardEntry {
   final int rank;
   final String displayName;
@@ -30,10 +31,39 @@ class LeaderboardEntry {
           : 'Student',
       totalScore: (row['total_score'] as num?)?.toDouble() ?? 0,
       testsTaken: (row['tests_taken'] as num?)?.toInt() ?? 0,
-      // is_me is always non-null in the current RPC, but a defensive false
+      // is_me is never null from the current RPC, but a defensive false
       // keeps a stray null from flipping another student's row into the
       // "that's you" highlight.
       isMe: row['is_me'] == true,
     );
+  }
+}
+
+/// The rows a leaderboard screen draws: the unbroken run of ranks from the
+/// top, and the caller's own row when the server sent it from further down.
+///
+/// Every student has a distinct rank, so the top block is 1, 2, 3, ... and
+/// anything after the first gap is the caller's row. Splitting on the gap
+/// rather than on a hard-coded ten keeps the app in step with the server's
+/// cut-off. A caller at rank 11 has no gap before them and simply continues
+/// the list, which reads the same.
+class LeaderboardSplit {
+  final List<LeaderboardEntry> top;
+  final LeaderboardEntry? pinned;
+
+  const LeaderboardSplit({required this.top, this.pinned});
+
+  factory LeaderboardSplit.of(List<LeaderboardEntry> entries) {
+    final top = <LeaderboardEntry>[];
+    LeaderboardEntry? pinned;
+    for (final e in entries) {
+      if (top.isEmpty || e.rank == top.last.rank + 1) {
+        top.add(e);
+      } else {
+        pinned = e;
+        break;
+      }
+    }
+    return LeaderboardSplit(top: top, pinned: pinned);
   }
 }
