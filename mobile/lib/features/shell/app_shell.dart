@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/providers/course_rating_provider.dart';
 import '../../core/providers/offline_provider.dart';
 import '../../shared/theme/colors.dart';
 import '../courses/courses_screen.dart';
@@ -125,7 +126,15 @@ class _AppShellState extends ConsumerState<AppShell>
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          // My Learning stays mounted in the stack, so its ratings would
+          // otherwise keep saying "finish a lesson to rate" after the student
+          // has gone and finished one. Re-reading on the way in is one call.
+          if (index == 2 && _currentIndex != 2) {
+            ref.invalidate(myCourseRatingsProvider);
+          }
+          setState(() => _currentIndex = index);
+        },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.orange,
         unselectedItemColor: AppColors.gray,

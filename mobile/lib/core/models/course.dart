@@ -16,6 +16,11 @@ class Course {
 
   /// Server-owned access window for a purchase. Never computed on the device.
   final int validityDays;
+
+  /// Students' average, one decimal, from visible ratings only. Null until
+  /// somebody has rated the course. Written by the database, never here.
+  final double? ratingAvg;
+  final int ratingCount;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -35,6 +40,8 @@ class Course {
     required this.totalLessons,
     required this.durationMinutes,
     required this.validityDays,
+    this.ratingAvg,
+    this.ratingCount = 0,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -72,6 +79,13 @@ class Course {
       durationMinutes: (json['duration_minutes'] as num?)?.toInt() ??
           (((json['duration_hours'] as num?)?.toDouble() ?? 0) * 60).round(),
       validityDays: (json['validity_days'] as num?)?.toInt() ?? 365,
+      // numeric(2,1) arrives as a number or, through some paths, a string.
+      ratingAvg: switch (json['rating_avg']) {
+        final num n => n.toDouble(),
+        final String s => double.tryParse(s),
+        _ => null,
+      },
+      ratingCount: (json['rating_count'] as num?)?.toInt() ?? 0,
       createdAt: DateTime.parse(
           json['created_at'] as String? ?? DateTime.now().toIso8601String()),
       updatedAt: DateTime.parse(
@@ -96,6 +110,8 @@ class Course {
       'total_lessons': totalLessons,
       'duration_minutes': durationMinutes,
       'validity_days': validityDays,
+      'rating_avg': ratingAvg,
+      'rating_count': ratingCount,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };

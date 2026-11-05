@@ -5,6 +5,8 @@ import Link from "next/link";
 import { BookOpen, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CourseRatingStars } from "@/components/student/dashboard/course-rating-stars";
+import type { MyCourseRating } from "@/lib/ratings";
 import type { EnrollmentWithCourse } from "@/types/enrollment";
 
 interface CourseProgress {
@@ -16,11 +18,13 @@ interface CourseProgress {
 interface MyCoursesContentProps {
   enrollments: EnrollmentWithCourse[];
   progress: Record<string, CourseProgress>;
+  ratings: Record<string, MyCourseRating>;
 }
 
 export function MyCoursesContent({
   enrollments,
   progress,
+  ratings,
 }: MyCoursesContentProps) {
   const activeCourses = enrollments.filter((e) => e.course != null);
 
@@ -65,86 +69,103 @@ export function MyCoursesContent({
             const pct = cp?.pct ?? 0;
             const completed = cp?.completed ?? 0;
             const total = cp?.total ?? 0;
+            const href = `/courses/${course.slug}/learn`;
 
+            // The card is no longer a single Link: the star control must sit
+            // outside the anchor, or clicks on it would navigate into the
+            // course, and nesting buttons inside <a> is invalid HTML.
             return (
-              <Link
+              <div
                 key={enrollment.id}
-                href={`/courses/${course.slug}/learn`}
-                className="group overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
               >
-                {/* Thumbnail */}
-                <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-brand-orange/20 to-brand-blue/20">
-                  {course.thumbnail_url ? (
-                    <Image
-                      src={course.thumbnail_url}
-                      alt={course.title}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover transition-transform duration-300 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <span className="text-3xl font-bold text-brand-orange/30">
-                        DE
-                      </span>
-                    </div>
-                  )}
-                  {course.class && (
-                    <Badge className="absolute left-2.5 top-2.5 bg-black/70 text-white backdrop-blur-sm">
-                      {course.class}
-                    </Badge>
-                  )}
-                </div>
+                <Link href={href} className="block">
+                  {/* Thumbnail */}
+                  <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-brand-orange/20 to-brand-blue/20">
+                    {course.thumbnail_url ? (
+                      <Image
+                        src={course.thumbnail_url}
+                        alt={course.title}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <span className="text-3xl font-bold text-brand-orange/30">
+                          DE
+                        </span>
+                      </div>
+                    )}
+                    {course.class && (
+                      <Badge className="absolute left-2.5 top-2.5 bg-black/70 text-white backdrop-blur-sm">
+                        {course.class}
+                      </Badge>
+                    )}
+                  </div>
+                </Link>
 
                 {/* Card body */}
-                <div className="p-4">
-                  <h3 className="line-clamp-2 text-sm font-semibold text-card-foreground">
-                    {course.title}
-                  </h3>
-                  {course.teacher_name && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {course.teacher_name}
-                    </p>
-                  )}
+                <div className="flex flex-1 flex-col p-4">
+                  <Link href={href} className="block">
+                    <h3 className="line-clamp-2 text-sm font-semibold text-card-foreground">
+                      {course.title}
+                    </h3>
+                    {course.teacher_name && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {course.teacher_name}
+                      </p>
+                    )}
 
-                  {/* Meta */}
-                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                    {total > 0 && (
-                      <span>
-                        {completed} of {total} lessons
-                      </span>
-                    )}
-                    {total === 0 && course.total_lessons > 0 && (
-                      <span>{course.total_lessons} lessons</span>
-                    )}
-                    {course.duration_hours && (
-                      <>
-                        <span aria-hidden="true">&middot;</span>
-                        <span>{course.duration_hours}h</span>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Progress */}
-                  <div className="mt-3">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{pct}% complete</span>
+                    {/* Meta */}
+                    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      {total > 0 && (
+                        <span>
+                          {completed} of {total} lessons
+                        </span>
+                      )}
+                      {total === 0 && course.total_lessons > 0 && (
+                        <span>{course.total_lessons} lessons</span>
+                      )}
+                      {course.duration_hours && (
+                        <>
+                          <span aria-hidden="true">&middot;</span>
+                          <span>{course.duration_hours}h</span>
+                        </>
+                      )}
                     </div>
-                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-brand-orange transition-all duration-300"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Continue link */}
-                  <div className="mt-3 flex items-center text-sm font-medium text-brand-orange">
-                    Continue
-                    <ChevronRight className="ml-0.5 h-4 w-4" />
+                    {/* Progress */}
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>{pct}% complete</span>
+                      </div>
+                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full bg-brand-orange transition-all duration-300"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Rating + continue */}
+                  <div className="mt-auto flex items-end justify-between gap-3 pt-3">
+                    <CourseRatingStars
+                      courseId={enrollment.course_id}
+                      courseTitle={course.title}
+                      initial={ratings[enrollment.course_id]}
+                    />
+                    <Link
+                      href={href}
+                      className="flex shrink-0 items-center text-sm font-medium text-brand-orange hover:text-brand-orange-dark"
+                    >
+                      Continue
+                      <ChevronRight className="ml-0.5 h-4 w-4" />
+                    </Link>
                   </div>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>

@@ -8,6 +8,7 @@ import { TestimonialsSection } from "@/components/student/home/testimonials-sect
 import { FaqSection } from "@/components/student/home/faq-section";
 import { getSiteSettings } from "@/lib/settings";
 import { CtaSection } from "@/components/student/home/cta-section";
+import { platformRating } from "@/lib/ratings";
 
 
 async function fetchCourses() {
@@ -24,6 +25,25 @@ async function fetchCourses() {
     return data ?? [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * The average across every rated, published course, for the hero's trust
+ * chip. Null until there are enough ratings to quote; the chip then says
+ * nothing about stars rather than showing five it has not earned.
+ */
+async function fetchPlatformRating() {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("courses")
+      .select("rating_avg, rating_count")
+      .eq("is_published", true)
+      .gt("rating_count", 0);
+    return platformRating(data ?? []);
+  } catch {
+    return null;
   }
 }
 
@@ -69,16 +89,17 @@ async function fetchTestimonials() {
 }
 
 export default async function HomePage() {
-  const [courses, testimonials, liveClassTitle, settings] = await Promise.all([
+  const [courses, testimonials, liveClassTitle, settings, rating] = await Promise.all([
     fetchCourses(),
     fetchTestimonials(),
     fetchLiveClassTitle(),
     getSiteSettings(),
+    fetchPlatformRating(),
   ]);
 
   return (
     <>
-      <HeroSection liveClassTitle={liveClassTitle} />
+      <HeroSection liveClassTitle={liveClassTitle} rating={rating} />
       <ClassSelector />
       <PopularCourses courses={courses} />
       <MentorStrip />

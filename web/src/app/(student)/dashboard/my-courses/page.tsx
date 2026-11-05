@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { requireCompleteStudentProfile } from "@/lib/auth-student";
+import type { MyCourseRating } from "@/lib/ratings";
 import { createClient } from "@/lib/supabase/server";
 import type { EnrollmentWithCourse } from "@/types/enrollment";
 import { MyCoursesContent } from "@/components/student/dashboard/my-courses-content";
@@ -140,6 +141,36 @@ async function fetchCourseProgress(
   }
 }
 
+/**
+ * The student's own rating for each course on this page, and whether they may
+ * rate it yet (an unexpired enrolment and at least one finished lesson). One
+ * call: `my_course_ratings` answers for every active enrolment at once, using
+ * the same rule the database applies when the rating is written.
+ */
+async function fetchStudentRatings(): Promise<Record<string, MyCourseRating>> {
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("my_course_ratings");
+    if (error || !data) {
+      if (error) console.error("[my-courses] ratings could not be read:", error);
+      return {};
+    }
+    const map: Record<string, MyCourseRating> = {};
+    for (const row of data) {
+      map[row.course_id] = {
+        canRate: row.can_rate,
+        stars: row.stars ?? null,
+        review: row.review ?? null,
+        isHidden: row.is_hidden,
+        hiddenReason: row.hidden_reason ?? null,
+      };
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
 export default async function MyCoursesPage() {
   const student = await requireCompleteStudentProfile("/dashboard/my-courses");
   const enrollments = await fetchEnrollments(student.id);
@@ -148,12 +179,21 @@ export default async function MyCoursesPage() {
     .filter((e) => e.course != null)
     .map((e) => e.course_id);
 
-  const progressMap = await fetchCourseProgress(student.id, courseIds);
+  const [progressMap, ratings] = await Promise.all([
+    fetchCourseProgress(student.id, courseIds),
+    fetchStudentRatings(),
+  ]);
 
   const progressData: Record<string, CourseProgress> = {};
   for (const [courseId, summary] of progressMap) {
     progressData[courseId] = summary;
   }
 
-  return <MyCoursesContent enrollments={enrollments} progress={progressData} />;
+  return (
+    <MyCoursesContent
+      enrollments={enrollments}
+      progress={progressData}
+      ratings={ratings}
+    />
+  );
 }

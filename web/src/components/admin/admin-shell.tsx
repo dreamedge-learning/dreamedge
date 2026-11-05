@@ -31,6 +31,7 @@ import {
   RotateCcw,
   ScrollText,
   MessageCircleQuestion,
+  Star,
   MessageSquare,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
@@ -135,6 +136,14 @@ const navItems: NavItem[] = [
         label: "Testimonials",
         href: "/admin/students/testimonials",
         icon: Award,
+        roles: ["super_admin", "support_staff"],
+      },
+      {
+        // Same two roles as the database's moderation function: the people
+        // who answer the phone when a parent complains about a review.
+        label: "Course Reviews",
+        href: "/admin/students/reviews",
+        icon: Star,
         roles: ["super_admin", "support_staff"],
       },
       {

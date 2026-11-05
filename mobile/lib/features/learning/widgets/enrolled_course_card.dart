@@ -1,22 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/enrollment.dart';
+import '../../../core/providers/course_rating_provider.dart';
 import '../../../shared/theme/colors.dart';
 import '../../../shared/theme/typography.dart';
+import 'course_rating_stars.dart';
 
-class EnrolledCourseCard extends StatelessWidget {
+class EnrolledCourseCard extends ConsumerWidget {
   final Enrollment enrollment;
 
   const EnrolledCourseCard({super.key, required this.enrollment});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final course = enrollment.course;
     final title = course?.title ?? 'Course';
     final targetClass = course?.targetClass;
     final thumbnailUrl = course?.thumbnailUrl;
+
+    // The student's own rating for this course and whether they may rate it
+    // yet. Nothing is drawn until that is known: stars that appear empty and
+    // then fill in a moment later read as the rating having been lost.
+    final rating = ref.watch(myCourseRatingsProvider).maybeWhen(
+          data: (map) => map[enrollment.courseId],
+          orElse: () => null,
+        );
 
     return GestureDetector(
       onTap: () => context.push('/course/${enrollment.courseId}'),
@@ -109,6 +120,17 @@ class EnrolledCourseCard extends StatelessWidget {
                       ],
                     ],
                   ),
+                  // The star control sits inside the card's info column so
+                  // a tap on it is isolated from the surrounding
+                  // GestureDetector by the IconButtons' own hit testing.
+                  if (rating != null) ...[
+                    const SizedBox(height: 6),
+                    CourseRatingStars(
+                      courseId: enrollment.courseId,
+                      courseTitle: title,
+                      initial: rating,
+                    ),
+                  ],
                 ],
               ),
             ),

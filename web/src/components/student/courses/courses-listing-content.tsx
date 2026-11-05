@@ -121,7 +121,13 @@ export function CoursesListingContent({
         result.sort((a, b) => b.price - a.price);
         break;
       case "rating":
-        result.sort((a, b) => (b.rating_avg ?? 0) - (a.rating_avg ?? 0));
+        // Unrated courses last; between equal averages, the one more
+        // students have rated is the safer bet.
+        result.sort(
+          (a, b) =>
+            (b.rating_avg ?? 0) - (a.rating_avg ?? 0) ||
+            (b.rating_count ?? 0) - (a.rating_count ?? 0)
+        );
         break;
       default:
         result.sort((a, b) => b.student_count - a.student_count);
