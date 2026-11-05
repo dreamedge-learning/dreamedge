@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/order.dart';
 import '../../core/providers/payment_provider.dart';
+import '../../core/services/receipt_service.dart';
 import '../../shared/theme/colors.dart';
 
 class PaymentHistoryScreen extends ConsumerWidget {
@@ -124,16 +125,41 @@ class PaymentHistoryScreen extends ConsumerWidget {
   }
 }
 
-class _OrderTile extends StatefulWidget {
+class _OrderTile extends ConsumerStatefulWidget {
   final CourseOrder order;
 
   const _OrderTile({required this.order});
 
   @override
-  State<_OrderTile> createState() => _OrderTileState();
+  ConsumerState<_OrderTile> createState() => _OrderTileState();
 }
 
-class _OrderTileState extends State<_OrderTile> {
+class _OrderTileState extends ConsumerState<_OrderTile> {
+  bool _openingReceipt = false;
+
+  /// Opens the receipt in the browser, through a short-lived signed link: the
+  /// browser is not signed in, and the stored address is a website path.
+  Future<void> _openReceipt() async {
+    if (_openingReceipt) return;
+    setState(() => _openingReceipt = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final uri =
+          await ref.read(receiptServiceProvider).linkFor(widget.order.id);
+      final opened =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) {
+        messenger.showSnackBar(const SnackBar(
+          content: Text('No browser is available to open the receipt.'),
+        ));
+      }
+    } on ReceiptUnavailable catch (failure) {
+      messenger.showSnackBar(SnackBar(content: Text(failure.message)));
+    } finally {
+      if (mounted) setState(() => _openingReceipt = false);
+    }
+  }
+
   bool _expanded = false;
 
   @override
@@ -223,21 +249,27 @@ class _OrderTileState extends State<_OrderTile> {
               if (order.discountAmount > 0)
                 _detailRow(
                     'Discount', '₹${order.discountAmount.toStringAsFixed(0)}'),
-              if (order.invoiceUrl != null)
+              if (order.invoiceNumber != null)
+                _detailRow('Receipt No.', order.invoiceNumber!),
+              if (order.invoiceNumber != null &&
+                  (order.isCompleted || order.isRefunded))
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final uri = Uri.parse(order.invoiceUrl!);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri,
-                              mode: LaunchMode.externalApplication);
-                        }
-                      },
-                      icon: const Icon(Icons.receipt_long_rounded, size: 18),
-                      label: const Text('Download Invoice'),
+                      onPressed: _openingReceipt ? null : _openReceipt,
+                      icon: _openingReceipt
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.orange,
+                              ),
+                            )
+                          : const Icon(Icons.receipt_long_rounded, size: 18),
+                      label: const Text('View Receipt'),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.orange,
                         side: const BorderSide(color: AppColors.orange),

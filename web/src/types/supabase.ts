@@ -374,6 +374,62 @@ export type Database = {
           },
         ]
       }
+      billing_profile: {
+        Row: {
+          address: string
+          footer_note: string | null
+          gst_rate: number
+          gst_registered: boolean
+          gstin: string | null
+          id: boolean
+          legal_name: string
+          receipt_prefix: string
+          sac_code: string
+          state: string
+          state_code: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          address?: string
+          footer_note?: string | null
+          gst_rate?: number
+          gst_registered?: boolean
+          gstin?: string | null
+          id?: boolean
+          legal_name?: string
+          receipt_prefix?: string
+          sac_code?: string
+          state?: string
+          state_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          address?: string
+          footer_note?: string | null
+          gst_rate?: number
+          gst_registered?: boolean
+          gstin?: string | null
+          id?: boolean
+          legal_name?: string
+          receipt_prefix?: string
+          sac_code?: string
+          state?: string
+          state_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_profile_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_downloads: {
         Row: {
           bytes: number
@@ -1125,7 +1181,9 @@ export type Database = {
           discount_amount: number
           final_amount: number
           id: string
+          invoice_issued_at: string | null
           invoice_number: string | null
+          invoice_snapshot: Json | null
           invoice_url: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           processed_by: string | null
@@ -1145,7 +1203,9 @@ export type Database = {
           discount_amount?: number
           final_amount: number
           id?: string
+          invoice_issued_at?: string | null
           invoice_number?: string | null
+          invoice_snapshot?: Json | null
           invoice_url?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           processed_by?: string | null
@@ -1165,7 +1225,9 @@ export type Database = {
           discount_amount?: number
           final_amount?: number
           id?: string
+          invoice_issued_at?: string | null
           invoice_number?: string | null
+          invoice_snapshot?: Json | null
           invoice_url?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           processed_by?: string | null
