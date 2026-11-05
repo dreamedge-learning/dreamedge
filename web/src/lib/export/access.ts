@@ -22,6 +22,7 @@ export const EXPORT_ROLES = {
   "student-progress": ["super_admin", "support_staff"],
   leads: ["super_admin", "support_staff"],
   testimonials: ["super_admin", "support_staff"],
+  certificates: ["super_admin", "teacher", "support_staff"],
 
   orders: ["super_admin", "accountant"],
   "manual-payments": ["super_admin", "accountant"],

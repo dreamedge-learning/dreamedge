@@ -374,6 +374,114 @@ export type Database = {
           },
         ]
       }
+      certificates: {
+        Row: {
+          certificate_number: string | null
+          course_id: string
+          course_title: string | null
+          created_at: string
+          id: string
+          issued_at: string | null
+          issued_by: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejected_reason: string | null
+          requested_at: string
+          revoked_at: string | null
+          revoked_by: string | null
+          revoked_reason: string | null
+          signatory_name: string | null
+          signatory_title: string | null
+          status: string
+          student_id: string
+          student_name: string | null
+          updated_at: string
+          verification_code: string
+        }
+        Insert: {
+          certificate_number?: string | null
+          course_id: string
+          course_title?: string | null
+          created_at?: string
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejected_reason?: string | null
+          requested_at?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          revoked_reason?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
+          status?: string
+          student_id: string
+          student_name?: string | null
+          updated_at?: string
+          verification_code?: string
+        }
+        Update: {
+          certificate_number?: string | null
+          course_id?: string
+          course_title?: string | null
+          created_at?: string
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejected_reason?: string | null
+          requested_at?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          revoked_reason?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
+          status?: string
+          student_id?: string
+          student_name?: string | null
+          updated_at?: string
+          verification_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_downloads: {
         Row: {
           bytes: number
@@ -2122,6 +2230,15 @@ export type Database = {
         Args: { p_email: string; p_ip?: string }
         Returns: Json
       }
+      approve_certificates: {
+        Args: { p_ids: string[] }
+        Returns: {
+          certificate_id: string
+          notification_id: string
+          student_id: string
+          verification_code: string
+        }[]
+      }
       check_offline_entitlements: {
         Args: { p_content_item_id?: string }
         Returns: {
@@ -2240,6 +2357,14 @@ export type Database = {
             Args: { p_content_item_id: string; p_idempotency_key?: string }
             Returns: Json
           }
+      reject_certificate: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      revoke_certificate: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
       save_test_answers: {
         Args: { p_answers: Json; p_attempt_id: string }
         Returns: {
@@ -2291,6 +2416,20 @@ export type Database = {
           }
       touch_admin_last_login: { Args: never; Returns: undefined }
       verify_admin_gate: { Args: { p_password: string }; Returns: boolean }
+      verify_certificate: {
+        Args: { p_code: string }
+        Returns: {
+          certificate_number: string
+          course_title: string
+          issued_at: string
+          revoked_at: string
+          signatory_name: string
+          signatory_title: string
+          status: string
+          student_name: string
+          verification_code: string
+        }[]
+      }
     }
     Enums: {
       admin_application_status: "pending" | "approved" | "rejected"

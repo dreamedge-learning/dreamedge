@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import {
   ArrowLeft,
+  Award,
   BookOpen,
   CheckCircle,
   ChevronDown,
@@ -33,6 +34,7 @@ import {
 } from "@/components/ui/sheet";
 import type { Course } from "@/types/course";
 import { getYouTubeId, isVideoFile } from "@/lib/video";
+import { certificatePath, type CertificateStatus } from "@/lib/certificates";
 import { HostedVideoPlayer } from "@/components/student/courses/hosted-video-player";
 import {
   markContentComplete,
@@ -111,9 +113,16 @@ export interface SyllabusSubject {
   topics: SyllabusTopic[];
 }
 
+/** This student's certificate request for the course, if one has been filed. */
+export interface LearnCertificate {
+  status: CertificateStatus;
+  verificationCode: string;
+}
+
 interface LearnContentProps {
   course: Course;
   subjects: SyllabusSubject[];
+  certificate: LearnCertificate | null;
   /**
    * Content item id to open on first paint. Used by the live-class
    * rewatch deep-link; the page passes the id from `?content=` through,
@@ -384,6 +393,62 @@ function SyllabusTree({
   );
 }
 
+/**
+ * Where the course's certificate stands, once there is anything to say.
+ *
+ * `finished` is worked out here from the progress on screen, so the note
+ * appears the moment the last lesson is marked complete -- the request the
+ * database files at that same moment only reaches `certificate` on the next
+ * page load.
+ */
+function CourseCertificateNote({
+  certificate,
+  finished,
+}: {
+  certificate: LearnCertificate | null;
+  finished: boolean;
+}) {
+  if (certificate?.status === "issued") {
+    return (
+      <a
+        href={certificatePath(certificate.verificationCode)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 flex items-center gap-2 rounded-lg border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-[#C9A84C]/15"
+      >
+        <Award className="h-4 w-4 shrink-0 text-[#C9A84C]" />
+        Your certificate is ready. View and print it.
+      </a>
+    );
+  }
+
+  if (certificate?.status === "rejected") {
+    return (
+      <Link
+        href="/dashboard/certificates"
+        className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Award className="h-4 w-4 shrink-0" />
+        Your certificate was not approved. See why.
+      </Link>
+    );
+  }
+
+  if (certificate?.status === "pending" || (finished && !certificate)) {
+    return (
+      <Link
+        href="/dashboard/certificates"
+        className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Award className="h-4 w-4 shrink-0 text-[#C9A84C]" />
+        Course complete. Your certificate is awaiting approval.
+      </Link>
+    );
+  }
+
+  return null;
+}
+
 function SidebarContent({
   course,
   subjects,
@@ -394,6 +459,7 @@ function SidebarContent({
   onSelect,
   completedCount,
   totalCount,
+  certificate,
 }: {
   course: Course;
   subjects: SyllabusSubject[];
@@ -404,6 +470,7 @@ function SidebarContent({
   onSelect: (itemId: string) => void;
   completedCount: number;
   totalCount: number;
+  certificate: LearnCertificate | null;
 }) {
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -424,6 +491,10 @@ function SidebarContent({
             style={{ width: `${pct}%` }}
           />
         </div>
+        <CourseCertificateNote
+          certificate={certificate}
+          finished={totalCount > 0 && completedCount === totalCount}
+        />
       </div>
 
       <div className="border-t border-border px-4 py-3">
@@ -804,6 +875,7 @@ function ItemViewer({
 export function LearnContent({
   course,
   subjects,
+  certificate,
   initialContentId,
 }: LearnContentProps) {
   const flatItems = useMemo(
@@ -1023,6 +1095,7 @@ export function LearnContent({
       onSelect={selectItem}
       completedCount={completedCount}
       totalCount={flatItems.length}
+      certificate={certificate}
     />
   );
 

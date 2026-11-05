@@ -9,6 +9,7 @@ import '../core/services/storage_service.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
+import '../features/certificates/certificates_screen.dart';
 import '../features/courses/course_detail_screen.dart';
 import '../features/lessons/lessons_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
@@ -216,6 +217,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile/edit',
         builder: (context, state) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: '/certificates',
+        builder: (context, state) => const CertificatesScreen(),
+      ),
+      // The "certificate issued" inbox message carries the website's path,
+      // because one notification row serves both platforms. Tapping it in the
+      // app lands here.
+      GoRoute(
+        path: '/dashboard/certificates',
+        redirect: (context, state) => '/certificates',
       ),
       GoRoute(
         path: '/live',

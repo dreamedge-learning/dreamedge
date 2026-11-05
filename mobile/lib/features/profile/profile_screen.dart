@@ -101,7 +101,7 @@ class ProfileScreen extends ConsumerWidget {
           _MenuItem(
             icon: Icons.emoji_events_outlined,
             title: 'My Certificates',
-            onTap: () {},
+            onTap: () => context.push('/certificates'),
           ),
           _MenuItem(
             icon: Icons.help_outline,
