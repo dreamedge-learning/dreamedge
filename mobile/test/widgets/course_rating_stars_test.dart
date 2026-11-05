@@ -10,8 +10,12 @@ import 'package:mobile/features/learning/widgets/course_rating_stars.dart';
 
 /// Stands in for the database. Each call to [rate] waits on [next], so a test
 /// can look at the optimistic paint before deciding how the write ends.
+///
+/// The completer is made inside the call, which runs in the test's fake-async
+/// zone. One made in `setUp` belongs to the real zone, and its completion
+/// would wait for a real event loop turn that `pumpAndSettle` never gives.
 class _FakeRatingService implements RatingService {
-  Completer<MyCourseRating> next = Completer<MyCourseRating>();
+  late Completer<MyCourseRating> next;
   final List<({int stars, String? review})> calls = [];
 
   @override
@@ -21,6 +25,7 @@ class _FakeRatingService implements RatingService {
     String? review,
   }) {
     calls.add((stars: stars, review: review));
+    next = Completer<MyCourseRating>();
     return next.future;
   }
 
