@@ -61,7 +61,7 @@ export function SubjectForm({ subject }: { subject: Subject }) {
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Edit Subject</h2>
         <p className="text-xs text-muted-foreground">
-          Subjects are the top-level categories within a course
+          The top level of the course. Folders and lessons go inside it.
         </p>
       </div>
 

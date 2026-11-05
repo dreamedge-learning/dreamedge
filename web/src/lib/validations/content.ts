@@ -30,12 +30,23 @@ export const subjectUpdateSchema = z
 
 export const topicCreateSchema = z.object({
   subject_id: uuid("Subject"),
-  name: requiredText("Topic name", 160),
+  // Null for a folder directly under its subject. The database derives the
+  // subject from the parent anyway; this only says where in the branch it goes.
+  parent_topic_id: uuid("Folder").nullable().optional(),
+  name: requiredText("Folder name", 160),
+});
+
+export const treeKindSchema = z.enum(["subject", "topic", "content"]);
+
+/** Where a folder or lesson is being moved to. */
+export const moveTargetSchema = z.object({
+  kind: z.enum(["subject", "topic"]),
+  id: uuid("Destination"),
 });
 
 export const topicUpdateSchema = z
   .object({
-    name: requiredText("Topic name", 160).optional(),
+    name: requiredText("Folder name", 160).optional(),
     description: z.string().max(2000, "Description is too long.").nullable().optional(),
     is_visible: z.boolean().optional(),
   })

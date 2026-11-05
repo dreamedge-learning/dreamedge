@@ -113,10 +113,15 @@ export async function GET(
 
   // Scoped to the item either way, so `?f=` cannot reach a file belonging to
   // another lesson.
+  // The service client bypasses RLS, so the rule that students never receive
+  // a PowerPoint or Word original has to be stated here too. Without it, a
+  // lesson whose first attachment is the .pptx would hand that to a student,
+  // and ?f= could name one directly.
   let query = service
     .from("content_files")
     .select("id, storage_path, display_name")
-    .eq("content_item_id", id);
+    .eq("content_item_id", id)
+    .eq("is_source_document", false);
 
   query = requestedFileId
     ? query.eq("id", requestedFileId)
@@ -197,6 +202,9 @@ export async function GET(
       {
         url: signed.signedUrl,
         fileName: file.display_name,
+        // Which attachment this is, so the app can tell the one it was given
+        // by default apart from the others on the same lesson.
+        fileId: file.id,
         isDownloadable: entitlement.isDownloadable,
         offlineLicenseDays: entitlement.offlineLicenseDays,
         // The two the app could not get anywhere else, and without which a

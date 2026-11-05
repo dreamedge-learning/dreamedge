@@ -11,6 +11,7 @@ import type {
   ContentProgress,
   SyllabusContentItem,
   SyllabusSubject,
+  SyllabusTopic,
 } from "@/components/student/courses/learn-content";
 
 interface PageProps {
@@ -67,6 +68,9 @@ async function fetchFiles(
     .from("content_files")
     .select("id, content_item_id, display_name, size_bytes, storage_path")
     .in("content_item_id", itemIds)
+    // RLS already withholds PowerPoint and Word originals from students; this
+    // says so where the query is, rather than relying on the reader knowing.
+    .eq("is_source_document", false)
     .order("weight", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -88,10 +92,10 @@ async function fetchFiles(
 }
 
 /**
- * Loads the published syllabus for a course: subjects -> topics ->
- * content_items, each level ordered by `weight`. Row-level security already
- * hides unpublished and unpaid-for items, so an empty result here is a real
- * empty state, not an error.
+ * Loads the published syllabus for a course: subjects -> folders (nested to
+ * any depth) -> content_items, each level ordered by `weight`. Row-level
+ * security already hides unpublished and unpaid-for items, so an empty result
+ * here is a real empty state, not an error.
  */
 async function fetchSyllabus(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -111,7 +115,7 @@ async function fetchSyllabus(
 
   const { data: topicRows } = await supabase
     .from("topics")
-    .select("id, subject_id, name, description, weight")
+    .select("id, subject_id, parent_topic_id, name, description, weight")
     .in(
       "subject_id",
       subjects.map((s) => s.id)
@@ -178,25 +182,44 @@ async function fetchSyllabus(
     itemsByTopic.set(item.topic_id, list);
   }
 
-  const topicsBySubject = new Map<string, typeof topics>();
+  // Folders nest. A folder without a parent hangs off its subject; any other
+  // hangs off its parent folder. The tree is built downward from the subjects,
+  // so a folder under a hidden one -- which this query never returned -- is
+  // never reached, and hiding a folder hides its whole branch.
+  const rootsBySubject = new Map<string, typeof topics>();
+  const childrenByFolder = new Map<string, typeof topics>();
   for (const topic of topics) {
-    const list = topicsBySubject.get(topic.subject_id) ?? [];
+    const bucket = topic.parent_topic_id ? childrenByFolder : rootsBySubject;
+    const key = topic.parent_topic_id ?? topic.subject_id;
+    const list = bucket.get(key) ?? [];
     list.push(topic);
-    topicsBySubject.set(topic.subject_id, list);
+    bucket.set(key, list);
   }
 
+  function buildFolder(topic: (typeof topics)[number], seen: Set<string>): SyllabusTopic | null {
+    if (seen.has(topic.id)) return null;
+    seen.add(topic.id);
+    return {
+      id: topic.id,
+      name: topic.name,
+      description: topic.description,
+      weight: topic.weight,
+      folders: (childrenByFolder.get(topic.id) ?? [])
+        .map((child) => buildFolder(child, seen))
+        .filter((child): child is SyllabusTopic => child !== null),
+      items: itemsByTopic.get(topic.id) ?? [],
+    };
+  }
+
+  const seen = new Set<string>();
   return subjects.map((subject) => ({
     id: subject.id,
     name: subject.name,
     color_code: subject.color_code,
     weight: subject.weight,
-    topics: (topicsBySubject.get(subject.id) ?? []).map((topic) => ({
-      id: topic.id,
-      name: topic.name,
-      description: topic.description,
-      weight: topic.weight,
-      items: itemsByTopic.get(topic.id) ?? [],
-    })),
+    topics: (rootsBySubject.get(subject.id) ?? [])
+      .map((topic) => buildFolder(topic, seen))
+      .filter((topic): topic is SyllabusTopic => topic !== null),
   }));
 }
 

@@ -40,7 +40,10 @@ class OfflineDb {
   /// 2: every row that belongs to a student says so, downloads record the
   /// licence terms and the last server-confirmed check behind them, and a
   /// paused row says who paused it.
-  static const int version = 2;
+  ///
+  /// 3: a lesson's attachments are recorded one row each in `download_files`,
+  /// beside the `downloads` row that still carries the licence and progress.
+  static const int version = 3;
 
   static Database? _database;
 
@@ -245,11 +248,44 @@ class OfflineDb {
       )
     """);
 
+    _createDownloadFiles(batch);
+
     await batch.commit(noResult: true);
+  }
+
+  /// One row per attachment saved for a lesson.
+  ///
+  /// The `downloads` row stays the single record of the lesson: its licence,
+  /// its status, its progress across every file. This table only says which
+  /// files make it up and where each one is, so the reader can list them by
+  /// name with the radio off. A lesson saved before version 3 has no rows here
+  /// and is read from `downloads.local_path` exactly as before.
+  ///
+  /// `if not exists`, because the version 1 upgrade rebuilds through
+  /// [_create] and the version 3 step then runs on top of it.
+  static void _createDownloadFiles(Batch batch) {
+    batch.execute("""
+      create table if not exists download_files (
+        content_item_id  text not null,
+        student_id       text not null,
+        file_id          text not null,
+        name             text not null default '',
+        extension        text not null default '',
+        local_path       text not null,
+        bytes            integer not null default 0,
+        weight           integer not null default 0,
+        primary key (content_item_id, student_id, file_id)
+      )
+    """);
   }
 
   static Future<void> _upgrade(Database db, int from, int to) async {
     if (from < 2) await _addStudentOwnership(db);
+    if (from < 3) {
+      final batch = db.batch();
+      _createDownloadFiles(batch);
+      await batch.commit(noResult: true);
+    }
   }
 
   /// Version 1 -> 2: every row gains an owner.

@@ -374,6 +374,62 @@ export type Database = {
           },
         ]
       }
+      billing_profile: {
+        Row: {
+          address: string
+          footer_note: string | null
+          gst_rate: number
+          gst_registered: boolean
+          gstin: string | null
+          id: boolean
+          legal_name: string
+          receipt_prefix: string
+          sac_code: string
+          state: string
+          state_code: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          address?: string
+          footer_note?: string | null
+          gst_rate?: number
+          gst_registered?: boolean
+          gstin?: string | null
+          id?: boolean
+          legal_name?: string
+          receipt_prefix?: string
+          sac_code?: string
+          state?: string
+          state_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          address?: string
+          footer_note?: string | null
+          gst_rate?: number
+          gst_registered?: boolean
+          gstin?: string | null
+          id?: boolean
+          legal_name?: string
+          receipt_prefix?: string
+          sac_code?: string
+          state?: string
+          state_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_profile_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_downloads: {
         Row: {
           bytes: number
@@ -428,6 +484,7 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          is_source_document: boolean | null
           mime_type: string | null
           size_bytes: number
           storage_path: string
@@ -439,6 +496,7 @@ export type Database = {
           created_at?: string
           display_name: string
           id?: string
+          is_source_document?: boolean | null
           mime_type?: string | null
           size_bytes?: number
           storage_path: string
@@ -450,6 +508,7 @@ export type Database = {
           created_at?: string
           display_name?: string
           id?: string
+          is_source_document?: boolean | null
           mime_type?: string | null
           size_bytes?: number
           storage_path?: string
@@ -1254,7 +1313,9 @@ export type Database = {
           discount_amount: number
           final_amount: number
           id: string
+          invoice_issued_at: string | null
           invoice_number: string | null
+          invoice_snapshot: Json | null
           invoice_url: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           processed_by: string | null
@@ -1274,7 +1335,9 @@ export type Database = {
           discount_amount?: number
           final_amount: number
           id?: string
+          invoice_issued_at?: string | null
           invoice_number?: string | null
+          invoice_snapshot?: Json | null
           invoice_url?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           processed_by?: string | null
@@ -1294,7 +1357,9 @@ export type Database = {
           discount_amount?: number
           final_amount?: number
           id?: string
+          invoice_issued_at?: string | null
           invoice_number?: string | null
+          invoice_snapshot?: Json | null
           invoice_url?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           processed_by?: string | null
@@ -2179,6 +2244,7 @@ export type Database = {
           id: string
           is_visible: boolean
           name: string
+          parent_topic_id: string | null
           slug: string
           subject_id: string
           weight: number
@@ -2189,6 +2255,7 @@ export type Database = {
           id?: string
           is_visible?: boolean
           name: string
+          parent_topic_id?: string | null
           slug: string
           subject_id: string
           weight?: number
@@ -2199,11 +2266,19 @@ export type Database = {
           id?: string
           is_visible?: boolean
           name?: string
+          parent_topic_id?: string | null
           slug?: string
           subject_id?: string
           weight?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "topics_parent_topic_id_fkey"
+            columns: ["parent_topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "topics_subject_id_fkey"
             columns: ["subject_id"]
@@ -2320,6 +2395,20 @@ export type Database = {
       get_admin_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
+      }
+      get_course_outline: {
+        Args: { p_course_id: string }
+        Returns: {
+          item_duration: number
+          item_is_paid: boolean
+          item_poster_url: string
+          item_type: Database["public"]["Enums"]["content_type"]
+          name: string
+          node_id: string
+          node_kind: string
+          parent_id: string
+          weight: number
+        }[]
       }
       get_course_syllabus: {
         Args: { p_course_id: string }
@@ -2612,6 +2701,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      admin_application_status: ["pending", "approved", "rejected"],
       banner_position: ["home_top", "home_bottom", "course_page", "dashboard"],
       batch_status: ["upcoming", "active", "completed", "cancelled"],
       content_status: ["draft", "published", "archived"],

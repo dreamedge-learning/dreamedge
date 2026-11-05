@@ -112,59 +112,46 @@ export async function updateSubject(
   }
 }
 
-export async function deleteSubject(id: string) {
-  try {
-    await assertAdmin(["super_admin", "content_creator"]);
-    const supabase = await createClient();
-
-    const parsedId = uuid("Subject").safeParse(id);
-    if (!parsedId.success) {
-      return { error: firstIssue(parsedId.error) };
-    }
-
-    const { count } = await supabase
-      .from("topics")
-      .select("id", { count: "exact", head: true })
-      .eq("subject_id", parsedId.data);
-
-    if (count && count > 0) {
-      return { error: `Cannot delete: ${count} topic${count > 1 ? "s" : ""} exist under this subject` };
-    }
-
-    const { error } = await supabase.from("subjects").delete().eq("id", parsedId.data);
-    if (error) {
-      console.error("deleteSubject failed:", error);
-      return { error: "Something went wrong. Please try again." };
-    }
-    revalidatePath("/admin/content/manager");
-    return { success: true };
-  } catch (err) {
-    console.error("deleteSubject failed:", err);
-    return { error: describeFailure(err) };
-  }
-}
-
 // ─── Topic ───
 
-export async function createTopic(subjectId: string, name: string) {
+/**
+ * Creates a folder directly under a subject, or inside another folder.
+ *
+ * The weight counts only the new folder's own siblings, so a folder added
+ * three levels down lands at the end of that level rather than after every
+ * folder in the subject.
+ */
+export async function createTopic(
+  subjectId: string,
+  name: string,
+  parentTopicId: string | null = null
+) {
   try {
     await assertAdmin(["super_admin", "content_creator"]);
     const supabase = await createClient();
 
-    const parsed = topicCreateSchema.safeParse({ subject_id: subjectId, name });
+    const parsed = topicCreateSchema.safeParse({
+      subject_id: subjectId,
+      parent_topic_id: parentTopicId,
+      name,
+    });
     if (!parsed.success) {
       return { error: firstIssue(parsed.error) };
     }
 
-    const { count } = await supabase
+    let siblings = supabase
       .from("topics")
-      .select("id", { count: "exact", head: true })
-      .eq("subject_id", parsed.data.subject_id);
+      .select("id", { count: "exact", head: true });
+    siblings = parsed.data.parent_topic_id
+      ? siblings.eq("parent_topic_id", parsed.data.parent_topic_id)
+      : siblings.eq("subject_id", parsed.data.subject_id).is("parent_topic_id", null);
+    const { count } = await siblings;
 
     const { data, error } = await supabase
       .from("topics")
       .insert({
         subject_id: parsed.data.subject_id,
+        parent_topic_id: parsed.data.parent_topic_id ?? null,
         name: parsed.data.name,
         slug: toSlug(parsed.data.name),
         weight: (count ?? 0) + 1,
@@ -174,6 +161,9 @@ export async function createTopic(subjectId: string, name: string) {
       .single();
 
     if (error) {
+      if (error.code === "23514" || error.code === "23503") {
+        return { error: error.message };
+      }
       console.error("createTopic failed:", error);
       return { error: "Something went wrong. Please try again." };
     }
@@ -226,38 +216,6 @@ export async function updateTopic(
     return { data };
   } catch (err) {
     console.error("updateTopic failed:", err);
-    return { error: describeFailure(err) };
-  }
-}
-
-export async function deleteTopic(id: string) {
-  try {
-    await assertAdmin(["super_admin", "content_creator"]);
-    const supabase = await createClient();
-
-    const parsedId = uuid("Topic").safeParse(id);
-    if (!parsedId.success) {
-      return { error: firstIssue(parsedId.error) };
-    }
-
-    const { count } = await supabase
-      .from("content_items")
-      .select("id", { count: "exact", head: true })
-      .eq("topic_id", parsedId.data);
-
-    if (count && count > 0) {
-      return { error: `Cannot delete: ${count} content item${count > 1 ? "s" : ""} exist under this topic` };
-    }
-
-    const { error } = await supabase.from("topics").delete().eq("id", parsedId.data);
-    if (error) {
-      console.error("deleteTopic failed:", error);
-      return { error: "Something went wrong. Please try again." };
-    }
-    revalidatePath("/admin/content/manager");
-    return { success: true };
-  } catch (err) {
-    console.error("deleteTopic failed:", err);
     return { error: describeFailure(err) };
   }
 }
@@ -392,36 +350,11 @@ export async function updateContentItem(
   }
 }
 
-export async function deleteContentItem(id: string) {
-  try {
-    await assertAdmin(["super_admin", "content_creator"]);
-    const supabase = await createClient();
-
-    const parsedId = uuid("Content item").safeParse(id);
-    if (!parsedId.success) {
-      return { error: firstIssue(parsedId.error) };
-    }
-
-    const { error } = await supabase
-      .from("content_items")
-      .delete()
-      .eq("id", parsedId.data);
-    if (error) {
-      console.error("deleteContentItem failed:", error);
-      return { error: "Something went wrong. Please try again." };
-    }
-    revalidatePath("/admin/content/manager");
-    return { success: true };
-  } catch (err) {
-    console.error("deleteContentItem failed:", err);
-    return { error: describeFailure(err) };
-  }
-}
-
 // ─── Offline ───
 
 /**
- * Turns the offline switch on for every content item under a subject or topic.
+ * Turns the offline switch on for every content item under a subject or folder,
+ * at any depth.
  *
  * A Maths course is sixty-odd items, and a mentor who has decided the course
  * should work on a phone with no signal should not have to click sixty
@@ -460,6 +393,37 @@ export async function enableOfflineForSubtree(
         return { error: "Something went wrong. Please try again." };
       }
       topicIds = (topics ?? []).map((topic) => topic.id);
+    } else {
+      // A folder's branch: every folder below it, at any depth. Walked in
+      // memory from the subject's folders rather than one query per level.
+      const { data: self } = await supabase
+        .from("topics")
+        .select("subject_id")
+        .eq("id", parsedId.data)
+        .maybeSingle();
+
+      if (self) {
+        const { data: branch } = await supabase
+          .from("topics")
+          .select("id, parent_topic_id")
+          .eq("subject_id", self.subject_id);
+
+        const childrenOf = new Map<string, string[]>();
+        for (const row of branch ?? []) {
+          if (!row.parent_topic_id) continue;
+          childrenOf.set(row.parent_topic_id, [
+            ...(childrenOf.get(row.parent_topic_id) ?? []),
+            row.id,
+          ]);
+        }
+        topicIds = [];
+        const queue = [parsedId.data];
+        while (queue.length > 0) {
+          const next = queue.shift()!;
+          topicIds.push(next);
+          queue.push(...(childrenOf.get(next) ?? []));
+        }
+      }
     }
 
     if (topicIds.length === 0) return { data: { updated: 0 } };
@@ -574,13 +538,6 @@ export async function fetchCourseTree(courseId: string) {
       contentItems = items || [];
     }
 
-    const topicMap = new Map<string, typeof topics>();
-    for (const topic of topics || []) {
-      const subId = topic.subject_id as string;
-      if (!topicMap.has(subId)) topicMap.set(subId, []);
-      topicMap.get(subId)!.push(topic);
-    }
-
     const contentMap = new Map<string, typeof contentItems>();
     for (const item of contentItems) {
       const tId = item.topic_id as string;
@@ -588,28 +545,61 @@ export async function fetchCourseTree(courseId: string) {
       contentMap.get(tId)!.push(item);
     }
 
+    // Folders hang off their parent folder, or off the subject when they have
+    // none. Built as a lookup first so a folder at any depth is placed in one
+    // pass, whatever order the rows arrived in.
+    type TopicRow = NonNullable<typeof topics>[number];
+    const rootFolders = new Map<string, TopicRow[]>();
+    const childFolders = new Map<string, TopicRow[]>();
+    for (const topic of topics || []) {
+      const bucket = topic.parent_topic_id ? childFolders : rootFolders;
+      const key = topic.parent_topic_id ?? topic.subject_id;
+      if (!bucket.has(key)) bucket.set(key, []);
+      bucket.get(key)!.push(topic);
+    }
+
+    function lessonNode(item: Record<string, unknown>) {
+      return {
+        id: item.id as string,
+        kind: "content" as const,
+        name: item.title as string,
+        weight: item.weight as number,
+        status: item.status as string,
+        contentType: item.type as string,
+        children: [],
+        data: item,
+      };
+    }
+
+    function folderNode(topic: TopicRow, seen: Set<string>): unknown {
+      // The trigger refuses cycles; this only stops a corrupt row from
+      // hanging the panel if one ever got past it.
+      if (seen.has(topic.id)) return null;
+      seen.add(topic.id);
+      const folders = (childFolders.get(topic.id) || [])
+        .map((child) => folderNode(child, seen))
+        .filter(Boolean);
+      const lessons = (contentMap.get(topic.id) || []).map(lessonNode);
+      return {
+        id: topic.id,
+        kind: "topic" as const,
+        name: topic.name,
+        weight: topic.weight,
+        // Subfolders before lessons, the way a file browser lists them.
+        children: [...folders, ...lessons],
+        data: topic,
+      };
+    }
+
+    const seen = new Set<string>();
     const tree = subjects.map((subject) => ({
       id: subject.id,
       kind: "subject" as const,
       name: subject.name,
       weight: subject.weight,
-      children: (topicMap.get(subject.id) || []).map((topic) => ({
-        id: topic.id,
-        kind: "topic" as const,
-        name: topic.name,
-        weight: topic.weight,
-        children: (contentMap.get(topic.id) || []).map((item) => ({
-          id: item.id as string,
-          kind: "content" as const,
-          name: item.title as string,
-          weight: item.weight as number,
-          status: item.status as string,
-          contentType: item.type as string,
-          children: [],
-          data: item,
-        })),
-        data: topic,
-      })),
+      children: (rootFolders.get(subject.id) || [])
+        .map((topic) => folderNode(topic, seen))
+        .filter(Boolean),
       data: subject,
     }));
 

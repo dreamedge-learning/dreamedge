@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/providers/password_recovery_provider.dart';
 import '../core/providers/student_provider.dart';
 import '../core/providers/supabase_provider.dart';
 import '../core/services/notification_service.dart';
 import '../core/services/storage_service.dart';
 import '../features/auth/forgot_password_screen.dart';
+import '../features/auth/reset_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/courses/course_detail_screen.dart';
@@ -18,6 +20,7 @@ import '../features/live/live_class_detail_screen.dart';
 import '../features/live/live_schedule_screen.dart';
 import '../features/notifications/notification_inbox_screen.dart';
 import '../features/payments/checkout_screen.dart';
+import 'storefront.dart';
 import '../features/payments/payment_history_screen.dart';
 import '../features/player/video_player_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
@@ -49,6 +52,7 @@ class _AuthGateRefresh extends ChangeNotifier {
   _AuthGateRefresh(Ref ref) {
     ref.listen<Object?>(currentSessionProvider, (_, _) => notifyListeners());
     ref.listen<Object?>(currentStudentProvider, (_, _) => notifyListeners());
+    ref.listen<bool>(passwordRecoveryProvider, (_, _) => notifyListeners());
   }
 }
 
@@ -116,6 +120,18 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isSplash) return null;
 
+      // A reset link signed the student in; nothing else opens until the new
+      // password is chosen. Checked before the profile wall so a student who
+      // never finished their profile is not asked for it first.
+      final isRecovering = ref.read(passwordRecoveryProvider);
+      final isResetPassword = state.matchedLocation == '/reset-password';
+      if (isAuthenticated && isRecovering) {
+        return isResetPassword ? null : '/reset-password';
+      }
+      if (isResetPassword) {
+        return isAuthenticated ? '/' : '/login';
+      }
+
       if (!isAuthenticated) {
         if (!storage.onboardingSeen && !isTour) {
           return '/onboarding';
@@ -166,6 +182,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
       GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
+      ),
+      GoRoute(
         path: '/',
         builder: (context, state) => const AppShell(),
       ),
@@ -193,6 +213,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/reader/:contentId',
         builder: (context, state) => PdfReaderScreen(
           contentId: state.pathParameters['contentId']!,
+          initialFileId: state.uri.queryParameters['file'],
         ),
       ),
       // `/doubts/:id` is also the link in the "your doubt has been answered"
@@ -219,12 +240,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/checkout/:courseId',
+        // Removed from a build that does not sell, not just unlinked: a deep
+        // link would otherwise still open it.
+        redirect: (context, state) => Storefront.canSell
+            ? null
+            : '/course/${state.pathParameters['courseId']}',
         builder: (context, state) => CheckoutScreen(
           courseId: state.pathParameters['courseId']!,
         ),
       ),
       GoRoute(
         path: '/payment-history',
+        redirect: (context, state) => Storefront.canSell ? null : '/',
         builder: (context, state) => const PaymentHistoryScreen(),
       ),
       GoRoute(

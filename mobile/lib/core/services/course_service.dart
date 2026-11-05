@@ -71,12 +71,33 @@ class CourseService {
         .toList();
   }
 
-  /// Visible topics of a subject, ordered by `weight`, with a content count.
+  /// The visible top-level folders of a subject, ordered by `weight`, with a
+  /// count of the lessons directly inside each.
+  ///
+  /// Only the top level: folders nest, and every folder at any depth shares
+  /// its root subject's id, so without the parent filter a subfolder would
+  /// also be listed beside the folder that contains it.
   Future<List<Topic>> getTopics(String subjectId) async {
     final data = await _client
         .from('topics')
         .select('*, content_items(count)')
         .eq('subject_id', subjectId)
+        .isFilter('parent_topic_id', null)
+        .eq('is_visible', true)
+        .order('weight', ascending: true);
+    return (data as List)
+        .map((e) => Topic.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// The visible folders directly inside [parentTopicId], ordered by
+  /// `weight`. A hidden folder is never returned, so nothing beneath it is
+  /// ever reached either.
+  Future<List<Topic>> getSubfolders(String parentTopicId) async {
+    final data = await _client
+        .from('topics')
+        .select('*, content_items(count)')
+        .eq('parent_topic_id', parentTopicId)
         .eq('is_visible', true)
         .order('weight', ascending: true);
     return (data as List)
