@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,12 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { toast } from "sonner";
-import {
-  Search,
-  Plus,
-  FolderOpen,
-  Loader2,
-} from "lucide-react";
+import { Search, Plus, FolderOpen } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,38 +27,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import { ExportButton } from "@/components/admin/export-button";
 import { TreeNodeRow } from "./tree-node";
-import { useContentTree, type NodeKind, type TreeNode } from "@/stores/content-tree";
+import { findPath, useContentTree, type TreeNode } from "@/stores/content-tree";
 import { useShallow } from "zustand/react/shallow";
 import {
   fetchCourseTree,
-  createSubject,
-  createTopic,
-  createContentItem,
-  deleteSubject,
-  deleteTopic,
-  deleteContentItem,
   enableOfflineForSubtree,
   reorderItems,
 } from "@/app/admin/(panel)/content/manager/actions";
+import { useAdminRole } from "@/components/admin/admin-role-context";
+import { useTreeActions } from "./tree-dialogs";
 import type { Course, ContentType, ContentStatus } from "@/types/database";
 
 interface TreeViewProps {
   courses: Pick<Course, "id" | "title" | "is_published">[];
+  /** Opens straight onto this course, from a course's "Manage content" link. */
+  initialCourseId?: string | null;
 }
 
-export function TreeView({ courses }: TreeViewProps) {
+/** True when the node or anything beneath it matches the search text. */
+function matchesSearch(node: TreeNode, q: string): boolean {
+  if (node.name.toLowerCase().includes(q)) return true;
+  return node.children.some((child) => matchesSearch(child, q));
+}
+
+export function TreeView({ courses, initialCourseId = null }: TreeViewProps) {
   const store = useContentTree(
     useShallow((s) => ({
       courseId: s.courseId,
@@ -83,29 +74,15 @@ export function TreeView({ courses }: TreeViewProps) {
       setTypeFilter: s.setTypeFilter,
       setStatusFilter: s.setStatusFilter,
       setLoading: s.setLoading,
-      addSubject: s.addSubject,
-      addTopic: s.addTopic,
-      addContentItem: s.addContentItem,
-      removeSubject: s.removeSubject,
-      removeTopic: s.removeTopic,
-      removeContentItem: s.removeContentItem,
       reorderChildren: s.reorderChildren,
     }))
   );
-  const [isPending, startTransition] = useTransition();
-
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [addParentId, setAddParentId] = useState<string | null>(null);
-  const [addKind, setAddKind] = useState<NodeKind>("subject");
-  const [addName, setAddName] = useState("");
-  const [addContentType, setAddContentType] = useState<ContentType>("video");
-
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{
-    id: string;
-    kind: NodeKind;
-    name: string;
-  } | null>(null);
+  const [, startTransition] = useTransition();
+  const actions = useTreeActions();
+  const role = useAdminRole();
+  // Deleting is super admin only, in the action as well as here. Offering the
+  // item to anyone else would only produce a refusal after they confirmed.
+  const canDelete = role === "super_admin";
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -144,137 +121,56 @@ export function TreeView({ courses }: TreeViewProps) {
     return () => { cancelled = true; };
   }, [courseId, setLoading, setTree, expandAll]);
 
+  const appliedInitial = useRef(false);
+  useEffect(() => {
+    if (appliedInitial.current) return;
+    appliedInitial.current = true;
+    if (initialCourseId && courses.some((c) => c.id === initialCourseId)) {
+      useContentTree.getState().setCourseId(initialCourseId);
+    }
+  }, [initialCourseId, courses]);
+
   function handleCourseChange(id: string | null) {
     store.setCourseId(id === "none" ? null : id);
   }
 
-  function openAddDialog(parentId: string | null, kind: NodeKind) {
-    setAddParentId(parentId);
-    setAddKind(kind);
-    setAddName("");
-    setAddContentType("video");
-    setAddDialogOpen(true);
-  }
-
-  function handleAdd() {
-    if (!addName.trim()) return;
-
-    startTransition(async () => {
-      let result;
-
-      if (addKind === "subject") {
-        result = await createSubject(store.courseId!, addName.trim());
-        if (result.data) store.addSubject(result.data);
-      } else if (addKind === "topic") {
-        result = await createTopic(addParentId!, addName.trim());
-        if (result.data) store.addTopic(addParentId!, result.data);
-      } else {
-        result = await createContentItem(
-          addParentId!,
-          addName.trim(),
-          addContentType
-        );
-        if (result.data) store.addContentItem(addParentId!, result.data);
-      }
-
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-
-      toast.success(
-        `${addKind.charAt(0).toUpperCase() + addKind.slice(1)} created`
-      );
-      setAddDialogOpen(false);
-
-      if (addParentId) {
-        const expanded = new Set(store.expandedIds);
-        expanded.add(addParentId);
-        useContentTree.setState({ expandedIds: expanded });
-      }
-    });
-  }
-
-  function openDeleteDialog(id: string, kind: NodeKind, name: string) {
-    setDeleteTarget({ id, kind, name });
-    setDeleteDialogOpen(true);
-  }
-
-  function handleDelete() {
-    if (!deleteTarget) return;
-
-    startTransition(async () => {
-      let result;
-
-      if (deleteTarget.kind === "subject") {
-        result = await deleteSubject(deleteTarget.id);
-        if (!result.error) store.removeSubject(deleteTarget.id);
-      } else if (deleteTarget.kind === "topic") {
-        result = await deleteTopic(deleteTarget.id);
-        if (!result.error) store.removeTopic(deleteTarget.id);
-      } else {
-        result = await deleteContentItem(deleteTarget.id);
-        if (!result.error) store.removeContentItem(deleteTarget.id);
-      }
-
-      if (result.error) {
-        toast.error(result.error);
-      } else {
-        toast.success("Deleted");
-      }
-      setDeleteDialogOpen(false);
-    });
-  }
-
+  /**
+   * Reorders within one parent. A drag only ever swaps siblings of the same
+   * kind -- subjects among subjects, folders among folders, lessons among
+   * lessons -- because a folder lists its subfolders before its lessons and
+   * moving between parents is what Move to... is for.
+   */
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const activeId = active.id as string;
-    const overId = over.id as string;
+    const activePath = findPath(store.tree, active.id as string);
+    const overPath = findPath(store.tree, over.id as string);
+    if (activePath.length === 0 || overPath.length === 0) return;
 
-    let parentId: string | null = null;
-    let siblings: TreeNode[] = [];
-    let table: "subjects" | "topics" | "content_items" = "subjects";
+    const moved = activePath[activePath.length - 1];
+    const target = overPath[overPath.length - 1];
+    const parent = activePath.length > 1 ? activePath[activePath.length - 2] : null;
+    const overParent = overPath.length > 1 ? overPath[overPath.length - 2] : null;
 
-    const idx = store.tree.findIndex((n) => n.id === activeId);
-    if (idx !== -1) {
-      siblings = store.tree;
-      parentId = null;
-      table = "subjects";
-    } else {
-      for (const subj of store.tree) {
-        const tIdx = subj.children.findIndex((n) => n.id === activeId);
-        if (tIdx !== -1) {
-          siblings = subj.children;
-          parentId = subj.id;
-          table = "topics";
-          break;
-        }
-        for (const topic of subj.children) {
-          const cIdx = topic.children.findIndex((n) => n.id === activeId);
-          if (cIdx !== -1) {
-            siblings = topic.children;
-            parentId = topic.id;
-            table = "content_items";
-            break;
-          }
-        }
-        if (siblings.length > 0 && table !== "subjects") break;
-      }
+    if ((parent?.id ?? null) !== (overParent?.id ?? null) || moved.kind !== target.kind) {
+      return;
     }
 
-    const oldIndex = siblings.findIndex((n) => n.id === activeId);
-    const newIndex = siblings.findIndex((n) => n.id === overId);
+    const siblings = (parent ? parent.children : store.tree).filter((n) => n.kind === moved.kind);
+    const oldIndex = siblings.findIndex((n) => n.id === moved.id);
+    const newIndex = siblings.findIndex((n) => n.id === target.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
     const reordered = [...siblings];
-    const [moved] = reordered.splice(oldIndex, 1);
-    reordered.splice(newIndex, 0, moved);
-
+    const [item] = reordered.splice(oldIndex, 1);
+    reordered.splice(newIndex, 0, item);
     const orderedIds = reordered.map((n) => n.id);
-    store.reorderChildren(parentId, orderedIds);
 
+    store.reorderChildren(parent?.id ?? null, orderedIds);
+
+    const table =
+      moved.kind === "subject" ? "subjects" : moved.kind === "topic" ? "topics" : "content_items";
     startTransition(async () => {
       const result = await reorderItems(table, orderedIds);
       if (result.error) toast.error(result.error);
@@ -318,16 +214,8 @@ export function TreeView({ courses }: TreeViewProps) {
     const isExpanded = store.expandedIds.has(node.id);
     const isSelected = store.selectedNode?.id === node.id;
 
-    if (store.searchQuery) {
-      const q = store.searchQuery.toLowerCase();
-      const matches =
-        node.name.toLowerCase().includes(q) ||
-        node.children.some(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            c.children.some((cc) => cc.name.toLowerCase().includes(q))
-        );
-      if (!matches) return null;
+    if (store.searchQuery && !matchesSearch(node, store.searchQuery.toLowerCase())) {
+      return null;
     }
 
     if (store.typeFilter !== "all" && node.kind === "content") {
@@ -353,7 +241,9 @@ export function TreeView({ courses }: TreeViewProps) {
               data: node.data,
             })
           }
-          onAdd={(kind) => openAddDialog(node.id, kind)}
+          onAddFolder={node.kind !== "content" ? () => actions.openAdd("folder", node) : undefined}
+          onAddLesson={node.kind === "topic" ? () => actions.openAdd("lesson", node) : undefined}
+          onMove={node.kind !== "subject" ? () => actions.openMove(node) : undefined}
           onRename={() =>
             store.selectNode({
               id: node.id,
@@ -361,7 +251,7 @@ export function TreeView({ courses }: TreeViewProps) {
               data: node.data,
             })
           }
-          onDelete={() => openDeleteDialog(node.id, node.kind, node.name)}
+          onDelete={canDelete ? () => actions.openDelete(node) : undefined}
           onEnableOffline={() => handleEnableOffline(node)}
         />
         {isExpanded && node.children.length > 0 && (
@@ -479,14 +369,14 @@ export function TreeView({ courses }: TreeViewProps) {
           </div>
         ) : store.tree.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-12 text-center">
-            <p className="text-xs font-medium">No subjects yet</p>
-            <p className="text-xs text-muted-foreground">
-              Add a subject to start building content
+            <p className="text-xs font-medium">This course is empty</p>
+            <p className="max-w-[14rem] text-xs text-muted-foreground">
+              Start with a subject such as Mathematics, then add folders and lessons inside it.
             </p>
             <Button
               size="sm"
               className="mt-1 h-7 text-xs bg-brand-orange hover:bg-brand-orange-dark text-white"
-              onClick={() => openAddDialog(null, "subject")}
+              onClick={() => actions.openAdd("subject", null)}
             >
               <Plus className="mr-1 h-3 w-3" />
               Add Subject
@@ -515,7 +405,7 @@ export function TreeView({ courses }: TreeViewProps) {
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-2 h-7 text-xs text-muted-foreground"
-            onClick={() => openAddDialog(null, "subject")}
+            onClick={() => actions.openAdd("subject", null)}
           >
             <Plus className="h-3.5 w-3.5" />
             Add Subject
@@ -523,119 +413,6 @@ export function TreeView({ courses }: TreeViewProps) {
         </div>
       )}
 
-      {/* Add dialog */}
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Add{" "}
-              {addKind === "subject"
-                ? "Subject"
-                : addKind === "topic"
-                ? "Topic"
-                : "Content Item"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="add-name">
-                {addKind === "content" ? "Title" : "Name"}
-              </Label>
-              <Input
-                id="add-name"
-                value={addName}
-                onChange={(e) => setAddName(e.target.value)}
-                placeholder={
-                  addKind === "subject"
-                    ? "e.g. Mathematics"
-                    : addKind === "topic"
-                    ? "e.g. Number Systems"
-                    : "e.g. Introduction to Numbers"
-                }
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAdd();
-                  }
-                }}
-                autoFocus
-              />
-            </div>
-            {addKind === "content" && (
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <Select
-                  value={addContentType}
-                  onValueChange={(v) =>
-                    setAddContentType((v ?? "video") as ContentType)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="video">Video</SelectItem>
-                    <SelectItem value="pdf">PDF</SelectItem>
-                    <SelectItem value="note">Notes</SelectItem>
-                    <SelectItem value="quiz">Test / Quiz</SelectItem>
-                    <SelectItem value="ebook">Ebook</SelectItem>
-                    <SelectItem value="pyp">PYP</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddDialogOpen(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleAdd}
-              disabled={isPending || !addName.trim()}
-              className="bg-brand-orange hover:bg-brand-orange-dark text-white"
-            >
-              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Delete {deleteTarget?.kind}?
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This will permanently delete &ldquo;{deleteTarget?.name}&rdquo;.
-            {deleteTarget?.kind !== "content" &&
-              " Items with children cannot be deleted."}
-          </p>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setDeleteDialogOpen(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isPending}
-            >
-              {isPending ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

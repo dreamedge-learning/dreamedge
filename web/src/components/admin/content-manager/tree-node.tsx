@@ -12,7 +12,11 @@ import {
   Notebook,
   BookMarked,
   MoreHorizontal,
-  Plus,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  FilePlus,
+  FolderInput,
   Pencil,
   Trash2,
   GripVertical,
@@ -43,14 +47,15 @@ const contentTypeIcons: Record<string, React.ElementType> = {
 
 const kindIcons: Record<NodeKind, React.ElementType> = {
   subject: BookOpen,
-  topic: FileText,
+  topic: Folder,
   content: Video,
 };
 
-function getIcon(node: TreeNodeType) {
+function getIcon(node: TreeNodeType, isExpanded: boolean) {
   if (node.kind === "content" && node.contentType) {
     return contentTypeIcons[node.contentType] || FileText;
   }
+  if (node.kind === "topic" && isExpanded) return FolderOpen;
   return kindIcons[node.kind];
 }
 
@@ -61,8 +66,11 @@ interface TreeNodeProps {
   isSelected: boolean;
   onToggle: () => void;
   onSelect: () => void;
-  onAdd?: (kind: NodeKind) => void;
+  onAddFolder?: () => void;
+  onAddLesson?: () => void;
+  onMove?: () => void;
   onRename?: () => void;
+  /** Absent for roles that may not delete; the item is then not offered. */
   onDelete?: () => void;
   onEnableOffline?: () => void;
 }
@@ -93,13 +101,15 @@ export const TreeNodeRow = memo(function TreeNodeRow({
   isSelected,
   onToggle,
   onSelect,
-  onAdd,
+  onAddFolder,
+  onAddLesson,
+  onMove,
   onRename,
   onDelete,
   onEnableOffline,
 }: TreeNodeProps) {
   const hasChildren = node.kind !== "content";
-  const Icon = getIcon(node);
+  const Icon = getIcon(node, isExpanded);
   const isDraft = node.status === "draft";
   const flags = contentFlags(node);
 
@@ -116,9 +126,6 @@ export const TreeNodeRow = memo(function TreeNodeRow({
     transform: CSS.Transform.toString(transform),
     transition,
   };
-
-  const childKind: NodeKind | null =
-    node.kind === "subject" ? "topic" : node.kind === "topic" ? "content" : null;
 
   return (
     <div
@@ -228,7 +235,11 @@ export const TreeNodeRow = memo(function TreeNodeRow({
           render={
             <Button
               variant="ghost"
-              className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 shrink-0"
+              // Visible at rest. This menu used to appear only on hover, which
+              // on a touch screen means never, and on a laptop meant most
+              // people never found out it existed.
+              aria-label={`Actions for ${node.name}`}
+              className="h-6 w-6 shrink-0 p-0 opacity-60 hover:opacity-100 group-hover:opacity-100"
             />
           }
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
@@ -236,15 +247,26 @@ export const TreeNodeRow = memo(function TreeNodeRow({
           <MoreHorizontal className="h-3.5 w-3.5" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" sideOffset={4}>
-          {childKind && onAdd && (
+          {onAddFolder && (
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
-                onAdd(childKind);
+                onAddFolder();
               }}
             >
-              <Plus className="mr-2 h-3.5 w-3.5" />
-              Add {childKind === "topic" ? "Topic" : "Content"}
+              <FolderPlus className="mr-2 h-3.5 w-3.5" />
+              New folder
+            </DropdownMenuItem>
+          )}
+          {onAddLesson && (
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddLesson();
+              }}
+            >
+              <FilePlus className="mr-2 h-3.5 w-3.5" />
+              New lesson
             </DropdownMenuItem>
           )}
           {hasChildren && onEnableOffline && (
@@ -258,6 +280,7 @@ export const TreeNodeRow = memo(function TreeNodeRow({
               Enable offline for all items below
             </DropdownMenuItem>
           )}
+          {(onAddFolder || onAddLesson || onEnableOffline) && <DropdownMenuSeparator />}
           {onRename && (
             <DropdownMenuItem
               onClick={(e) => {
@@ -269,7 +292,18 @@ export const TreeNodeRow = memo(function TreeNodeRow({
               Rename
             </DropdownMenuItem>
           )}
-          {(childKind || onRename) && onDelete && <DropdownMenuSeparator />}
+          {onMove && (
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onMove();
+              }}
+            >
+              <FolderInput className="mr-2 h-3.5 w-3.5" />
+              Move to…
+            </DropdownMenuItem>
+          )}
+          {onDelete && <DropdownMenuSeparator />}
           {onDelete && (
             <DropdownMenuItem
               className="text-red-500 focus:text-red-500"

@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/content.dart';
+import '../../core/models/topic.dart';
 import '../../core/providers/content_provider.dart';
+import '../../core/providers/course_provider.dart';
 import '../../core/providers/offline_provider.dart';
 import '../reader/pdf_reader_screen.dart';
 import '../../shared/theme/colors.dart';
@@ -11,6 +13,10 @@ import '../../shared/theme/typography.dart';
 import '../../shared/widgets/shimmer_box.dart';
 import 'widgets/lesson_tile.dart';
 
+/// One folder: its subfolders, then its lessons.
+///
+/// Folders nest to any depth. A subfolder opens this same screen for itself,
+/// so the back button walks back up the way the student came down.
 class LessonsScreen extends ConsumerWidget {
   final String topicId;
   final String topicName;
@@ -24,6 +30,9 @@ class LessonsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final contentsAsync = ref.watch(topicContentsProvider(topicId));
+    // A failure here costs the folder its subfolder list, not its lessons.
+    final folders =
+        ref.watch(subfoldersProvider(topicId)).valueOrNull ?? const <Topic>[];
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -55,7 +64,7 @@ class LessonsScreen extends ConsumerWidget {
       ),
       body: contentsAsync.when(
         data: (contents) {
-          if (contents.isEmpty) {
+          if (contents.isEmpty && folders.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
@@ -72,7 +81,7 @@ class LessonsScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Lessons for this topic will appear here once added.',
+                      'Lessons in this folder will appear here once added.',
                       style: AppTypography.bodySmall
                           .copyWith(color: AppColors.gray),
                       textAlign: TextAlign.center,
@@ -85,12 +94,23 @@ class LessonsScreen extends ConsumerWidget {
 
           return ListView.builder(
             padding: const EdgeInsets.only(top: 8, bottom: 24),
-            itemCount: contents.length,
+            itemCount: folders.length + contents.length,
             itemBuilder: (context, index) {
-              final lesson = contents[index];
+              if (index < folders.length) {
+                final folder = folders[index];
+                return _FolderTile(
+                  folder: folder,
+                  onTap: () => context.push(
+                    '/lessons/${folder.id}',
+                    extra: folder.name,
+                  ),
+                );
+              }
+              final lessonIndex = index - folders.length;
+              final lesson = contents[lessonIndex];
               return LessonTile(
                 content: lesson,
-                index: index,
+                index: lessonIndex,
                 onTap: () => _onLessonTap(context, lesson),
               );
             },
@@ -223,6 +243,70 @@ class LessonsScreen extends ConsumerWidget {
                   ShimmerBox(width: 80, height: 10),
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A subfolder, listed above the folder's own lessons.
+class _FolderTile extends StatelessWidget {
+  final Topic folder;
+  final VoidCallback onTap;
+
+  const _FolderTile({required this.folder, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final lessons = folder.contentCount;
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.folder_rounded,
+                size: 20,
+                color: AppColors.orange,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    folder.name,
+                    style: AppTypography.bodyMedium
+                        .copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (lessons > 0) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      '$lessons ${lessons == 1 ? 'lesson' : 'lessons'}',
+                      style: AppTypography.caption,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppColors.gray,
             ),
           ],
         ),
