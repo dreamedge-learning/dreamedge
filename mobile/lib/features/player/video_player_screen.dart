@@ -7,6 +7,7 @@ import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
 import '../downloads/widgets/download_button.dart';
 import 'controller/player_controller.dart';
+import 'widgets/attachments_section.dart';
 import 'widgets/content_info_section.dart';
 import 'widgets/player_controls.dart';
 import 'widgets/player_gesture_layer.dart';
@@ -181,6 +182,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
               ),
             ],
           ),
+          LessonAttachmentsSection(contentId: content.id),
           _buildLessonNav(controller),
         ],
       ),
