@@ -2,11 +2,17 @@ import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../config/app_config.dart';
+import '../models/lesson_file.dart';
 
 /// A document the reader can open, and the terms it came with.
 class DocumentSource {
   final String url;
   final String fileName;
+
+  /// Which attachment the route served, when it says. Older deployments of
+  /// the route do not, and the callers do not depend on it.
+  final String? fileId;
+
   final bool isDownloadable;
   final int offlineLicenseDays;
 
@@ -25,6 +31,7 @@ class DocumentSource {
   const DocumentSource({
     required this.url,
     required this.fileName,
+    this.fileId,
     required this.isDownloadable,
     required this.offlineLicenseDays,
     this.validUntil,
@@ -117,6 +124,7 @@ class DocumentService {
         return DocumentSource(
           url: body['url'] as String,
           fileName: body['fileName'] as String? ?? 'Document',
+          fileId: body['fileId'] as String?,
           isDownloadable: body['isDownloadable'] as bool? ?? false,
           offlineLicenseDays:
               (body['offlineLicenseDays'] as num?)?.toInt() ?? 30,
@@ -133,6 +141,40 @@ class DocumentService {
     }
 
     throw _describe(response.statusCode ?? 0);
+  }
+
+  /// Every attachment on a lesson that a student may have, in the admin's
+  /// order.
+  ///
+  /// Read straight from `content_files`: row security already hides the
+  /// teachers-only originals and anything on a lesson the student cannot see,
+  /// and the filter here says the same thing again so the app never depends
+  /// on one of the two alone. Listing a file is not opening it -- the signed
+  /// address for each still comes from [getSource], behind the paywall check.
+  ///
+  /// Throws [DocumentException] when the list cannot be fetched, because an
+  /// empty answer would be read as "this lesson has no attachments".
+  Future<List<LessonFile>> listFiles(String contentItemId) async {
+    try {
+      final rows = await _client
+          .from('content_files')
+          .select('id, display_name, size_bytes, storage_path, mime_type, weight')
+          .eq('content_item_id', contentItemId)
+          .eq('is_source_document', false)
+          .order('weight', ascending: true)
+          .order('created_at', ascending: true);
+
+      return [
+        for (final row in rows) LessonFile.fromJson(Map<String, dynamic>.from(row)),
+      ];
+    } on Exception {
+      // A refused query, no connection, a timeout: all the same to the
+      // student, and all worth a retry.
+      throw const DocumentException(
+        DocumentFailure.unavailable,
+        'Could not load the files for this lesson.',
+      );
+    }
   }
 
   DocumentException _describe(int status) {

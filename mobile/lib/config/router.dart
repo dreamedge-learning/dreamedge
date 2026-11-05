@@ -192,6 +192,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/reader/:contentId',
         builder: (context, state) => PdfReaderScreen(
           contentId: state.pathParameters['contentId']!,
+          initialFileId: state.uri.queryParameters['file'],
         ),
       ),
       GoRoute(
