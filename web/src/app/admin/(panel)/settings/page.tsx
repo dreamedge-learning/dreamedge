@@ -11,6 +11,7 @@ import {
   getAdminGateStatus,
 } from "./applications-actions";
 import { getLegalDocuments } from "./legal-actions";
+import { getBillingProfile } from "./billing-actions";
 import {
   getAdminTeam,
   getRoles,
@@ -29,7 +30,7 @@ interface PageProps {
   searchParams: Promise<{ tab?: string }>;
 }
 
-const TABS = ["team", "applications", "roles", "audit", "platform", "legal"];
+const TABS = ["team", "applications", "roles", "audit", "platform", "legal", "billing"];
 
 export default async function SettingsPage({ searchParams }: PageProps) {
   // Read here rather than in a client hook so the tab is right on first paint:
@@ -74,6 +75,7 @@ async function SettingsContent({ initialTab }: { initialTab: string }) {
     applicationsResult,
     gateResult,
     legalResult,
+    billingResult,
     liveSettings,
   ] = await Promise.all([
     getAdminTeam({ page: 1, pageSize: 10 }),
@@ -84,6 +86,7 @@ async function SettingsContent({ initialTab }: { initialTab: string }) {
     isSuperAdmin ? getAdminApplications("pending") : null,
     isSuperAdmin ? getAdminGateStatus() : null,
     isSuperAdmin ? getLegalDocuments() : null,
+    isSuperAdmin ? getBillingProfile() : null,
     getSiteSettings(),
   ]);
 
@@ -105,6 +108,7 @@ async function SettingsContent({ initialTab }: { initialTab: string }) {
       }
       applyUrl={absoluteUrl("/admin/apply")}
       legalDocuments={legalResult?.data ?? null}
+      billingProfile={billingResult ? billingResult.data : undefined}
       supportEmail={liveSettings.support_email}
       supportPhone={liveSettings.support_phone}
       platformName={liveSettings.platform_name}
