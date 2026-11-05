@@ -16,6 +16,7 @@ import '../features/live/live_class_detail_screen.dart';
 import '../features/live/live_schedule_screen.dart';
 import '../features/notifications/notification_inbox_screen.dart';
 import '../features/payments/checkout_screen.dart';
+import 'storefront.dart';
 import '../features/payments/payment_history_screen.dart';
 import '../features/player/video_player_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
@@ -205,12 +206,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/checkout/:courseId',
+        // Removed from a build that does not sell, not just unlinked: a deep
+        // link would otherwise still open it.
+        redirect: (context, state) => Storefront.canSell
+            ? null
+            : '/course/${state.pathParameters['courseId']}',
         builder: (context, state) => CheckoutScreen(
           courseId: state.pathParameters['courseId']!,
         ),
       ),
       GoRoute(
         path: '/payment-history',
+        redirect: (context, state) => Storefront.canSell ? null : '/',
         builder: (context, state) => const PaymentHistoryScreen(),
       ),
       GoRoute(
