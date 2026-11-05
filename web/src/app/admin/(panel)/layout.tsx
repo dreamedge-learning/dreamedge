@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
-import { getAdminSession } from "@/lib/admin";
+import { getAdminSession, hasPermission } from "@/lib/admin";
+import { DOUBT_READ_ROLES } from "@/lib/doubts";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { countPendingApplications } from "./settings/applications-actions";
+import { countOpenDoubts } from "./doubts/actions";
 import { countNewFeedback } from "./engage/feedback/actions";
 
 // Every admin route is session-gated, so there's no static shell worth
@@ -26,10 +28,14 @@ export default async function AdminPanelLayout({
     countNewFeedback(),
   ]);
 
+  // The unanswered-doubts badge. Zero for roles that cannot open the inbox.
+  const openDoubts = hasPermission(admin, DOUBT_READ_ROLES) ? await countOpenDoubts() : 0;
+
   return (
     <AdminShell
       admin={admin}
       pendingApplications={pendingApplications}
+      openDoubts={openDoubts}
       pendingFeedback={pendingFeedback}
     >
       {children}

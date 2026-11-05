@@ -26,6 +26,18 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async redirects() {
+    return [
+      {
+        // The "your doubt has been answered" notification carries one link
+        // for both clients. The app routes `/doubts/:id` itself; the website
+        // keeps the thread under the dashboard with the student's other pages.
+        source: "/doubts/:id",
+        destination: "/dashboard/doubts/:id",
+        permanent: false,
+      },
+    ];
+  },
   // cacheComponents: true,
   // partialPrefetching: true,
   turbopack: {

@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
  *
  * Every student-facing policy on `content_items` requires an active
  * enrolment, so this cannot read the table: it comes from
- * `get_course_syllabus`, which returns titles, types, durations and posters
+ * `get_course_outline`, which returns titles, types, durations and posters
  * and nothing that could be turned into playback.
  *
  * A locked lesson shows its poster behind a buy overlay rather than being
@@ -34,10 +34,16 @@ export interface SyllabusLesson {
   posterUrl: string | null;
 }
 
+/** A folder. Folders nest to any depth; `folders` are its subfolders. */
 export interface SyllabusTopic {
   id: string;
   name: string;
+  folders: SyllabusTopic[];
   lessons: SyllabusLesson[];
+}
+
+function countLessons(folder: SyllabusTopic): number {
+  return folder.lessons.length + folder.folders.reduce((sum, f) => sum + countLessons(f), 0);
 }
 
 export interface SyllabusSubject {
@@ -80,8 +86,7 @@ export function CourseSyllabus({
 
   const lessonCount = subjects.reduce(
     (total, subject) =>
-      total +
-      subject.topics.reduce((sum, topic) => sum + topic.lessons.length, 0),
+      total + subject.topics.reduce((sum, topic) => sum + countLessons(topic), 0),
     0
   );
 
@@ -110,7 +115,7 @@ export function CourseSyllabus({
         {subjects.map((subject) => {
           const open = openSubjects.has(subject.id);
           const subjectLessons = subject.topics.reduce(
-            (sum, topic) => sum + topic.lessons.length,
+            (sum, topic) => sum + countLessons(topic),
             0
           );
 
@@ -138,85 +143,13 @@ export function CourseSyllabus({
               {open && (
                 <div className="space-y-4 border-t border-border bg-muted/20 px-4 py-4">
                   {subject.topics.map((topic) => (
-                    <div key={topic.id} className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {topic.name}
-                      </p>
-
-                      {topic.lessons.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          Lessons coming soon.
-                        </p>
-                      ) : (
-                        <ul className="space-y-1.5">
-                          {topic.lessons.map((lesson) => {
-                            const locked = lesson.isPaid && !isEnrolled;
-                            const length = duration(lesson.durationSeconds);
-
-                            return (
-                              <li
-                                key={lesson.id}
-                                className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2"
-                              >
-                                {/* The poster, or a typed placeholder. Only a
-                                    poster is ever shown here: Bunny's own
-                                    frame sits behind token auth and would
-                                    come back 403 unsigned. */}
-                                <div className="relative h-11 w-20 shrink-0 overflow-hidden rounded bg-muted">
-                                  {lesson.posterUrl ? (
-                                    /* eslint-disable-next-line @next/next/no-img-element */
-                                    <img
-                                      src={lesson.posterUrl}
-                                      alt=""
-                                      className={`h-full w-full object-cover ${
-                                        locked ? "opacity-50" : ""
-                                      }`}
-                                    />
-                                  ) : (
-                                    <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                                      <LessonIcon type={lesson.type} />
-                                    </div>
-                                  )}
-
-                                  {locked && (
-                                    <div className="absolute inset-0 flex items-center justify-center bg-black/55">
-                                      <Lock className="size-3.5 text-white" />
-                                    </div>
-                                  )}
-                                </div>
-
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-sm text-foreground">
-                                    {lesson.title}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {lesson.type === "video" ? "Video" : "Notes"}
-                                    {length ? ` · ${length}` : ""}
-                                    {!lesson.isPaid ? " · Free preview" : ""}
-                                  </p>
-                                </div>
-
-                                {locked ? (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="shrink-0 text-xs text-brand-orange hover:text-brand-orange-dark"
-                                    onClick={onEnrol}
-                                  >
-                                    Buy to unlock
-                                  </Button>
-                                ) : (
-                                  <span className="shrink-0 text-xs text-muted-foreground">
-                                    {isEnrolled ? "Included" : "Free"}
-                                  </span>
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </div>
+                    <SyllabusFolder
+                      key={topic.id}
+                      folder={topic}
+                      depth={0}
+                      isEnrolled={isEnrolled}
+                      onEnrol={onEnrol}
+                    />
                   ))}
                 </div>
               )}
@@ -225,5 +158,132 @@ export function CourseSyllabus({
         })}
       </div>
     </section>
+  );
+}
+
+/**
+ * One folder of the syllabus: its heading, its subfolders indented beneath it,
+ * then its own lessons. Only the first level is set as a section heading; a
+ * deeper folder reads as part of the one above it.
+ */
+function SyllabusFolder({
+  folder,
+  depth,
+  isEnrolled,
+  onEnrol,
+}: {
+  folder: SyllabusTopic;
+  depth: number;
+  isEnrolled: boolean;
+  onEnrol: () => void;
+}) {
+  const empty = countLessons(folder) === 0;
+
+  return (
+    <div className={depth === 0 ? "space-y-2" : "space-y-2 border-l border-border pl-3"}>
+      <p
+        className={
+          depth === 0
+            ? "text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            : "text-sm font-medium text-foreground/80"
+        }
+      >
+        {folder.name}
+      </p>
+
+      {empty ? (
+        <p className="text-sm text-muted-foreground">Lessons coming soon.</p>
+      ) : (
+        <>
+          {folder.folders.map((child) => (
+            <SyllabusFolder
+              key={child.id}
+              folder={child}
+              depth={depth + 1}
+              isEnrolled={isEnrolled}
+              onEnrol={onEnrol}
+            />
+          ))}
+          {folder.lessons.length > 0 && (
+            <ul className="space-y-1.5">
+              {folder.lessons.map((lesson) => (
+                <LessonRow
+                  key={lesson.id}
+                  lesson={lesson}
+                  isEnrolled={isEnrolled}
+                  onEnrol={onEnrol}
+                />
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function LessonRow({
+  lesson,
+  isEnrolled,
+  onEnrol,
+}: {
+  lesson: SyllabusLesson;
+  isEnrolled: boolean;
+  onEnrol: () => void;
+}) {
+  const locked = lesson.isPaid && !isEnrolled;
+  const length = duration(lesson.durationSeconds);
+
+  return (
+    <li className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-2">
+      {/* The poster, or a typed placeholder. Only a poster is ever shown here:
+          Bunny's own frame sits behind token auth and would come back 403
+          unsigned. */}
+      <div className="relative h-11 w-20 shrink-0 overflow-hidden rounded bg-muted">
+        {lesson.posterUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={lesson.posterUrl}
+            alt=""
+            className={`h-full w-full object-cover ${locked ? "opacity-50" : ""}`}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+            <LessonIcon type={lesson.type} />
+          </div>
+        )}
+
+        {locked && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/55">
+            <Lock className="size-3.5 text-white" />
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-foreground">{lesson.title}</p>
+        <p className="text-xs text-muted-foreground">
+          {lesson.type === "video" ? "Video" : "Notes"}
+          {length ? ` · ${length}` : ""}
+          {!lesson.isPaid ? " · Free preview" : ""}
+        </p>
+      </div>
+
+      {locked ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="shrink-0 text-xs text-brand-orange hover:text-brand-orange-dark"
+          onClick={onEnrol}
+        >
+          Buy to unlock
+        </Button>
+      ) : (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {isEnrolled ? "Included" : "Free"}
+        </span>
+      )}
+    </li>
   );
 }

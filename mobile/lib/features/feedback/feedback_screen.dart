@@ -175,7 +175,9 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
 
             const SizedBox(height: 8),
             Text(
-              'We look at every message. Please do not include passwords.',
+              'Up to 5 messages a day. If we need to get back to you, we will use '
+              'the email or phone number on your profile. Please do not include '
+              'passwords.',
               style: AppTypography.caption
                   .copyWith(color: AppColors.textSecondary),
             ),

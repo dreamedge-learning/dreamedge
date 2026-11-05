@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import {
   ArrowLeft,
+  Award,
   BookOpen,
   CheckCircle,
   ChevronDown,
@@ -33,7 +34,9 @@ import {
 } from "@/components/ui/sheet";
 import type { Course } from "@/types/course";
 import { getYouTubeId, isVideoFile } from "@/lib/video";
+import { certificatePath, type CertificateStatus } from "@/lib/certificates";
 import { HostedVideoPlayer } from "@/components/student/courses/hosted-video-player";
+import { LessonDoubtsPanel } from "@/components/student/doubts/lesson-doubts-panel";
 import {
   markContentComplete,
   updateContentProgress,
@@ -95,12 +98,28 @@ export interface SyllabusContentItem {
   progress: ContentProgress | null;
 }
 
+/** A folder. Folders nest to any depth; `folders` are its subfolders. */
 export interface SyllabusTopic {
   id: string;
   name: string;
   description: string | null;
   weight: number;
+  folders: SyllabusTopic[];
   items: SyllabusContentItem[];
+}
+
+/**
+ * Every lesson in a folder and its subfolders, in the order the sidebar shows
+ * them: subfolders first, then the folder's own lessons. Previous / Next and
+ * "resume where you left off" walk this same order, so the buttons never skip
+ * a lesson the sidebar lists between two others.
+ */
+function folderItems(folder: SyllabusTopic): SyllabusContentItem[] {
+  return [...folder.folders.flatMap(folderItems), ...folder.items];
+}
+
+function subjectItems(subject: SyllabusSubject): SyllabusContentItem[] {
+  return subject.topics.flatMap(folderItems);
 }
 
 export interface SyllabusSubject {
@@ -111,9 +130,16 @@ export interface SyllabusSubject {
   topics: SyllabusTopic[];
 }
 
+/** This student's certificate request for the course, if one has been filed. */
+export interface LearnCertificate {
+  status: CertificateStatus;
+  verificationCode: string;
+}
+
 interface LearnContentProps {
   course: Course;
   subjects: SyllabusSubject[];
+  certificate: LearnCertificate | null;
   /**
    * Content item id to open on first paint. Used by the live-class
    * rewatch deep-link; the page passes the id from `?content=` through,
@@ -246,8 +272,8 @@ function SyllabusTree({
   return (
     <div className="pb-6">
       {subjects.map((subject) => {
-        const subjectItems = subject.topics.flatMap((t) => t.items);
-        const subjectDone = subjectItems.filter(
+        const lessons = subjectItems(subject);
+        const subjectDone = lessons.filter(
           (i) => progressById[i.id]?.status === "completed"
         ).length;
 
@@ -262,9 +288,9 @@ function SyllabusTree({
               <h3 className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {subject.name}
               </h3>
-              {subjectItems.length > 0 && (
+              {lessons.length > 0 && (
                 <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                  {subjectDone}/{subjectItems.length}
+                  {subjectDone}/{lessons.length}
                 </span>
               )}
             </header>
@@ -275,113 +301,219 @@ function SyllabusTree({
               </p>
             )}
 
-            {subject.topics.map((topic) => {
-              const isOpen = openTopics[topic.id] ?? false;
-              const topicDone = topic.items.filter(
-                (i) => progressById[i.id]?.status === "completed"
-              ).length;
-              const allDone =
-                topic.items.length > 0 && topicDone === topic.items.length;
-
-              return (
-                <div key={topic.id} className="px-2">
-                  <button
-                    type="button"
-                    onClick={() => onToggleTopic(topic.id)}
-                    aria-expanded={isOpen}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted"
-                  >
-                    {isOpen ? (
-                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/90">
-                      {topic.name}
-                    </span>
-                    {allDone ? (
-                      <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
-                    ) : (
-                      topic.items.length > 0 && (
-                        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                          {topicDone}/{topic.items.length}
-                        </span>
-                      )
-                    )}
-                  </button>
-
-                  {isOpen && (
-                    <ul className="mb-1 space-y-0.5 pl-3">
-                      {topic.items.length === 0 && (
-                        <li className="px-3 py-2 text-xs text-muted-foreground">
-                          Nothing published in this chapter yet.
-                        </li>
-                      )}
-                      {topic.items.map((item) => {
-                        const ItemIcon = iconFor(item.type);
-                        const progress = progressById[item.id];
-                        const isCompleted = progress?.status === "completed";
-                        const isInProgress = progress?.status === "in_progress";
-                        const isCurrent = item.id === currentItemId;
-                        const duration = formatDuration(item.duration_seconds);
-
-                        return (
-                          <li key={item.id}>
-                            <button
-                              type="button"
-                              onClick={() => onSelect(item.id)}
-                              aria-current={isCurrent ? "true" : undefined}
-                              className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                                isCurrent
-                                  ? "bg-brand-orange/10 font-medium text-brand-orange"
-                                  : "text-foreground/80 hover:bg-muted"
-                              }`}
-                            >
-                              {isCompleted ? (
-                                <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
-                              ) : (
-                                <ItemIcon
-                                  className={`mt-0.5 h-4 w-4 shrink-0 ${
-                                    isCurrent
-                                      ? "text-brand-orange"
-                                      : "text-muted-foreground"
-                                  }`}
-                                />
-                              )}
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate">{item.title}</span>
-                                <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                                  {TYPE_LABEL[item.type]}
-                                  {duration && (
-                                    <>
-                                      <span aria-hidden="true">&middot;</span>
-                                      {duration}
-                                    </>
-                                  )}
-                                </span>
-                                {isInProgress && (progress?.progressPct ?? 0) > 0 && (
-                                  <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
-                                    <span
-                                      className="block h-full rounded-full bg-brand-orange"
-                                      style={{ width: `${progress.progressPct}%` }}
-                                    />
-                                  </span>
-                                )}
-                              </span>
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
+            {subject.topics.map((topic) => (
+              <FolderNode
+                key={topic.id}
+                folder={topic}
+                depth={0}
+                progressById={progressById}
+                currentItemId={currentItemId}
+                openTopics={openTopics}
+                onToggleTopic={onToggleTopic}
+                onSelect={onSelect}
+              />
+            ))}
           </section>
         );
       })}
     </div>
   );
+}
+
+/**
+ * One folder in the sidebar, with its subfolders nested beneath it and then
+ * its own lessons. Counts and the all-done tick cover the whole branch, so a
+ * chapter reads as finished only when everything inside it is.
+ */
+function FolderNode({
+  folder,
+  depth,
+  progressById,
+  currentItemId,
+  openTopics,
+  onToggleTopic,
+  onSelect,
+}: {
+  folder: SyllabusTopic;
+  depth: number;
+  progressById: Record<string, ContentProgress>;
+  currentItemId: string | null;
+  openTopics: Record<string, boolean>;
+  onToggleTopic: (topicId: string) => void;
+  onSelect: (itemId: string) => void;
+}) {
+  const isOpen = openTopics[folder.id] ?? false;
+  const lessons = folderItems(folder);
+  const done = lessons.filter((i) => progressById[i.id]?.status === "completed").length;
+  const allDone = lessons.length > 0 && done === lessons.length;
+  const isEmpty = folder.folders.length === 0 && folder.items.length === 0;
+
+  return (
+    <div className={depth === 0 ? "px-2" : "pl-3"}>
+      <button
+        type="button"
+        onClick={() => onToggleTopic(folder.id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted"
+      >
+        {isOpen ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <span
+          className={`min-w-0 flex-1 truncate text-sm text-foreground/90 ${
+            depth === 0 ? "font-medium" : ""
+          }`}
+        >
+          {folder.name}
+        </span>
+        {allDone ? (
+          <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
+        ) : (
+          lessons.length > 0 && (
+            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+              {done}/{lessons.length}
+            </span>
+          )
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="mb-1 border-l border-border/60 ml-4">
+          {folder.folders.map((child) => (
+            <FolderNode
+              key={child.id}
+              folder={child}
+              depth={depth + 1}
+              progressById={progressById}
+              currentItemId={currentItemId}
+              openTopics={openTopics}
+              onToggleTopic={onToggleTopic}
+              onSelect={onSelect}
+            />
+          ))}
+
+          <ul className="space-y-0.5 pl-1">
+            {isEmpty && (
+              <li className="px-3 py-2 text-xs text-muted-foreground">
+                Nothing published here yet.
+              </li>
+            )}
+            {folder.items.map((item) => {
+              const ItemIcon = iconFor(item.type);
+              const progress = progressById[item.id];
+              const isCompleted = progress?.status === "completed";
+              const isInProgress = progress?.status === "in_progress";
+              const isCurrent = item.id === currentItemId;
+              const duration = formatDuration(item.duration_seconds);
+
+              return (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(item.id)}
+                    aria-current={isCurrent ? "true" : undefined}
+                    className={`flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      isCurrent
+                        ? "bg-brand-orange/10 font-medium text-brand-orange"
+                        : "text-foreground/80 hover:bg-muted"
+                    }`}
+                  >
+                    {isCompleted ? (
+                      <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                    ) : (
+                      <ItemIcon
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${
+                          isCurrent ? "text-brand-orange" : "text-muted-foreground"
+                        }`}
+                      />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{item.title}</span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        {TYPE_LABEL[item.type]}
+                        {duration && (
+                          <>
+                            <span aria-hidden="true">&middot;</span>
+                            {duration}
+                          </>
+                        )}
+                      </span>
+                      {isInProgress && (progress?.progressPct ?? 0) > 0 && (
+                        <span className="mt-1.5 block h-1 w-full overflow-hidden rounded-full bg-muted">
+                          <span
+                            className="block h-full rounded-full bg-brand-orange"
+                            style={{ width: `${progress.progressPct}%` }}
+                          />
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Where the course's certificate stands, once there is anything to say.
+ *
+ * `finished` is worked out here from the progress on screen, so the note
+ * appears the moment the last lesson is marked complete -- the request the
+ * database files at that same moment only reaches `certificate` on the next
+ * page load.
+ */
+function CourseCertificateNote({
+  certificate,
+  finished,
+}: {
+  certificate: LearnCertificate | null;
+  finished: boolean;
+}) {
+  if (certificate?.status === "issued") {
+    return (
+      <a
+        href={certificatePath(certificate.verificationCode)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-3 flex items-center gap-2 rounded-lg border border-[#C9A84C]/40 bg-[#C9A84C]/10 px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-[#C9A84C]/15"
+      >
+        <Award className="h-4 w-4 shrink-0 text-[#C9A84C]" />
+        Your certificate is ready. View and print it.
+      </a>
+    );
+  }
+
+  if (certificate?.status === "rejected") {
+    return (
+      <Link
+        href="/dashboard/certificates"
+        className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Award className="h-4 w-4 shrink-0" />
+        Your certificate was not approved. See why.
+      </Link>
+    );
+  }
+
+  if (certificate?.status === "pending" || (finished && !certificate)) {
+    return (
+      <Link
+        href="/dashboard/certificates"
+        className="mt-3 flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <Award className="h-4 w-4 shrink-0 text-[#C9A84C]" />
+        Course complete. Your certificate is awaiting approval.
+      </Link>
+    );
+  }
+
+  return null;
 }
 
 function SidebarContent({
@@ -394,6 +526,7 @@ function SidebarContent({
   onSelect,
   completedCount,
   totalCount,
+  certificate,
 }: {
   course: Course;
   subjects: SyllabusSubject[];
@@ -404,6 +537,7 @@ function SidebarContent({
   onSelect: (itemId: string) => void;
   completedCount: number;
   totalCount: number;
+  certificate: LearnCertificate | null;
 }) {
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -424,6 +558,10 @@ function SidebarContent({
             style={{ width: `${pct}%` }}
           />
         </div>
+        <CourseCertificateNote
+          certificate={certificate}
+          finished={totalCount > 0 && completedCount === totalCount}
+        />
       </div>
 
       <div className="border-t border-border px-4 py-3">
@@ -804,21 +942,28 @@ function ItemViewer({
 export function LearnContent({
   course,
   subjects,
+  certificate,
   initialContentId,
 }: LearnContentProps) {
-  const flatItems = useMemo(
-    () => subjects.flatMap((s) => s.topics.flatMap((t) => t.items)),
-    [subjects]
-  );
+  const flatItems = useMemo(() => subjects.flatMap(subjectItems), [subjects]);
 
-  const topicOfItem = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const subject of subjects) {
-      for (const topic of subject.topics) {
-        for (const item of topic.items) map[item.id] = topic.id;
-      }
+  // Which folder holds each lesson, which folder holds each folder, and every
+  // folder id -- so the sidebar can open exactly the chain leading to a
+  // lesson, at whatever depth it sits.
+  const { topicOfItem, parentOfFolder, allFolderIds } = useMemo(() => {
+    const itemMap: Record<string, string> = {};
+    const parentMap: Record<string, string | null> = {};
+    const ids: string[] = [];
+    function walk(folder: SyllabusTopic, parent: string | null) {
+      ids.push(folder.id);
+      parentMap[folder.id] = parent;
+      for (const item of folder.items) itemMap[item.id] = folder.id;
+      for (const child of folder.folders) walk(child, folder.id);
     }
-    return map;
+    for (const subject of subjects) {
+      for (const topic of subject.topics) walk(topic, null);
+    }
+    return { topicOfItem: itemMap, parentOfFolder: parentMap, allFolderIds: ids };
   }, [subjects]);
 
   const [progressById, setProgressById] = useState<Record<string, ContentProgress>>(
@@ -858,10 +1003,17 @@ export function LearnContent({
   const [openTopics, setOpenTopics] = useState<Record<string, boolean>>(() => {
     const open: Record<string, boolean> = {};
     const focusTopic = initialItem ? topicOfItem[initialItem.id] : undefined;
-    for (const subject of subjects) {
-      for (const topic of subject.topics) {
-        open[topic.id] = focusTopic ? topic.id === focusTopic : true;
-      }
+    if (!focusTopic) {
+      for (const id of allFolderIds) open[id] = true;
+      return open;
+    }
+    // Only the folders on the way down to the lesson being resumed, so a
+    // twelve-chapter course does not open as a wall of lessons.
+    for (const id of allFolderIds) open[id] = false;
+    let cursor: string | null = focusTopic;
+    while (cursor) {
+      open[cursor] = true;
+      cursor = parentOfFolder[cursor] ?? null;
     }
     return open;
   });
@@ -994,12 +1146,23 @@ export function LearnContent({
     (itemId: string) => {
       setCurrentItemId(itemId);
       setSheetOpen(false);
-      const topicId = topicOfItem[itemId];
-      if (topicId) {
-        setOpenTopics((prev) => ({ ...prev, [topicId]: true }));
+      // Open every folder on the way down, not just the lesson's own: with
+      // nesting, Next can land in a subfolder of a folder that is closed.
+      const chain: string[] = [];
+      let cursor: string | null = topicOfItem[itemId] ?? null;
+      while (cursor) {
+        chain.push(cursor);
+        cursor = parentOfFolder[cursor] ?? null;
+      }
+      if (chain.length > 0) {
+        setOpenTopics((prev) => {
+          const next = { ...prev };
+          for (const id of chain) next[id] = true;
+          return next;
+        });
       }
     },
-    [topicOfItem]
+    [topicOfItem, parentOfFolder]
   );
 
   const toggleTopic = useCallback((topicId: string) => {
@@ -1023,6 +1186,7 @@ export function LearnContent({
       onSelect={selectItem}
       completedCount={completedCount}
       totalCount={flatItems.length}
+      certificate={certificate}
     />
   );
 
@@ -1222,6 +1386,10 @@ export function LearnContent({
                   </div>
                 </div>
               )}
+
+              {/* Keyed on the lesson so switching lessons starts a fresh
+                  load instead of flashing the last lesson's doubts. */}
+              <LessonDoubtsPanel key={currentItem.id} contentItemId={currentItem.id} />
             </>
           ) : (
             <div className="flex flex-col items-center rounded-xl border border-dashed border-border bg-card/50 px-6 py-16 text-center">

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { assertAdmin } from "@/lib/auth-guard";
+import { adminAccessToken, dispatchPush } from "@/lib/push";
 import { createClient } from "@/lib/supabase/server";
 import { describeFailure, firstIssue } from "@/lib/validations/form";
 import {
@@ -46,6 +47,10 @@ export async function fetchNotifications(limit = 50) {
     const { data, error } = await supabase
       .from("notifications")
       .select("id, title, message, channel, target_type, target_id, course_id, action_url, thumbnail_url, sent_at")
+      // "Your doubt has been answered" notices are sent one per teacher reply
+      // and live in the Doubts inbox; listing them here would bury the
+      // broadcasts this log is for.
+      .neq("target_type", "doubt")
       .order("sent_at", { ascending: false })
       .limit(limit);
 
@@ -202,84 +207,25 @@ export async function sendNotification(formData: FormData) {
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 /**
- * POSTs to the `send-push` Edge Function with the admin's own JWT, so FCM
- * dispatch is gated by the same role check the admin UI already enforces.
+ * Sends the push for a notification this admin just created.
  *
  * Returns a readable summary for the UI. `notConfigured` is the one
  * failure the sender can act on -- it means the Firebase project id and
  * service account have not been uploaded as Supabase secrets yet, so the
  * push did not go out even though the inbox row did.
  */
-async function invokeSendPush(
-  notificationId: string,
-): Promise<{
+async function invokeSendPush(notificationId: string): Promise<{
   sent?: number;
   failed?: number;
   pruned?: number;
   notConfigured?: boolean;
   error?: string;
 }> {
-  try {
-    const supabase = await createClient();
-    const { data: session } = await supabase.auth.getSession();
-    const accessToken = session.session?.access_token;
-    if (!accessToken) return { error: "No session." };
+  const accessToken = await adminAccessToken();
+  if (!accessToken) return { error: "No session." };
 
-    const baseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!baseUrl || !anonKey) {
-      return { error: "Push service is not configured." };
-    }
-
-    const response = await fetch(
-      `${baseUrl.replace(/\/+$/, "")}/functions/v1/send-push`,
-      {
-        method: "POST",
-        cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: anonKey,
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ notification_id: notificationId }),
-      },
-    );
-
-    const raw = await response.text().catch(() => "");
-    let parsed: Record<string, unknown> = {};
-    if (raw) {
-      try {
-        parsed = JSON.parse(raw) as Record<string, unknown>;
-      } catch {
-        // Non-JSON body -- treated as a generic failure below.
-      }
-    }
-
-    if (!response.ok) {
-      if (parsed.error === "push_not_configured") {
-        return { notConfigured: true };
-      }
-      return { error: typeof parsed.error === "string" ? parsed.error : `Push dispatch failed (${response.status}).` };
-    }
-
-    return {
-      sent: toInt(parsed.sent),
-      failed: toInt(parsed.failed),
-      pruned: toInt(parsed.pruned),
-    };
-  } catch (err) {
-    console.error("[invokeSendPush] unexpected error:", err);
-    return { error: "Could not reach the push service." };
-  }
-}
-
-function toInt(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const n = parseInt(value, 10);
-    return Number.isFinite(n) ? n : 0;
-  }
-  return 0;
+  const { forbidden, ...outcome } = await dispatchPush(notificationId, accessToken);
+  return forbidden ? { error: "forbidden" } : outcome;
 }
 
 async function resolveRecipients(

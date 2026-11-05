@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
-  CheckCircle2,
   CircleAlert,
   Inbox,
   Loader2,
+  Lock,
   Mail,
   MessageSquare,
   Phone,
@@ -47,6 +47,7 @@ import {
   fetchFeedback,
   markFeedbackRead,
   resolveFeedback,
+  saveFeedbackNote,
   type FeedbackRow,
 } from "@/app/admin/(panel)/engage/feedback/actions";
 import {
@@ -150,7 +151,8 @@ export function FeedbackClient({ initialData, loadError }: Props) {
           <h1 className="text-xl font-semibold tracking-tight">Feedback</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Students write in from the website and the app. Mark a message read
-            when you have seen it, resolved when it is done.
+            when you have seen it, resolved when it is done. Students see the
+            status; notes stay internal.
           </p>
         </div>
         <ExportButton dataset="feedback" filters={exportFilters} />
@@ -158,7 +160,7 @@ export function FeedbackClient({ initialData, loadError }: Props) {
 
       <div className="grid grid-cols-3 gap-3">
         <StatTile label="New" value={counts.new} highlight="brand" />
-        <StatTile label="Being read" value={counts.read} highlight="muted" />
+        <StatTile label="Read" value={counts.read} highlight="muted" />
         <StatTile label="Resolved" value={counts.resolved} highlight="emerald" />
       </div>
 
@@ -364,38 +366,45 @@ function FeedbackDetail({
   row: FeedbackRow;
   onChanged: (next: FeedbackRow) => void;
 }) {
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(row.admin_note ?? "");
   const [pending, startTransition] = useTransition();
+  const noteChanged = note.trim() !== (row.admin_note ?? "");
+
+  function noteForm() {
+    const formData = new FormData();
+    formData.set("admin_note", note.trim());
+    return formData;
+  }
+
+  function apply(
+    result: { error?: string; data?: FeedbackRow },
+    success: string,
+  ) {
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    toast.success(success);
+    // The action returns the row as the database now holds it, including the
+    // handler and time the trigger stamped, so the table never shows a guess.
+    if (result.data) onChanged({ ...result.data, student: result.data.student ?? row.student });
+  }
 
   function handleRead() {
     startTransition(async () => {
-      const result = await markFeedbackRead(row.id);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Marked as read.");
-      onChanged({ ...row, status: "read", handled_at: new Date().toISOString() });
+      apply(await markFeedbackRead(row.id), "Marked as read.");
     });
   }
 
   function handleResolve() {
-    const formData = new FormData();
-    if (note.trim()) formData.set("admin_note", note.trim());
-
     startTransition(async () => {
-      const result = await resolveFeedback(row.id, formData);
-      if (result.error) {
-        toast.error(result.error);
-        return;
-      }
-      toast.success("Marked as resolved.");
-      onChanged({
-        ...row,
-        status: "resolved",
-        admin_note: note.trim() || row.admin_note,
-        handled_at: new Date().toISOString(),
-      });
+      apply(await resolveFeedback(row.id, noteForm()), "Marked as resolved.");
+    });
+  }
+
+  function handleSaveNote() {
+    startTransition(async () => {
+      apply(await saveFeedbackNote(row.id, noteForm()), "Note saved.");
     });
   }
 
@@ -478,57 +487,61 @@ function FeedbackDetail({
         </p>
       </section>
 
-      {row.admin_note && row.status === "resolved" && (
-        <section>
-          <p className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            Note on resolution
+      <section className="space-y-3 border-t border-border pt-5">
+        <div className="space-y-1.5">
+          <Label htmlFor="admin-note" className="flex items-center gap-1.5">
+            <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+            Internal note
+            <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
+          <Textarea
+            id="admin-note"
+            rows={3}
+            maxLength={1000}
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="What happened, what was done. For the team's record."
+          />
+          <p className="text-xs text-muted-foreground">
+            Only the team sees this. The student sees the status of their
+            message, never this note. To reply, contact them directly.
           </p>
-          <p className="whitespace-pre-wrap break-words rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-sm">
-            {row.admin_note}
-          </p>
-        </section>
-      )}
+        </div>
 
-      {canResolve && (
-        <section className="space-y-3 border-t border-border pt-5">
-          <div className="space-y-1.5">
-            <Label htmlFor="admin-note">
-              Note <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Textarea
-              id="admin-note"
-              rows={3}
-              maxLength={1000}
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              placeholder="What happened? Kept on the record."
-            />
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row">
-            {canMarkRead && (
-              <Button
-                variant="outline"
-                className="flex-1"
-                disabled={pending}
-                onClick={handleRead}
-              >
-                {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-                Mark read
-              </Button>
-            )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {canMarkRead && (
+            <Button
+              variant="outline"
+              className="flex-1"
+              disabled={pending}
+              onClick={handleRead}
+            >
+              {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Mark read
+            </Button>
+          )}
+          {canResolve ? (
             <Button
               className="flex-1"
               disabled={pending}
               onClick={handleResolve}
             >
               {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-              Resolve
+              {noteChanged && note.trim() ? "Save note and resolve" : "Resolve"}
             </Button>
-          </div>
-        </section>
-      )}
+          ) : (
+            <Button
+              variant="outline"
+              className="flex-1"
+              disabled={pending || !noteChanged}
+              onClick={handleSaveNote}
+            >
+              {pending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+              Save note
+            </Button>
+          )}
+        </div>
+      </section>
 
       {row.status === "resolved" && (
         <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
@@ -536,7 +549,7 @@ function FeedbackDetail({
           <p>
             Resolved
             {row.handled_at ? ` on ${formatTimestamp(row.handled_at)}` : ""}.
-            The student will see the status on their dashboard.
+            The student sees this message as resolved on their dashboard.
           </p>
         </div>
       )}

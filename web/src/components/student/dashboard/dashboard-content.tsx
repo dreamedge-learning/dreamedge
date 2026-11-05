@@ -10,11 +10,13 @@ import {
   Search,
   UserCircle,
   HelpCircle,
+  MessageCircleQuestion,
   Share2,
   Copy,
   FileText,
   Receipt,
   Radio,
+  Award,
   MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -114,6 +116,16 @@ const QUICK_ACTIONS = [
     icon: Radio,
     label: "Live classes",
     href: "/dashboard/live-classes",
+  },
+  {
+    icon: Award,
+    label: "Certificates",
+    href: "/dashboard/certificates",
+  },
+  {
+    icon: MessageCircleQuestion,
+    label: "My doubts",
+    href: "/dashboard/doubts",
   },
   {
     icon: Search,

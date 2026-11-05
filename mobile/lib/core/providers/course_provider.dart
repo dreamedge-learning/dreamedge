@@ -64,6 +64,14 @@ final topicsProvider = StreamProvider.family<List<Topic>, String>((
   return ref.watch(courseRepositoryProvider).watchTopics(subjectId);
 });
 
+/// Folders directly inside one folder.
+final subfoldersProvider = StreamProvider.family<List<Topic>, String>((
+  ref,
+  parentTopicId,
+) {
+  return ref.watch(courseRepositoryProvider).watchSubfolders(parentTopicId);
+});
+
 class CourseFilter {
   final String? categoryId;
   final String? targetClass;

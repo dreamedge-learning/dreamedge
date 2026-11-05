@@ -3,10 +3,11 @@ import type { Metadata } from "next";
 import { FeedbackContent } from "@/components/student/feedback/feedback-content";
 import { requireCompleteStudentProfile } from "@/lib/auth-student";
 import { createClient } from "@/lib/supabase/server";
-import { feedbackQueryBuilder } from "@/lib/supabase/feedback-table";
-import type {
-  FeedbackCategory,
-  FeedbackStatus,
+import {
+  feedbackCategorySchema,
+  feedbackStatusSchema,
+  type FeedbackCategory,
+  type FeedbackStatus,
 } from "@/lib/validations/feedback";
 
 export const metadata: Metadata = {
@@ -18,45 +19,39 @@ export interface FeedbackHistoryItem {
   category: FeedbackCategory;
   message: string;
   status: FeedbackStatus;
-  adminNote: string | null;
   createdAt: string;
   handledAt: string | null;
 }
 
-interface Row {
-  id: string;
-  category: FeedbackCategory;
-  message: string;
-  status: FeedbackStatus;
-  admin_note: string | null;
-  handled_at: string | null;
-  created_at: string;
-}
-
 export default async function FeedbackPage() {
-  const student = await requireCompleteStudentProfile("/dashboard/feedback");
+  await requireCompleteStudentProfile("/dashboard/feedback");
   const supabase = await createClient();
 
-  // Narrow, local typing on the select so we do not regenerate
-  // `src/types/supabase.ts` -- three sibling branches touch that file.
-  const { data } = await feedbackQueryBuilder(supabase)
-    .select(
-      "id, category, message, status, admin_note, handled_at, created_at",
-    )
-    .eq("student_id", student.id)
-    .order("created_at", { ascending: false })
-    .limit(20)
-    .returns<Row[]>();
+  // Students cannot SELECT the table: the row carries the team's internal
+  // note. `get_my_feedback` returns the student's own rows with only the
+  // columns they are meant to see.
+  const { data, error } = await supabase.rpc("get_my_feedback", { p_limit: 20 });
+  if (error) {
+    console.error("[FeedbackPage] history failed:", error);
+  }
 
-  const history: FeedbackHistoryItem[] = (data ?? []).map((row) => ({
-    id: row.id,
-    category: row.category,
-    message: row.message,
-    status: row.status,
-    adminNote: row.admin_note,
-    createdAt: row.created_at,
-    handledAt: row.handled_at,
-  }));
+  const history: FeedbackHistoryItem[] = [];
+  for (const row of data ?? []) {
+    // The table's check constraints hold these to the known values, but the
+    // RPC returns plain text; parsing keeps an unexpected value from
+    // reaching a label lookup as `undefined`.
+    const category = feedbackCategorySchema.safeParse(row.category);
+    const status = feedbackStatusSchema.safeParse(row.status);
+    if (!category.success || !status.success) continue;
+    history.push({
+      id: row.id,
+      category: category.data,
+      message: row.message,
+      status: status.data,
+      createdAt: row.created_at,
+      handledAt: row.handled_at,
+    });
+  }
 
   return <FeedbackContent history={history} />;
 }

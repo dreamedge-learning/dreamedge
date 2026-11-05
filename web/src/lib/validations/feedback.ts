@@ -72,8 +72,12 @@ export function feedbackSubmissionInput(formData: FormData) {
   };
 }
 
-/** The admin's note on a resolution. Optional; `null` means "no change". */
-export const feedbackResolutionSchema = z.object({
+/**
+ * The team's internal note on a message. Never shown to the student: their
+ * history comes from `get_my_feedback`, which does not return it. An empty
+ * string means "no note".
+ */
+export const feedbackNoteSchema = z.object({
   admin_note: z
     .string()
     .trim()
@@ -81,7 +85,7 @@ export const feedbackResolutionSchema = z.object({
     .optional(),
 });
 
-export function feedbackResolutionInput(formData: FormData) {
+export function feedbackNoteInput(formData: FormData) {
   return {
     admin_note: formText(formData, "admin_note"),
   };

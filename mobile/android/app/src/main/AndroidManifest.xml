@@ -42,6 +42,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- The password-reset hand-over. The reset email opens a page on
+                 the website, which passes the one-time code to this address;
+                 the Supabase client picks it up and signs the student in to
+                 choose a new password. Host-scoped so the scheme opens the app
+                 for this and nothing else. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="com.dreamedge.mobile" android:host="reset-password"/>
+            </intent-filter>
         </activity>
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"

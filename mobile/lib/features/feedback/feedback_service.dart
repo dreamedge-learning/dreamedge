@@ -34,9 +34,9 @@ class FeedbackFailure extends FeedbackResult {
 /// Thin wrapper around the student's own Supabase session.
 ///
 /// Writes go through the student's auth token, so Row Level Security does
-/// the gating. We never set `student_id` on the client -- the policy's
-/// `with check (student_id = current_student_id())` is what proves the row
-/// belongs to the caller.
+/// the gating. The client sends only what the student wrote: the database
+/// fills `student_id`, the status and the timestamp from the session, and
+/// refuses those columns outright if a client tries to send them.
 class FeedbackService {
   FeedbackService(this._client, {Future<String?> Function()? versionLoader})
       : _versionLoader = versionLoader ?? _defaultAppVersion;
@@ -48,8 +48,7 @@ class FeedbackService {
     final error = validateFeedbackMessage(submission.message);
     if (error != null) return FeedbackFailure(error);
 
-    final student = _client.auth.currentUser;
-    if (student == null) {
+    if (_client.auth.currentUser == null) {
       return const FeedbackFailure(
         'You need to sign in again before sending feedback.',
       );
@@ -58,25 +57,7 @@ class FeedbackService {
     final version = await _versionLoader();
 
     try {
-      // The student_id is set by RLS via a with-check; see the migration.
-      // We still set it to the student's `students.id` here so the row has
-      // a value to measure the policy against. That value comes from the
-      // students row for the current auth user.
-      final studentRow = await _client
-          .from('students')
-          .select('id')
-          .eq('user_id', student.id)
-          .maybeSingle();
-
-      final studentId = studentRow?['id'] as String?;
-      if (studentId == null) {
-        return const FeedbackFailure(
-          'Your account is not fully set up yet. Finish your profile and try again.',
-        );
-      }
-
       await _client.from('student_feedback').insert({
-        'student_id': studentId,
         'category': submission.category.key,
         'message': submission.message.trim(),
         'source': 'app',
@@ -85,20 +66,30 @@ class FeedbackService {
 
       return const FeedbackOk();
     } on PostgrestException catch (err) {
-      // Trigger-raised rate limit, pass the human-readable sentence through.
-      if (err.code == '53400') {
-        return FeedbackFailure(err.message);
-      }
-      return FeedbackFailure(
-        err.message.isNotEmpty
-            ? err.message
-            : 'Could not send your feedback. Please try again.',
-      );
+      return FeedbackFailure(describeFeedbackError(err.code, err.message));
     } catch (_) {
       return const FeedbackFailure(
         'Could not send your feedback. Please try again.',
       );
     }
+  }
+}
+
+/// Turns a database refusal into a sentence for the student.
+///
+/// Only the rate limit's own message is passed through, because that one is
+/// written for students. Anything else (an RLS refusal, a constraint name)
+/// is database wording and is replaced with something a student can act on.
+String describeFeedbackError(String? code, String message) {
+  switch (code) {
+    case '53400':
+      return message;
+    // RLS refuses the row when the signed-in account has no student record
+    // yet, which in practice means registration was never finished.
+    case '42501':
+      return 'Your account is not fully set up yet. Finish your profile and try again.';
+    default:
+      return 'Could not send your feedback. Please try again.';
   }
 }
 

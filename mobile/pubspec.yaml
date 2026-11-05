@@ -40,8 +40,15 @@ dependencies:
   # URL launcher
   url_launcher: ^6.3.1
 
-  # App metadata (used for stamping the running build onto student feedback).
-  package_info_plus: ^8.1.0
+  # App metadata, used to stamp the running build onto student feedback.
+  # wakelock_plus already pulls in package_info_plus 9.x, so the constraint
+  # has to sit on that major or the resolver downgrades wakelock_plus.
+  package_info_plus: ^9.0.1
+
+  # Photos for doubts. Android's system photo picker and camera intent need no
+  # runtime permission, so the manifest gains nothing; the picker also scales
+  # the photo down before handing it over.
+  image_picker: ^1.1.2
 
   # Video player
   #

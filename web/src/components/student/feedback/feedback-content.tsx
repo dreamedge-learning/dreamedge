@@ -12,6 +12,7 @@ import {
   FEEDBACK_CATEGORY_LABELS,
   FEEDBACK_MESSAGE_MAX,
   FEEDBACK_MESSAGE_MIN,
+  FEEDBACK_RATE_LIMIT_PER_DAY,
   FEEDBACK_STATUS_LABELS,
   type FeedbackCategory,
   type FeedbackStatus,
@@ -67,7 +68,6 @@ export function FeedbackContent({ history }: Props) {
           category: formData.get("category") as FeedbackCategory,
           message: String(formData.get("message") ?? ""),
           status: "new",
-          adminNote: null,
           createdAt: new Date().toISOString(),
           handledAt: null,
         },
@@ -153,7 +153,8 @@ export function FeedbackContent({ history }: Props) {
 
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
-              We look at every message. Please do not include passwords.
+              Up to {FEEDBACK_RATE_LIMIT_PER_DAY} messages a day. Please do not
+              include passwords.
             </p>
             <button
               type="submit"
@@ -174,6 +175,14 @@ export function FeedbackContent({ history }: Props) {
             Your past feedback
           </h2>
         </div>
+        {/* The inbox is one-way: the team's notes on a message stay internal,
+            so say plainly where an answer would come from instead of leaving
+            the student waiting for a reply on this page. */}
+        <p className="mb-4 text-sm text-muted-foreground">
+          Each message shows whether the team has read it or resolved it. If
+          we need to get back to you, we will use the email or phone number on
+          your profile.
+        </p>
 
         {recent.length === 0 ? (
           <HistoryEmpty />
@@ -233,16 +242,6 @@ function HistoryCard({ item }: { item: FeedbackHistoryItem }) {
         {item.message}
       </p>
 
-      {item.adminNote && (
-        <div className="mt-3 rounded-lg border border-brand-orange/30 bg-brand-orange/5 p-3 text-sm">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-orange">
-            Reply from the team
-          </p>
-          <p className="whitespace-pre-wrap break-words text-foreground/90">
-            {item.adminNote}
-          </p>
-        </div>
-      )}
     </article>
   );
 }

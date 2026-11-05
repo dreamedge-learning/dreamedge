@@ -374,6 +374,170 @@ export type Database = {
           },
         ]
       }
+      billing_profile: {
+        Row: {
+          address: string
+          footer_note: string | null
+          gst_rate: number
+          gst_registered: boolean
+          gstin: string | null
+          id: boolean
+          legal_name: string
+          receipt_prefix: string
+          sac_code: string
+          state: string
+          state_code: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          address?: string
+          footer_note?: string | null
+          gst_rate?: number
+          gst_registered?: boolean
+          gstin?: string | null
+          id?: boolean
+          legal_name?: string
+          receipt_prefix?: string
+          sac_code?: string
+          state?: string
+          state_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          address?: string
+          footer_note?: string | null
+          gst_rate?: number
+          gst_registered?: boolean
+          gstin?: string | null
+          id?: boolean
+          legal_name?: string
+          receipt_prefix?: string
+          sac_code?: string
+          state?: string
+          state_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_profile_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      certificates: {
+        Row: {
+          certificate_number: string | null
+          course_id: string
+          course_title: string | null
+          created_at: string
+          id: string
+          issued_at: string | null
+          issued_by: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejected_reason: string | null
+          requested_at: string
+          revoked_at: string | null
+          revoked_by: string | null
+          revoked_reason: string | null
+          signatory_name: string | null
+          signatory_title: string | null
+          status: string
+          student_id: string
+          student_name: string | null
+          updated_at: string
+          verification_code: string
+        }
+        Insert: {
+          certificate_number?: string | null
+          course_id: string
+          course_title?: string | null
+          created_at?: string
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejected_reason?: string | null
+          requested_at?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          revoked_reason?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
+          status?: string
+          student_id: string
+          student_name?: string | null
+          updated_at?: string
+          verification_code?: string
+        }
+        Update: {
+          certificate_number?: string | null
+          course_id?: string
+          course_title?: string | null
+          created_at?: string
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejected_reason?: string | null
+          requested_at?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          revoked_reason?: string | null
+          signatory_name?: string | null
+          signatory_title?: string | null
+          status?: string
+          student_id?: string
+          student_name?: string | null
+          updated_at?: string
+          verification_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_issued_by_fkey"
+            columns: ["issued_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_revoked_by_fkey"
+            columns: ["revoked_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certificates_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_downloads: {
         Row: {
           bytes: number
@@ -428,6 +592,7 @@ export type Database = {
           created_at: string
           display_name: string
           id: string
+          is_source_document: boolean | null
           mime_type: string | null
           size_bytes: number
           storage_path: string
@@ -439,6 +604,7 @@ export type Database = {
           created_at?: string
           display_name: string
           id?: string
+          is_source_document?: boolean | null
           mime_type?: string | null
           size_bytes?: number
           storage_path: string
@@ -450,6 +616,7 @@ export type Database = {
           created_at?: string
           display_name?: string
           id?: string
+          is_source_document?: boolean | null
           mime_type?: string | null
           size_bytes?: number
           storage_path?: string
@@ -734,6 +901,138 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      doubt_replies: {
+        Row: {
+          author_admin_id: string | null
+          author_kind: string
+          author_name: string
+          author_student_id: string | null
+          body: string
+          created_at: string
+          doubt_id: string
+          id: string
+          image_path: string | null
+        }
+        Insert: {
+          author_admin_id?: string | null
+          author_kind?: string
+          author_name?: string
+          author_student_id?: string | null
+          body: string
+          created_at?: string
+          doubt_id: string
+          id?: string
+          image_path?: string | null
+        }
+        Update: {
+          author_admin_id?: string | null
+          author_kind?: string
+          author_name?: string
+          author_student_id?: string | null
+          body?: string
+          created_at?: string
+          doubt_id?: string
+          id?: string
+          image_path?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doubt_replies_author_admin_id_fkey"
+            columns: ["author_admin_id"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubt_replies_author_student_id_fkey"
+            columns: ["author_student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubt_replies_doubt_id_fkey"
+            columns: ["doubt_id"]
+            isOneToOne: false
+            referencedRelation: "doubts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      doubts: {
+        Row: {
+          answered_at: string | null
+          assigned_to: string | null
+          body: string
+          closed_at: string | null
+          content_item_id: string
+          course_id: string
+          created_at: string
+          id: string
+          image_path: string | null
+          status: string
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          answered_at?: string | null
+          assigned_to?: string | null
+          body: string
+          closed_at?: string | null
+          content_item_id: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          image_path?: string | null
+          status?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Update: {
+          answered_at?: string | null
+          assigned_to?: string | null
+          body?: string
+          closed_at?: string | null
+          content_item_id?: string
+          course_id?: string
+          created_at?: string
+          id?: string
+          image_path?: string | null
+          status?: string
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "doubts_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubts_content_item_id_fkey"
+            columns: ["content_item_id"]
+            isOneToOne: false
+            referencedRelation: "content_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubts_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "doubts_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       enrollments: {
         Row: {
@@ -1122,7 +1421,9 @@ export type Database = {
           discount_amount: number
           final_amount: number
           id: string
+          invoice_issued_at: string | null
           invoice_number: string | null
+          invoice_snapshot: Json | null
           invoice_url: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           processed_by: string | null
@@ -1142,7 +1443,9 @@ export type Database = {
           discount_amount?: number
           final_amount: number
           id?: string
+          invoice_issued_at?: string | null
           invoice_number?: string | null
+          invoice_snapshot?: Json | null
           invoice_url?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           processed_by?: string | null
@@ -1162,7 +1465,9 @@ export type Database = {
           discount_amount?: number
           final_amount?: number
           id?: string
+          invoice_issued_at?: string | null
           invoice_number?: string | null
+          invoice_snapshot?: Json | null
           invoice_url?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           processed_by?: string | null
@@ -1572,6 +1877,63 @@ export type Database = {
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_feedback: {
+        Row: {
+          admin_note: string | null
+          app_version: string | null
+          category: string
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          message: string
+          source: string
+          status: string
+          student_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          app_version?: string | null
+          category: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          message: string
+          source: string
+          status?: string
+          student_id?: string
+        }
+        Update: {
+          admin_note?: string | null
+          app_version?: string | null
+          category?: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          message?: string
+          source?: string
+          status?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_feedback_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_feedback_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
             referencedColumns: ["id"]
           },
         ]
@@ -2047,6 +2409,7 @@ export type Database = {
           id: string
           is_visible: boolean
           name: string
+          parent_topic_id: string | null
           slug: string
           subject_id: string
           weight: number
@@ -2057,6 +2420,7 @@ export type Database = {
           id?: string
           is_visible?: boolean
           name: string
+          parent_topic_id?: string | null
           slug: string
           subject_id: string
           weight?: number
@@ -2067,11 +2431,19 @@ export type Database = {
           id?: string
           is_visible?: boolean
           name?: string
+          parent_topic_id?: string | null
           slug?: string
           subject_id?: string
           weight?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "topics_parent_topic_id_fkey"
+            columns: ["parent_topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "topics_subject_id_fkey"
             columns: ["subject_id"]
@@ -2118,9 +2490,47 @@ export type Database = {
           updated_by_name: string
         }[]
       }
+      admin_list_doubts: {
+        Args: {
+          p_course_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_status?: string
+        }
+        Returns: {
+          answered_at: string
+          assigned_to: string
+          assignee_name: string
+          body: string
+          content_item_id: string
+          course_id: string
+          course_title: string
+          created_at: string
+          has_image: boolean
+          id: string
+          lesson_title: string
+          reply_count: number
+          status: string
+          student_class: string
+          student_id: string
+          student_name: string
+          total_count: number
+          updated_at: string
+        }[]
+      }
       admin_login_blocked: {
         Args: { p_email: string; p_ip?: string }
         Returns: Json
+      }
+      approve_certificates: {
+        Args: { p_ids: string[] }
+        Returns: {
+          certificate_id: string
+          notification_id: string
+          student_id: string
+          verification_code: string
+        }[]
       }
       check_offline_entitlements: {
         Args: { p_content_item_id?: string }
@@ -2160,6 +2570,20 @@ export type Database = {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      get_course_outline: {
+        Args: { p_course_id: string }
+        Returns: {
+          item_duration: number
+          item_is_paid: boolean
+          item_poster_url: string
+          item_type: Database["public"]["Enums"]["content_type"]
+          name: string
+          node_id: string
+          node_kind: string
+          parent_id: string
+          weight: number
+        }[]
+      }
       get_course_syllabus: {
         Args: { p_course_id: string }
         Returns: {
@@ -2181,6 +2605,18 @@ export type Database = {
       get_daily_orders: {
         Args: { end_date?: string; start_date?: string }
         Returns: Json
+      }
+      get_my_feedback: {
+        Args: { p_limit?: number }
+        Returns: {
+          category: string
+          created_at: string
+          handled_at: string
+          id: string
+          message: string
+          source: string
+          status: string
+        }[]
       }
       get_payment_method_breakdown: {
         Args: { end_date?: string; start_date?: string }
@@ -2240,6 +2676,14 @@ export type Database = {
             Args: { p_content_item_id: string; p_idempotency_key?: string }
             Returns: Json
           }
+      reject_certificate: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      revoke_certificate: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
       save_test_answers: {
         Args: { p_answers: Json; p_attempt_id: string }
         Returns: {
@@ -2291,6 +2735,20 @@ export type Database = {
           }
       touch_admin_last_login: { Args: never; Returns: undefined }
       verify_admin_gate: { Args: { p_password: string }; Returns: boolean }
+      verify_certificate: {
+        Args: { p_code: string }
+        Returns: {
+          certificate_number: string
+          course_title: string
+          issued_at: string
+          revoked_at: string
+          signatory_name: string
+          signatory_title: string
+          status: string
+          student_name: string
+          verification_code: string
+        }[]
+      }
     }
     Enums: {
       admin_application_status: "pending" | "approved" | "rejected"
@@ -2451,6 +2909,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      admin_application_status: ["pending", "approved", "rejected"],
       banner_position: ["home_top", "home_bottom", "course_page", "dashboard"],
       batch_status: ["upcoming", "active", "completed", "cancelled"],
       content_status: ["draft", "published", "archived"],

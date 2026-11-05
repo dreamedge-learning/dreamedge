@@ -14,6 +14,7 @@ import {
   Users,
   Calendar,
   Star,
+  FolderTree,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -166,9 +167,15 @@ export function CourseCard({ course }: { course: CourseWithCategory }) {
                 <MoreHorizontal className="h-4 w-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  render={<Link href={`/admin/content/manager?course=${course.id}`} />}
+                >
+                  <FolderTree className="mr-2 h-4 w-4" />
+                  Manage content
+                </DropdownMenuItem>
                 <DropdownMenuItem render={<Link href={`/admin/content/courses/${course.id}/edit`} />}>
                   <Pencil className="mr-2 h-4 w-4" />
-                  Edit
+                  Edit details
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleDuplicate}>
                   <Copy className="mr-2 h-4 w-4" />
@@ -235,6 +242,19 @@ export function CourseCard({ course }: { course: CourseWithCategory }) {
               </span>
             )}
           </div>
+
+          {/* The course's folders and lessons. This was reachable only through
+              Content Manager and a dropdown, so from the course itself there
+              was no visible way in. */}
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2 w-full"
+            render={<Link href={`/admin/content/manager?course=${course.id}`} />}
+          >
+            <FolderTree className="mr-1.5 h-3.5 w-3.5" />
+            Manage content
+          </Button>
         </div>
       </div>
 

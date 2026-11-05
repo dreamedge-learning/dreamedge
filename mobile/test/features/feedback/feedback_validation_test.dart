@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/feedback/feedback_category.dart';
+import 'package:mobile/features/feedback/feedback_service.dart';
 
 void main() {
   group('validateFeedbackMessage', () {
@@ -59,6 +60,30 @@ void main() {
       for (final c in FeedbackCategory.values) {
         expect(c.label, isNotEmpty);
       }
+    });
+  });
+
+  group('describeFeedbackError', () {
+    test('passes the rate-limit sentence through unchanged', () {
+      const sentence =
+          'You have reached the limit of 5 feedback submissions in 24 hours. Please try again later.';
+      expect(describeFeedbackError('53400', sentence), sentence);
+    });
+
+    test('never shows raw database wording', () {
+      final text = describeFeedbackError(
+        '23514',
+        'new row for relation "student_feedback" violates check constraint',
+      );
+      expect(text, isNot(contains('student_feedback')));
+      expect(text, isNot(contains('constraint')));
+    });
+
+    test('explains an RLS refusal as an unfinished account', () {
+      expect(
+        describeFeedbackError('42501', 'new row violates row-level security policy'),
+        contains('not fully set up'),
+      );
     });
   });
 }

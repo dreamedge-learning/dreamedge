@@ -6,6 +6,10 @@ import {
   SUPPORT_EMAIL,
   SUPPORT_PHONE,
 } from "@/lib/site";
+import {
+  DEFAULT_SIGNATORY_NAME,
+  DEFAULT_SIGNATORY_TITLE,
+} from "@/lib/certificates";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -49,6 +53,13 @@ export interface SiteSettings {
    */
   manual_payment_enabled: boolean;
   social_links: SocialLinks;
+  /**
+   * Who signs course certificates. Private rows, like the one above: read in
+   * admin code only. A certificate prints the copy frozen when it was issued,
+   * never these.
+   */
+  certificate_signatory_name: string;
+  certificate_signatory_title: string;
 }
 
 export const SETTINGS_DEFAULTS: SiteSettings = {
@@ -68,6 +79,8 @@ export const SETTINGS_DEFAULTS: SiteSettings = {
   watermark_enabled: true,
   manual_payment_enabled: true,
   social_links: {},
+  certificate_signatory_name: DEFAULT_SIGNATORY_NAME,
+  certificate_signatory_title: DEFAULT_SIGNATORY_TITLE,
 };
 
 function asText(value: unknown, fallback: string): string {
@@ -140,6 +153,14 @@ export const getSiteSettings = cache(async (): Promise<SiteSettings> => {
         SETTINGS_DEFAULTS.manual_payment_enabled
       ),
       social_links: asSocialLinks(pick("social_links")),
+      certificate_signatory_name: asText(
+        pick("certificate_signatory_name"),
+        SETTINGS_DEFAULTS.certificate_signatory_name
+      ),
+      certificate_signatory_title: asText(
+        pick("certificate_signatory_title"),
+        SETTINGS_DEFAULTS.certificate_signatory_title
+      ),
     };
   } catch (error) {
     console.error("[settings] could not be read:", error);

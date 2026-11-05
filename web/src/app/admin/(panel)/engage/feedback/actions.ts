@@ -5,11 +5,10 @@ import { z } from "zod";
 
 import { assertAdmin } from "@/lib/auth-guard";
 import { createClient } from "@/lib/supabase/server";
-import { feedbackQueryBuilder } from "@/lib/supabase/feedback-table";
 import {
   feedbackCategorySchema,
-  feedbackResolutionInput,
-  feedbackResolutionSchema,
+  feedbackNoteInput,
+  feedbackNoteSchema,
   feedbackStatusSchema,
   type FeedbackCategory,
   type FeedbackStatus,
@@ -23,6 +22,14 @@ import { describeFailure, firstIssue, uuid } from "@/lib/validations/form";
  * that answer messages (super admin, support staff) are the only ones RLS
  * admits for SELECT or UPDATE. Everything here calls `assertAdmin` with that
  * pair, so the policy and the server action say the same thing.
+ *
+ * The admin's note is internal. Students read their history through the
+ * `get_my_feedback` RPC, which does not return it, so nothing written in the
+ * note ever reaches the student.
+ *
+ * `handled_by` and `handled_at` are not sent from here: a trigger stamps them
+ * from the session whenever the status or note changes, and the column grants
+ * refuse them from any client.
  */
 
 const FEEDBACK_ROLES = ["super_admin", "support_staff"] as const;
@@ -52,6 +59,7 @@ export interface StudentSummary {
 }
 
 const feedbackIdSchema = uuid("Feedback");
+const sourceSchema = z.enum(["web", "app"]);
 
 export interface FeedbackListFilters {
   status: FeedbackStatus | "all";
@@ -62,6 +70,43 @@ const listFiltersSchema = z.object({
   status: z.union([feedbackStatusSchema, z.literal("all")]).catch("all"),
   category: z.union([feedbackCategorySchema, z.literal("all")]).catch("all"),
 });
+
+const FEEDBACK_SELECT = `
+  id, student_id, category, message, source, app_version, status, admin_note,
+  handled_at, created_at,
+  student:students(id, full_name, student_code, class, board, email, phone)
+`;
+
+/**
+ * Narrow the text columns to the values the table's check constraints allow.
+ * A row that somehow falls outside them is skipped rather than rendered with
+ * a missing label.
+ */
+function toFeedbackRow(row: {
+  id: string;
+  student_id: string;
+  category: string;
+  message: string;
+  source: string;
+  app_version: string | null;
+  status: string;
+  admin_note: string | null;
+  handled_at: string | null;
+  created_at: string;
+  student: StudentSummary | null;
+}): FeedbackRow | null {
+  const category = feedbackCategorySchema.safeParse(row.category);
+  const status = feedbackStatusSchema.safeParse(row.status);
+  const source = sourceSchema.safeParse(row.source);
+  if (!category.success || !status.success || !source.success) return null;
+
+  return {
+    ...row,
+    category: category.data,
+    status: status.data,
+    source: source.data,
+  };
+}
 
 export async function fetchFeedback(
   filters: Partial<FeedbackListFilters> = {},
@@ -75,13 +120,9 @@ export async function fetchFeedback(
       category: filters.category ?? "all",
     });
 
-    // Fetch the feedback rows first, then the student rows in a second
-    // query. A nested embed would need the generated types to know about
-    // `student_feedback`, and we are deliberately not regenerating them.
-    let query = feedbackQueryBuilder(supabase)
-      .select(
-        "id, student_id, category, message, source, app_version, status, admin_note, handled_at, created_at",
-      )
+    let query = supabase
+      .from("student_feedback")
+      .select(FEEDBACK_SELECT)
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -95,43 +136,10 @@ export async function fetchFeedback(
       return { error: "Could not load feedback." };
     }
 
-    const studentIds = Array.from(
-      new Set((rows ?? []).map((row) => row.student_id)),
-    );
-
-    let studentMap = new Map<string, StudentSummary>();
-
-    if (studentIds.length > 0) {
-      const { data: students, error: studentError } = await supabase
-        .from("students")
-        .select("id, full_name, student_code, class, board, email, phone")
-        .in("id", studentIds);
-
-      if (studentError) {
-        // A failure here is non-fatal for the inbox -- a message without a
-        // student card still has a message worth reading.
-        console.warn("[fetchFeedback] student lookup failed:", studentError);
-      } else {
-        studentMap = new Map(
-          (students ?? []).map((s) => [s.id, s as StudentSummary]),
-        );
-      }
-    }
-
     return {
-      data: (rows ?? []).map((row) => ({
-        id: row.id,
-        student_id: row.student_id,
-        category: row.category,
-        message: row.message,
-        source: row.source,
-        app_version: row.app_version,
-        status: row.status,
-        admin_note: row.admin_note,
-        handled_at: row.handled_at,
-        created_at: row.created_at,
-        student: studentMap.get(row.student_id) ?? null,
-      })),
+      data: (rows ?? [])
+        .map(toFeedbackRow)
+        .filter((row): row is FeedbackRow => row !== null),
     };
   } catch (err) {
     console.error("[fetchFeedback] unexpected:", err);
@@ -145,7 +153,8 @@ export async function countNewFeedback(): Promise<number> {
     if (!admin) return 0;
 
     const supabase = await createClient();
-    const { count, error } = await feedbackQueryBuilder(supabase)
+    const { count, error } = await supabase
+      .from("student_feedback")
       .select("id", { count: "exact", head: true })
       .eq("status", "new");
 
@@ -161,83 +170,156 @@ export async function countNewFeedback(): Promise<number> {
 }
 
 /**
+ * The inbox page and the sidebar badge both read from the table, so both are
+ * refreshed: the badge lives in the admin layout, which a page-only
+ * revalidate would leave showing the old count.
+ */
+function revalidateInbox() {
+  revalidatePath("/admin/engage/feedback");
+  revalidatePath("/admin", "layout");
+}
+
+type ActionResult = { error?: string; data?: FeedbackRow };
+
+/**
  * Mark a feedback row as `read` without resolving it. Used for triage: a
  * support agent sees a message, wants to come back to it, and this gets it
  * out of the `new` bucket without closing the loop.
  */
-export async function markFeedbackRead(
-  id: string,
-): Promise<{ error?: string; success?: true }> {
+export async function markFeedbackRead(id: string): Promise<ActionResult> {
   try {
     const { adminUser } = await assertAdmin([...FEEDBACK_ROLES]);
-    const supabase = await createClient();
 
     const parsedId = feedbackIdSchema.safeParse(id);
     if (!parsedId.success) return { error: firstIssue(parsedId.error) };
 
-    const { data, error } = await feedbackQueryBuilder(supabase)
-      .update({
-        status: "read",
-        handled_by: adminUser.id,
-        handled_at: new Date().toISOString(),
-      })
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("student_feedback")
+      .update({ status: "read" })
       .eq("id", parsedId.data)
-      // Resolved is a terminal state -- going back to `read` would quietly
+      // Only from `new`: going back to `read` from `resolved` would quietly
       // undo someone's close-out, and the UI doesn't offer that.
       .eq("status", "new")
-      .select("id");
+      .select(FEEDBACK_SELECT)
+      .maybeSingle();
 
     if (error) {
       console.error("[markFeedbackRead] failed:", error);
       return { error: "Could not update that message." };
     }
+    if (!data) return { error: "This message is no longer new." };
 
-    if (!data || data.length === 0) {
-      return { error: "This message is no longer new." };
-    }
+    await supabase.from("audit_log").insert({
+      user_id: adminUser.user_id,
+      action: "mark_read",
+      entity_type: "feedback",
+      entity_id: parsedId.data,
+      old_data: { status: "new" },
+      new_data: { status: "read", category: data.category },
+    });
 
-    revalidatePath("/admin/engage/feedback");
-    return { success: true };
+    revalidateInbox();
+    return { data: toFeedbackRow(data) ?? undefined };
   } catch (err) {
     console.error("[markFeedbackRead] unexpected:", err);
     return { error: describeFailure(err) };
   }
 }
 
+/**
+ * Close a message, optionally saving the internal note in the same write.
+ * An empty note box leaves any earlier note as it was rather than wiping it.
+ */
 export async function resolveFeedback(
   id: string,
   formData: FormData,
-): Promise<{ error?: string; success?: true }> {
+): Promise<ActionResult> {
   try {
     const { adminUser } = await assertAdmin([...FEEDBACK_ROLES]);
-    const supabase = await createClient();
 
     const parsedId = feedbackIdSchema.safeParse(id);
     if (!parsedId.success) return { error: firstIssue(parsedId.error) };
 
-    const parsed = feedbackResolutionSchema.safeParse(
-      feedbackResolutionInput(formData),
-    );
+    const parsed = feedbackNoteSchema.safeParse(feedbackNoteInput(formData));
     if (!parsed.success) return { error: firstIssue(parsed.error) };
+    const note = parsed.data.admin_note || null;
 
-    const { error } = await feedbackQueryBuilder(supabase)
-      .update({
-        status: "resolved",
-        admin_note: parsed.data.admin_note ?? null,
-        handled_by: adminUser.id,
-        handled_at: new Date().toISOString(),
-      })
-      .eq("id", parsedId.data);
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("student_feedback")
+      .update(note ? { status: "resolved", admin_note: note } : { status: "resolved" })
+      .eq("id", parsedId.data)
+      .in("status", ["new", "read"])
+      .select(FEEDBACK_SELECT)
+      .maybeSingle();
 
     if (error) {
       console.error("[resolveFeedback] failed:", error);
       return { error: "Could not resolve that message." };
     }
+    if (!data) return { error: "This message has already been resolved." };
 
-    revalidatePath("/admin/engage/feedback");
-    return { success: true };
+    await supabase.from("audit_log").insert({
+      user_id: adminUser.user_id,
+      action: "resolve",
+      entity_type: "feedback",
+      entity_id: parsedId.data,
+      new_data: { status: "resolved", category: data.category, note_saved: note !== null },
+    });
+
+    revalidateInbox();
+    return { data: toFeedbackRow(data) ?? undefined };
   } catch (err) {
     console.error("[resolveFeedback] unexpected:", err);
+    return { error: describeFailure(err) };
+  }
+}
+
+/**
+ * Save or clear the internal note without changing the status, so a note can
+ * be added to a message that is already resolved, or corrected later.
+ */
+export async function saveFeedbackNote(
+  id: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const { adminUser } = await assertAdmin([...FEEDBACK_ROLES]);
+
+    const parsedId = feedbackIdSchema.safeParse(id);
+    if (!parsedId.success) return { error: firstIssue(parsedId.error) };
+
+    const parsed = feedbackNoteSchema.safeParse(feedbackNoteInput(formData));
+    if (!parsed.success) return { error: firstIssue(parsed.error) };
+    const note = parsed.data.admin_note || null;
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("student_feedback")
+      .update({ admin_note: note })
+      .eq("id", parsedId.data)
+      .select(FEEDBACK_SELECT)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[saveFeedbackNote] failed:", error);
+      return { error: "Could not save the note." };
+    }
+    if (!data) return { error: "That message could not be found." };
+
+    await supabase.from("audit_log").insert({
+      user_id: adminUser.user_id,
+      action: "update_note",
+      entity_type: "feedback",
+      entity_id: parsedId.data,
+      new_data: { category: data.category, note_saved: note !== null },
+    });
+
+    revalidateInbox();
+    return { data: toFeedbackRow(data) ?? undefined };
+  } catch (err) {
+    console.error("[saveFeedbackNote] unexpected:", err);
     return { error: describeFailure(err) };
   }
 }

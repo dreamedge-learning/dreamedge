@@ -14,6 +14,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  DEFAULT_SIGNATORY_NAME,
+  DEFAULT_SIGNATORY_TITLE,
+} from "@/lib/certificates";
 import { updateSettings, getSettings } from "@/app/admin/(panel)/settings/actions";
 import type { SiteSetting } from "@/app/admin/(panel)/settings/actions";
 
@@ -67,6 +71,15 @@ export function PlatformSettings({ initialData }: PlatformSettingsProps) {
         tagline={get("tagline", "") as string}
         supportEmail={get("support_email", "") as string}
         supportPhone={get("support_phone", "") as string}
+        onChange={set}
+        onSuccess={reload}
+      />
+
+      <Separator />
+
+      <CertificatesSection
+        signatoryName={get("certificate_signatory_name", "") as string}
+        signatoryTitle={get("certificate_signatory_title", "") as string}
         onChange={set}
         onSuccess={reload}
       />
@@ -162,6 +175,95 @@ function GeneralSection({
           />
         </div>
       </div>
+      <div className="flex justify-end">
+        <Button size="sm" onClick={handleSave} disabled={isPending}>
+          {isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+          Save
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Certificates
+// ---------------------------------------------------------------------------
+
+/**
+ * The name and title printed under the signature line of every course
+ * certificate. Each certificate copies them at the moment it is approved, so
+ * changing them here affects the next one issued and never one already in a
+ * student's hands.
+ */
+function CertificatesSection({
+  signatoryName, signatoryTitle, onChange, onSuccess,
+}: {
+  signatoryName: string;
+  signatoryTitle: string;
+  onChange: (key: string, val: unknown) => void;
+  onSuccess: () => void;
+}) {
+  const [isPending, startTransition] = useTransition();
+
+  function handleSave() {
+    const name = signatoryName.trim();
+    const title = signatoryTitle.trim();
+
+    if (name.length > 80 || title.length > 80) {
+      toast.error("Keep the name and title under 80 characters so they fit on the certificate.");
+      return;
+    }
+
+    startTransition(async () => {
+      const result = await updateSettings([
+        { key: "certificate_signatory_name", value: name },
+        { key: "certificate_signatory_title", value: title },
+      ]);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Certificate signatory saved");
+      onSuccess();
+    });
+  }
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div>
+        <h3 className="font-semibold text-base">Certificates</h3>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Printed under the signature line of course certificates. A
+          certificate keeps the signatory it was approved with, so a change
+          here applies only to certificates approved from now on.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="s-cert-name">Signatory Name</Label>
+          <Input
+            id="s-cert-name"
+            value={signatoryName}
+            maxLength={80}
+            placeholder={DEFAULT_SIGNATORY_NAME}
+            onChange={(e) => onChange("certificate_signatory_name", e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="s-cert-title">Signatory Title</Label>
+          <Input
+            id="s-cert-title"
+            value={signatoryTitle}
+            maxLength={80}
+            placeholder={DEFAULT_SIGNATORY_TITLE}
+            onChange={(e) => onChange("certificate_signatory_title", e.target.value)}
+          />
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Left blank, certificates are signed &ldquo;{DEFAULT_SIGNATORY_NAME},{" "}
+        {DEFAULT_SIGNATORY_TITLE}&rdquo;.
+      </p>
       <div className="flex justify-end">
         <Button size="sm" onClick={handleSave} disabled={isPending}>
           {isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
