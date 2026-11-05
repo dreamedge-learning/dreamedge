@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/providers/password_recovery_provider.dart';
 import '../core/providers/student_provider.dart';
 import '../core/providers/supabase_provider.dart';
 import '../core/services/notification_service.dart';
 import '../core/services/storage_service.dart';
 import '../features/auth/forgot_password_screen.dart';
+import '../features/auth/reset_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/courses/course_detail_screen.dart';
@@ -48,6 +50,7 @@ class _AuthGateRefresh extends ChangeNotifier {
   _AuthGateRefresh(Ref ref) {
     ref.listen<Object?>(currentSessionProvider, (_, _) => notifyListeners());
     ref.listen<Object?>(currentStudentProvider, (_, _) => notifyListeners());
+    ref.listen<bool>(passwordRecoveryProvider, (_, _) => notifyListeners());
   }
 }
 
@@ -115,6 +118,18 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isSplash) return null;
 
+      // A reset link signed the student in; nothing else opens until the new
+      // password is chosen. Checked before the profile wall so a student who
+      // never finished their profile is not asked for it first.
+      final isRecovering = ref.read(passwordRecoveryProvider);
+      final isResetPassword = state.matchedLocation == '/reset-password';
+      if (isAuthenticated && isRecovering) {
+        return isResetPassword ? null : '/reset-password';
+      }
+      if (isResetPassword) {
+        return isAuthenticated ? '/' : '/login';
+      }
+
       if (!isAuthenticated) {
         if (!storage.onboardingSeen && !isTour) {
           return '/onboarding';
@@ -163,6 +178,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/forgot',
         builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => const ResetPasswordScreen(),
       ),
       GoRoute(
         path: '/',
