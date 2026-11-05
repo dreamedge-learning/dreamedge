@@ -202,6 +202,9 @@ export async function GET(
       {
         url: signed.signedUrl,
         fileName: file.display_name,
+        // Which attachment this is, so the app can tell the one it was given
+        // by default apart from the others on the same lesson.
+        fileId: file.id,
         isDownloadable: entitlement.isDownloadable,
         offlineLicenseDays: entitlement.offlineLicenseDays,
         // The two the app could not get anywhere else, and without which a
