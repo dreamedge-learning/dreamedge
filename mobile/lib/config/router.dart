@@ -15,6 +15,7 @@ import '../features/certificates/certificates_screen.dart';
 import '../features/courses/course_detail_screen.dart';
 import '../features/doubts/doubt_thread_screen.dart';
 import '../features/doubts/my_doubts_screen.dart';
+import '../features/feedback/feedback_screen.dart';
 import '../features/lessons/lessons_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/live/live_class_detail_screen.dart';
@@ -259,6 +260,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile/edit',
         builder: (context, state) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: '/profile/feedback',
+        builder: (context, state) => const FeedbackScreen(),
       ),
       GoRoute(
         path: '/leaderboard',

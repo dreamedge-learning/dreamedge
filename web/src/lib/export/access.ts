@@ -41,6 +41,7 @@ export const EXPORT_ROLES = {
 
   notifications: ["super_admin", "support_staff"],
   banners: ["super_admin", "support_staff"],
+  feedback: ["super_admin", "support_staff"],
 
   "admin-team": ["super_admin"],
   "audit-log": ["super_admin"],

@@ -17,6 +17,7 @@ import {
   MessageCircleQuestion,
   LogOut,
   Award,
+  MessageSquare,
   Trophy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -178,6 +179,13 @@ export function Navbar() {
                   <UserCircle className="h-4 w-4" />
                   Profile
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  render={<Link href="/dashboard/feedback" />}
+                  className="flex items-center gap-2"
+                >
+                  <MessageSquare className="h-4 w-4" />
+                  Send feedback
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleLogout}
@@ -292,6 +300,13 @@ export function Navbar() {
                       className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
                     >
                       Profile
+                    </Link>
+                    <Link
+                      href="/dashboard/feedback"
+                      onClick={() => setMobileOpen(false)}
+                      className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
+                    >
+                      Send feedback
                     </Link>
                     <button
                       onClick={() => {

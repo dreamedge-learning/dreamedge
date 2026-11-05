@@ -2118,6 +2118,118 @@ const notificationsDataset = defineDataset({
   },
 });
 
+const feedbackDataset = defineDataset({
+  label: "Feedback",
+  requiredRoles: EXPORT_ROLES.feedback,
+  // Student contact and the message itself are kept out for roles outside
+  // CONTACT_ROLES. The feedback audience (super_admin, support_staff) already
+  // overlaps that set, so these columns are visible in practice -- the flag is
+  // here to document the intent and to be robust if the role list widens.
+  sensitiveKeys: ["student_email", "student_phone", "message", "admin_note"],
+  columns: [
+    { key: "created_at", header: "Received", format: "datetime" },
+    { key: "student_code", header: "Student code" },
+    { key: "student_name", header: "Student" },
+    { key: "student_class", header: "Class" },
+    { key: "student_email", header: "Email" },
+    { key: "student_phone", header: "Phone" },
+    { key: "category", header: "Category" },
+    { key: "source", header: "Source" },
+    { key: "app_version", header: "App version" },
+    { key: "status", header: "Status" },
+    { key: "message", header: "Message" },
+    { key: "admin_note", header: "Internal note" },
+    { key: "handled_at", header: "Handled at", format: "datetime" },
+  ],
+  filters: z.object({
+    status: allOr(z.enum(["new", "read", "resolved"])),
+    category: allOr(
+      z.enum([
+        "content",
+        "app_problem",
+        "website_problem",
+        "payment",
+        "suggestion",
+        "other",
+      ])
+    ),
+  }),
+  async describe(filters) {
+    return describeParts([
+      ["status", filters.status],
+      ["category", filters.category],
+    ]);
+  },
+  async fetcher(filters, supabase) {
+    interface FeedbackQueryRow {
+      category: string;
+      message: string;
+      source: string;
+      app_version: string | null;
+      status: string;
+      admin_note: string | null;
+      handled_at: string | null;
+      created_at: string;
+      student: {
+        student_code: string | null;
+        full_name: string | null;
+        email: string | null;
+        phone: string | null;
+        class: string | null;
+      } | null;
+    }
+
+    const rows = await fetchAllRows<FeedbackQueryRow>("feedback", (from, to) => {
+      let query = supabase
+        .from("student_feedback")
+        .select(
+          `category, message, source, app_version, status, admin_note,
+           handled_at, created_at,
+           student:students(student_code, full_name, email, phone, class)`,
+          { count: "exact" }
+        )
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: true });
+
+      if (filters.status && isApplied(filters.status)) {
+        query = query.eq("status", filters.status);
+      }
+
+      if (filters.category && isApplied(filters.category)) {
+        query = query.eq("category", filters.category);
+      }
+
+      return query.range(from, to);
+    });
+
+    return rows.map((row) => ({
+      created_at: row.created_at,
+      student_code: row.student?.student_code ?? null,
+      student_name: row.student?.full_name ?? null,
+      student_class: row.student?.class ?? null,
+      student_email: row.student?.email ?? null,
+      student_phone: row.student?.phone ?? null,
+      category: row.category,
+      source: row.source,
+      app_version: row.app_version,
+      status: row.status,
+      message: row.message,
+      admin_note: row.admin_note,
+      handled_at: row.handled_at,
+    }));
+  },
+  summary(rows) {
+    const by = (status: string) =>
+      rows.filter((row) => row.status === status).length;
+    return [
+      { label: "Messages", value: rows.length, format: "number" },
+      { label: "New", value: by("new"), format: "number" },
+      { label: "Read", value: by("read"), format: "number" },
+      { label: "Resolved", value: by("resolved"), format: "number" },
+    ];
+  },
+});
+
 const bannersDataset = defineDataset({
   label: "Banners",
   requiredRoles: EXPORT_ROLES.banners,
@@ -2434,6 +2546,7 @@ export const EXPORT_DATASETS: Record<string, ExportDataset> = {
   recordings: recordingsDataset,
   notifications: notificationsDataset,
   banners: bannersDataset,
+  feedback: feedbackDataset,
   "admin-team": adminTeamDataset,
   "audit-log": auditLogDataset,
   dashboard: dashboardViewDataset,

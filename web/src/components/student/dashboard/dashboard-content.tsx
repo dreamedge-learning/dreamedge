@@ -17,6 +17,7 @@ import {
   Receipt,
   Radio,
   Award,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -145,6 +146,11 @@ const QUICK_ACTIONS = [
     icon: HelpCircle,
     label: "Help & Support",
     href: "/contact",
+  },
+  {
+    icon: MessageSquare,
+    label: "Send Feedback",
+    href: "/dashboard/feedback",
   },
 ] as const;
 
