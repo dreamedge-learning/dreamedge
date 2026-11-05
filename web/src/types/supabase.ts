@@ -771,6 +771,63 @@ export type Database = {
         }
         Relationships: []
       }
+      course_ratings: {
+        Row: {
+          course_id: string
+          created_at: string
+          hidden_at: string | null
+          hidden_by_name: string | null
+          hidden_reason: string | null
+          id: string
+          is_hidden: boolean
+          review: string | null
+          stars: number
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          hidden_at?: string | null
+          hidden_by_name?: string | null
+          hidden_reason?: string | null
+          id?: string
+          is_hidden?: boolean
+          review?: string | null
+          stars: number
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          hidden_at?: string | null
+          hidden_by_name?: string | null
+          hidden_reason?: string | null
+          id?: string
+          is_hidden?: boolean
+          review?: string | null
+          stars?: number
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_ratings_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_ratings_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           category_id: string | null
@@ -2433,6 +2490,34 @@ export type Database = {
           updated_by_name: string
         }[]
       }
+      admin_list_course_ratings: {
+        Args: {
+          p_course_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_search?: string
+          p_stars?: number
+          p_status?: string
+        }
+        Returns: {
+          course_id: string
+          course_title: string
+          created_at: string
+          hidden_at: string
+          hidden_by_name: string
+          hidden_reason: string
+          id: string
+          is_hidden: boolean
+          review: string
+          stars: number
+          student_class: string
+          student_code: string
+          student_id: string
+          student_name: string
+          total_count: number
+          updated_at: string
+        }[]
+      }
       admin_list_doubts: {
         Args: {
           p_course_id?: string
@@ -2475,6 +2560,7 @@ export type Database = {
           verification_code: string
         }[]
       }
+      can_rate_course: { Args: { p_course_id: string }; Returns: boolean }
       check_offline_entitlements: {
         Args: { p_content_item_id?: string }
         Returns: {
@@ -2505,6 +2591,16 @@ export type Database = {
         Returns: Json
       }
       complete_student_profile: { Args: { p_profile: Json }; Returns: string }
+      course_reviews: {
+        Args: { p_course_id: string; p_limit?: number; p_offset?: number }
+        Returns: {
+          review: string
+          reviewed_at: string
+          reviewer_name: string
+          stars: number
+          total_count: number
+        }[]
+      }
       current_live_class_title: { Args: never; Returns: string }
       current_student_id: { Args: never; Returns: string }
       enroll_free_course: { Args: { p_course_id: string }; Returns: Json }
@@ -2593,6 +2689,18 @@ export type Database = {
         Args: { p_attempt_id: string; p_kind: string; p_meta?: Json }
         Returns: number
       }
+      my_course_ratings: {
+        Args: never
+        Returns: {
+          can_rate: boolean
+          course_id: string
+          hidden_reason: string
+          is_hidden: boolean
+          review: string
+          stars: number
+          updated_at: string
+        }[]
+      }
       next_student_code: { Args: never; Returns: string }
       offline_check_in: { Args: { p_device_id?: string }; Returns: Json }
       prune_rate_limit_hits: { Args: never; Returns: undefined }
@@ -2636,6 +2744,10 @@ export type Database = {
         }[]
       }
       set_admin_gate: { Args: { p_password: string }; Returns: undefined }
+      set_course_rating_hidden: {
+        Args: { p_hidden: boolean; p_rating_id: string; p_reason?: string }
+        Returns: undefined
+      }
       start_test_attempt: {
         Args: { p_test_id: string }
         Returns: {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { requireCompleteStudentProfile } from "@/lib/auth-student";
+import type { MyCourseRating } from "@/lib/ratings";
 import { createClient } from "@/lib/supabase/server";
 import type { EnrollmentWithCourse } from "@/types/enrollment";
 import { MyCoursesContent } from "@/components/student/dashboard/my-courses-content";
@@ -140,49 +141,29 @@ async function fetchCourseProgress(
   }
 }
 
-interface CourseRatingRow {
-  course_id: string;
-  stars: number;
-}
-
 /**
- * Loads the student's existing ratings for the courses on this page. One
- * query, keyed on the enrolment list rather than fetching every row the
- * student has ever written, so an old rating for a course they no longer
- * see here is naturally excluded.
- *
- * `course_ratings` is not yet in the generated supabase.ts types -- we were
- * explicitly asked not to regenerate the file on this change -- so the
- * table name is cast once and the row shape is declared locally.
+ * The student's own rating for each course on this page, and whether they may
+ * rate it yet (an unexpired enrolment and at least one finished lesson). One
+ * call: `my_course_ratings` answers for every active enrolment at once, using
+ * the same rule the database applies when the rating is written.
  */
-async function fetchStudentRatings(
-  studentId: string,
-  courseIds: string[]
-): Promise<Record<string, number>> {
-  if (courseIds.length === 0) return {};
+async function fetchStudentRatings(): Promise<Record<string, MyCourseRating>> {
   try {
     const supabase = await createClient();
-    const q = supabase.from("course_ratings" as never) as unknown as {
-      select: (cols: string) => {
-        eq: (col: string, val: string) => {
-          in: (
-            col: string,
-            vals: string[]
-          ) => Promise<{
-            data: CourseRatingRow[] | null;
-            error: unknown;
-          }>;
-        };
-      };
-    };
-    const { data, error } = await q
-      .select("course_id, stars")
-      .eq("student_id", studentId)
-      .in("course_id", courseIds);
-    if (error || !data) return {};
-    const map: Record<string, number> = {};
+    const { data, error } = await supabase.rpc("my_course_ratings");
+    if (error || !data) {
+      if (error) console.error("[my-courses] ratings could not be read:", error);
+      return {};
+    }
+    const map: Record<string, MyCourseRating> = {};
     for (const row of data) {
-      map[row.course_id] = row.stars;
+      map[row.course_id] = {
+        canRate: row.can_rate,
+        stars: row.stars ?? null,
+        review: row.review ?? null,
+        isHidden: row.is_hidden,
+        hiddenReason: row.hidden_reason ?? null,
+      };
     }
     return map;
   } catch {
@@ -200,7 +181,7 @@ export default async function MyCoursesPage() {
 
   const [progressMap, ratings] = await Promise.all([
     fetchCourseProgress(student.id, courseIds),
-    fetchStudentRatings(student.id, courseIds),
+    fetchStudentRatings(),
   ]);
 
   const progressData: Record<string, CourseProgress> = {};

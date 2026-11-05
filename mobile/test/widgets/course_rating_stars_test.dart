@@ -1,103 +1,207 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile/core/models/course_rating.dart';
+import 'package:mobile/core/providers/course_rating_provider.dart';
+import 'package:mobile/core/services/rating_service.dart';
 import 'package:mobile/features/learning/widgets/course_rating_stars.dart';
 
-/// Widget-level test for the star control. Server round-trips are not
-/// exercised here (the Supabase client is uninitialised in a test harness),
-/// so this focuses on the parts a user actually interacts with: the painted
-/// value, the per-star labels and the "Rate" / "n/5" indicator.
+/// Stands in for the database. Each call to [rate] waits on [next], so a test
+/// can look at the optimistic paint before deciding how the write ends.
+class _FakeRatingService implements RatingService {
+  Completer<MyCourseRating> next = Completer<MyCourseRating>();
+  final List<({int stars, String? review})> calls = [];
+
+  @override
+  Future<MyCourseRating> rate({
+    required String courseId,
+    required int stars,
+    String? review,
+  }) {
+    calls.add((stars: stars, review: review));
+    return next.future;
+  }
+
+  @override
+  Future<Map<String, MyCourseRating>> myRatings() async => const {};
+
+  @override
+  Future<ReviewPage> reviews(String courseId, {int offset = 0}) async =>
+      ReviewPage.empty;
+}
+
 void main() {
-  Widget host(Widget child) {
+  late _FakeRatingService service;
+
+  setUp(() => service = _FakeRatingService());
+
+  Widget host(MyCourseRating initial) {
     return ProviderScope(
+      overrides: [ratingServiceProvider.overrideWithValue(service)],
       child: MaterialApp(
-        home: Scaffold(body: Padding(padding: const EdgeInsets.all(16), child: child)),
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: CourseRatingStars(
+              courseId: 'c1',
+              courseTitle: 'Class 9 Maths',
+              initial: initial,
+            ),
+          ),
+        ),
       ),
     );
   }
 
+  const unrated = MyCourseRating(courseId: 'c1', canRate: true);
+
   group('CourseRatingStars', () {
-    testWidgets('renders five star buttons', (tester) async {
-      await tester.pumpWidget(
-        host(const CourseRatingStars(
-          courseId: 'c1',
-          courseTitle: 'Class 9 Maths',
-          initialStars: null,
-        )),
-      );
-
-      // Five IconButton wrappers, one per star.
-      expect(find.byType(IconButton), findsNWidgets(5));
-    });
-
-    testWidgets('shows "Rate" when the student has not rated yet',
+    testWidgets('offers five stars and says "Rate" before any rating',
         (tester) async {
-      await tester.pumpWidget(
-        host(const CourseRatingStars(
-          courseId: 'c1',
-          courseTitle: 'Class 9 Maths',
-          initialStars: null,
-        )),
-      );
+      await tester.pumpWidget(host(unrated));
 
+      expect(find.byType(IconButton), findsNWidgets(5));
       expect(find.text('Rate'), findsOneWidget);
-      expect(find.text('3/5'), findsNothing);
+      // No review to write until there are stars to hang it on.
+      expect(find.text('Write a review'), findsNothing);
     });
 
-    testWidgets('paints the initial rating when one exists', (tester) async {
-      await tester.pumpWidget(
-        host(const CourseRatingStars(
-          courseId: 'c1',
-          courseTitle: 'Class 9 Maths',
-          initialStars: 4,
-        )),
-      );
+    testWidgets('paints an existing rating and offers to edit the review',
+        (tester) async {
+      await tester.pumpWidget(host(const MyCourseRating(
+        courseId: 'c1',
+        canRate: true,
+        stars: 4,
+        review: 'Clear explanations',
+      )));
 
-      // The caption switches from "Rate" to "4/5" when a rating is present.
       expect(find.text('4/5'), findsOneWidget);
-      expect(find.text('Rate'), findsNothing);
-
-      // Four filled stars, one outline.
       expect(find.byIcon(Icons.star_rounded), findsNWidgets(4));
       expect(find.byIcon(Icons.star_outline_rounded), findsOneWidget);
+      expect(find.text('Edit your review'), findsOneWidget);
     });
 
-    testWidgets('each star carries a readable semantic label',
-        (tester) async {
-      await tester.pumpWidget(
-        host(const CourseRatingStars(
-          courseId: 'c1',
-          courseTitle: 'Class 9 Maths',
-          initialStars: null,
-        )),
-      );
+    testWidgets('each star carries a readable semantic label', (tester) async {
+      await tester.pumpWidget(host(unrated));
 
-      // The first star says "1 star" (singular); the rest say "n stars".
       expect(find.bySemanticsLabel('1 star'), findsOneWidget);
       expect(find.bySemanticsLabel('2 stars'), findsOneWidget);
       expect(find.bySemanticsLabel('5 stars'), findsOneWidget);
     });
 
-    testWidgets('tapping a star paints up to that star optimistically',
+    testWidgets('a tap paints at once and keeps what the server saved',
         (tester) async {
-      await tester.pumpWidget(
-        host(const CourseRatingStars(
-          courseId: 'c1',
-          courseTitle: 'Class 9 Maths',
-          initialStars: null,
-        )),
-      );
+      await tester.pumpWidget(host(unrated));
 
-      // Tap the third star. We use the semantics label so the test does not
-      // depend on the position of the IconButton in a Row that may reflow.
       await tester.tap(find.bySemanticsLabel('3 stars'));
       await tester.pump();
 
-      // Three filled, two outline -- paint happens before the network call
-      // settles, which is the whole point of optimistic UI.
+      // Painted before the write settles.
       expect(find.byIcon(Icons.star_rounded), findsNWidgets(3));
-      expect(find.byIcon(Icons.star_outline_rounded), findsNWidgets(2));
+      expect(service.calls.single.stars, 3);
+      // Only the stars are sent; a review already written is left alone.
+      expect(service.calls.single.review, isNull);
+
+      service.next.complete(
+        const MyCourseRating(courseId: 'c1', canRate: true, stars: 3),
+      );
+      await tester.pumpAndSettle();
+
       expect(find.text('3/5'), findsOneWidget);
+      expect(find.text('Write a review'), findsOneWidget);
+    });
+
+    testWidgets('a refused write rolls back and says why', (tester) async {
+      await tester.pumpWidget(host(const MyCourseRating(
+        courseId: 'c1',
+        canRate: true,
+        stars: 2,
+      )));
+
+      await tester.tap(find.bySemanticsLabel('5 stars'));
+      await tester.pump();
+      expect(find.byIcon(Icons.star_rounded), findsNWidgets(5));
+
+      service.next.completeError(const RatingException(
+        'You have changed your ratings a lot recently. '
+        'Please try again in 5 minutes.',
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.star_rounded), findsNWidgets(2));
+      expect(find.textContaining('Please try again in 5 minutes'),
+          findsOneWidget);
+    });
+
+    testWidgets('explains why a student who has not started cannot rate',
+        (tester) async {
+      await tester.pumpWidget(
+        host(const MyCourseRating(courseId: 'c1', canRate: false)),
+      );
+
+      expect(find.text('Finish a lesson to rate this course.'), findsOneWidget);
+      expect(find.byType(IconButton), findsNothing);
+    });
+
+    testWidgets('shows a lapsed enrolment its rating without the controls',
+        (tester) async {
+      await tester.pumpWidget(host(const MyCourseRating(
+        courseId: 'c1',
+        canRate: false,
+        stars: 4,
+      )));
+
+      expect(find.text('Your rating'), findsOneWidget);
+      expect(find.byType(IconButton), findsNothing);
+    });
+
+    testWidgets('tells the student when their review has been hidden',
+        (tester) async {
+      await tester.pumpWidget(host(const MyCourseRating(
+        courseId: 'c1',
+        canRate: true,
+        stars: 1,
+        review: 'rude words',
+        isHidden: true,
+        hiddenReason: 'Personal remarks are not allowed.',
+      )));
+
+      expect(
+        find.textContaining('Personal remarks are not allowed.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the review sheet sends the stars and the text together',
+        (tester) async {
+      await tester.pumpWidget(host(const MyCourseRating(
+        courseId: 'c1',
+        canRate: true,
+        stars: 4,
+      )));
+
+      await tester.tap(find.text('Write a review'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'Loved the examples');
+      await tester.tap(find.text('Save review'));
+      await tester.pump();
+
+      expect(service.calls.single.stars, 4);
+      expect(service.calls.single.review, 'Loved the examples');
+
+      service.next.complete(const MyCourseRating(
+        courseId: 'c1',
+        canRate: true,
+        stars: 4,
+        review: 'Loved the examples',
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Save review'), findsNothing);
+      expect(find.text('Edit your review'), findsOneWidget);
     });
   });
 }

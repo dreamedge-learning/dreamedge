@@ -1,7 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Award, Play, Sparkles, Star, Users } from "lucide-react";
+import { ArrowRight, Award, Play, Sparkles, Users } from "lucide-react";
+
+import { StarDisplay } from "@/components/ratings/star-display";
 
 const CHIPS = [
   { icon: Users, label: "5,000+ mentored at Dream IIT" },
@@ -12,9 +14,11 @@ const CHIPS = [
 interface HeroSectionProps {
   /** Title of a class that is live right now, if any. */
   liveClassTitle?: string;
+  /** The platform-wide student rating, once there are enough to quote. */
+  rating?: { average: number; count: number } | null;
 }
 
-export function HeroSection({ liveClassTitle }: HeroSectionProps) {
+export function HeroSection({ liveClassTitle, rating }: HeroSectionProps) {
   return (
     <section className="relative overflow-hidden bg-background">
       {/* Decorative background */}
@@ -30,13 +34,17 @@ export function HeroSection({ liveClassTitle }: HeroSectionProps) {
       <div className="relative mx-auto grid max-w-7xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 md:grid-cols-5 md:py-24 lg:px-8 lg:py-28 lg:gap-16">
         {/* Text column */}
         <div className="md:col-span-3 flex flex-col items-start">
-          {/* Rating/trust chip above title */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-brand-orange/30 bg-brand-orange/5 px-3 py-1 text-xs font-semibold text-brand-orange">
-            <span className="flex items-center gap-0.5">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Star key={i} className="h-3 w-3 fill-brand-orange text-brand-orange" />
-              ))}
-            </span>
+          {/* Trust chip above title. The stars are the students' real
+              average, and appear only once there are enough ratings. */}
+          <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-brand-orange/30 bg-brand-orange/5 px-3 py-1 text-xs font-semibold text-brand-orange">
+            {rating && (
+              <span className="flex items-center gap-1">
+                <StarDisplay value={rating.average} starClassName="h-3 w-3" />
+                <span className="tabular-nums">
+                  {rating.average.toFixed(1)} from {rating.count.toLocaleString("en-IN")} student ratings ·
+                </span>
+              </span>
+            )}
             Loved by students across Nagpur · Trusted since 2017
           </div>
 

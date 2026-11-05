@@ -36,6 +36,8 @@ import {
   CourseSyllabus,
   type SyllabusSubject,
 } from "@/components/student/courses/course-syllabus";
+import { CourseReviews } from "@/components/student/courses/course-reviews";
+import type { PublicReviewPage } from "@/lib/ratings";
 
 interface CourseDetailContentProps {
   course: Course;
@@ -46,6 +48,8 @@ interface CourseDetailContentProps {
    * without an active enrolment.
    */
   syllabus?: SyllabusSubject[];
+  /** The first page of written reviews, from `course_reviews`. */
+  reviews?: PublicReviewPage;
 }
 
 const DIFFICULTY_COLORS: Record<string, string> = {
@@ -58,6 +62,7 @@ export function CourseDetailContent({
   course,
   isEnrolled = false,
   syllabus = [],
+  reviews = { reviews: [], total: 0 },
 }: CourseDetailContentProps) {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
@@ -341,9 +346,10 @@ export function CourseDetailContent({
               <span className="flex items-center gap-1 text-sm">
                 <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                 {course.rating_avg.toFixed(1)}
-                <span className="text-muted-foreground">
-                  ({course.rating_count})
-                </span>
+                <a href="#course-reviews-heading" className="text-muted-foreground hover:underline">
+                  ({course.rating_count.toLocaleString("en-IN")}{" "}
+                  {course.rating_count === 1 ? "rating" : "ratings"})
+                </a>
               </span>
             )}
             {course.student_count > 0 && (
@@ -433,6 +439,13 @@ export function CourseDetailContent({
               </div>
             </div>
           )}
+
+          <CourseReviews
+            courseId={course.id}
+            ratingAvg={course.rating_avg}
+            ratingCount={course.rating_count}
+            initial={reviews}
+          />
         </div>
 
         {/* Right Column — Enrollment Card */}

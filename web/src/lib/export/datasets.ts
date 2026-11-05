@@ -1106,6 +1106,98 @@ const certificatesDataset = defineDataset({
 });
 
 // ---------------------------------------------------------------------------
+// Course reviews
+// ---------------------------------------------------------------------------
+
+/** The moderation function caps a page at this many rows. */
+const REVIEW_EXPORT_WINDOW = 100;
+
+const courseReviewsDataset = defineDataset({
+  label: "Course reviews",
+  requiredRoles: EXPORT_ROLES["course-reviews"],
+  columns: [
+    { key: "course", header: "Course" },
+    { key: "student_name", header: "Student" },
+    { key: "student_code", header: "Student ID" },
+    { key: "class", header: "Class" },
+    { key: "stars", header: "Stars", format: "number" },
+    { key: "review", header: "Review" },
+    { key: "status", header: "Status" },
+    { key: "hidden_reason", header: "Hidden because" },
+    { key: "hidden_by", header: "Hidden by" },
+    { key: "created_at", header: "First rated", format: "date" },
+    { key: "updated_at", header: "Last changed", format: "date" },
+  ],
+  filters: z.object({
+    status: allOr(z.enum(["visible", "hidden"])),
+    courseId: allOr(z.string().uuid("Course filter is invalid.")),
+    stars: allOr(z.enum(["1", "2", "3", "4", "5"])),
+    search: searchFilter,
+  }),
+  async describe(filters, supabase) {
+    return describeParts([
+      ["status", filters.status],
+      ["course", await courseLabel(supabase, filters.courseId)],
+      ["stars", filters.stars],
+      ["search", filters.search],
+    ]);
+  },
+  // Through the same function as the moderation screen, so the export holds
+  // exactly what the screen would show for the same filters, review-text
+  // search included.
+  async fetcher(filters, supabase) {
+    const out: ExportRow[] = [];
+    for (let offset = 0; ; offset += REVIEW_EXPORT_WINDOW) {
+      const { data, error } = await supabase.rpc("admin_list_course_ratings", {
+        p_status: isApplied(filters.status) ? (filters.status as string) : undefined,
+        p_course_id: isApplied(filters.courseId) ? (filters.courseId as string) : undefined,
+        p_stars: isApplied(filters.stars) ? Number(filters.stars) : undefined,
+        p_search: filters.search || undefined,
+        p_limit: REVIEW_EXPORT_WINDOW,
+        p_offset: offset,
+      });
+
+      if (error) {
+        throw new Error(`Could not read every course review row: ${error.message}`);
+      }
+
+      for (const row of data ?? []) {
+        out.push({
+          course: row.course_title ?? null,
+          student_name: row.student_name,
+          student_code: row.student_code ?? null,
+          class: row.student_class ?? null,
+          stars: row.stars,
+          review: row.review ?? null,
+          status: row.is_hidden ? "Hidden" : "Visible",
+          hidden_reason: row.hidden_reason ?? null,
+          hidden_by: row.hidden_by_name ?? null,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        });
+      }
+
+      const total = Number(data?.[0]?.total_count ?? 0);
+      if (!data || data.length < REVIEW_EXPORT_WINDOW || out.length >= total) break;
+    }
+    return out;
+  },
+  summary(rows) {
+    const rated = rows.filter((row) => row.status === "Visible");
+    const sum = rated.reduce((acc, row) => acc + Number(row.stars ?? 0), 0);
+    return [
+      { label: "Ratings", value: rows.length, format: "number" },
+      { label: "Hidden", value: rows.length - rated.length, format: "number" },
+      {
+        label: "Average of visible",
+        value: rated.length > 0 ? Math.round((sum / rated.length) * 10) / 10 : null,
+        format: "number",
+      },
+    ];
+  },
+});
+
+// ---------------------------------------------------------------------------
 // Revenue
 // ---------------------------------------------------------------------------
 
@@ -2420,6 +2512,7 @@ export const EXPORT_DATASETS: Record<string, ExportDataset> = {
   leads: leadsDataset,
   testimonials: testimonialsDataset,
   certificates: certificatesDataset,
+  "course-reviews": courseReviewsDataset,
   orders: ordersDataset,
   "manual-payments": manualPaymentsDataset,
   refunds: refundsDataset,

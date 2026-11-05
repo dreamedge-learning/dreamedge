@@ -21,16 +21,13 @@ class EnrolledCourseCard extends ConsumerWidget {
     final targetClass = course?.targetClass;
     final thumbnailUrl = course?.thumbnailUrl;
 
-    // Current student's own rating for this course, if any. The provider
-    // returns an empty map while loading, which the widget reads as "not
-    // rated yet" -- correct for a brand-new load, and overwritten the
-    // instant the fetch settles.
-    final ratings = ref.watch(myCourseRatingsProvider).maybeWhen(
-          data: (map) => map,
-          orElse: () => const <String, int>{},
+    // The student's own rating for this course and whether they may rate it
+    // yet. Nothing is drawn until that is known: stars that appear empty and
+    // then fill in a moment later read as the rating having been lost.
+    final rating = ref.watch(myCourseRatingsProvider).maybeWhen(
+          data: (map) => map[enrollment.courseId],
+          orElse: () => null,
         );
-    final initialStars = ratings[enrollment.courseId];
-    final canRate = enrollment.isActive;
 
     return GestureDetector(
       onTap: () => context.push('/course/${enrollment.courseId}'),
@@ -126,12 +123,12 @@ class EnrolledCourseCard extends ConsumerWidget {
                   // The star control sits inside the card's info column so
                   // a tap on it is isolated from the surrounding
                   // GestureDetector by the IconButtons' own hit testing.
-                  if (canRate) ...[
+                  if (rating != null) ...[
                     const SizedBox(height: 6),
                     CourseRatingStars(
                       courseId: enrollment.courseId,
                       courseTitle: title,
-                      initialStars: initialStars,
+                      initial: rating,
                     ),
                   ],
                 ],

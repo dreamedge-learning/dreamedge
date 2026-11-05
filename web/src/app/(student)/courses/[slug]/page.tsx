@@ -9,6 +9,8 @@ import type {
 } from "@/components/student/courses/course-syllabus";
 import type { Course } from "@/types/course";
 
+import { loadCourseReviews } from "./reviews-actions";
+
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -102,13 +104,17 @@ export default async function CourseDetailPage({ params }: PageProps) {
     notFound();
   }
 
-  const syllabus = await fetchSyllabus(course.id);
+  const [syllabus, reviews] = await Promise.all([
+    fetchSyllabus(course.id),
+    loadCourseReviews({ courseId: course.id, offset: 0 }),
+  ]);
 
   return (
     <CourseDetailContent
       course={course}
       isEnrolled={isEnrolled}
       syllabus={syllabus}
+      reviews={reviews}
     />
   );
 }

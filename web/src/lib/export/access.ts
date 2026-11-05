@@ -23,6 +23,7 @@ export const EXPORT_ROLES = {
   leads: ["super_admin", "support_staff"],
   testimonials: ["super_admin", "support_staff"],
   certificates: ["super_admin", "teacher", "support_staff"],
+  "course-reviews": ["super_admin", "support_staff"],
 
   orders: ["super_admin", "accountant"],
   "manual-payments": ["super_admin", "accountant"],

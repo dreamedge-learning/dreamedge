@@ -16,6 +16,8 @@ import '../../config/storefront.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
 import '../../shared/widgets/shimmer_box.dart';
+import '../../shared/widgets/star_row.dart';
+import 'widgets/course_reviews_section.dart';
 
 class CourseDetailScreen extends ConsumerWidget {
   final String courseId;
@@ -174,6 +176,16 @@ class CourseDetailScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                child: CourseReviewsSection(
+                  courseId: courseId,
+                  ratingAvg: course.ratingAvg,
+                  ratingCount: course.ratingCount,
+                ),
+              ),
+            ),
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
           ],
         ),
@@ -233,20 +245,41 @@ class CourseDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildStatsRow(Course course) {
-    return Row(
+    final avg = course.ratingAvg;
+    // A Wrap, not a Row: with the rating added the four stats no longer fit
+    // one line on a narrow phone.
+    return Wrap(
+      spacing: 16,
+      runSpacing: 8,
       children: [
-        const Icon(Icons.people_outline, size: 18, color: AppColors.gray),
+        if (avg != null && course.ratingCount > 0)
+          _stat(
+            StarRow(value: avg, size: 16),
+            '${avg.toStringAsFixed(1)} (${course.ratingCount})',
+          ),
+        _stat(
+          const Icon(Icons.people_outline, size: 18, color: AppColors.gray),
+          '${course.enrollmentCount} students',
+        ),
+        _stat(
+          const Icon(Icons.play_lesson_outlined, size: 18, color: AppColors.gray),
+          '${course.totalLessons} lessons',
+        ),
+        _stat(
+          const Icon(Icons.access_time, size: 18, color: AppColors.gray),
+          course.formattedDuration,
+        ),
+      ],
+    );
+  }
+
+  Widget _stat(Widget leading, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        leading,
         const SizedBox(width: 4),
-        Text('${course.enrollmentCount} students',
-            style: AppTypography.caption),
-        const SizedBox(width: 16),
-        const Icon(Icons.play_lesson_outlined, size: 18, color: AppColors.gray),
-        const SizedBox(width: 4),
-        Text('${course.totalLessons} lessons', style: AppTypography.caption),
-        const SizedBox(width: 16),
-        const Icon(Icons.access_time, size: 18, color: AppColors.gray),
-        const SizedBox(width: 4),
-        Text(course.formattedDuration, style: AppTypography.caption),
+        Text(label, style: AppTypography.caption),
       ],
     );
   }

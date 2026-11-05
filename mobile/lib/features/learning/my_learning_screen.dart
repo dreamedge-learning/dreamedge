@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/providers/course_rating_provider.dart';
 import '../../core/providers/enrollment_provider.dart';
 import '../../core/providers/offline_provider.dart';
 import '../downloads/widgets/offline_content_view.dart';
@@ -29,6 +30,7 @@ class MyLearningScreen extends ConsumerWidget {
         color: AppColors.orange,
         onRefresh: () async {
           ref.invalidate(myEnrollmentsProvider);
+          ref.invalidate(myCourseRatingsProvider);
         },
         child: enrollmentsAsync.when(
           data: (enrollments) {

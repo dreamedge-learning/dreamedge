@@ -6,6 +6,7 @@ import { BookOpen, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CourseRatingStars } from "@/components/student/dashboard/course-rating-stars";
+import type { MyCourseRating } from "@/lib/ratings";
 import type { EnrollmentWithCourse } from "@/types/enrollment";
 
 interface CourseProgress {
@@ -17,7 +18,7 @@ interface CourseProgress {
 interface MyCoursesContentProps {
   enrollments: EnrollmentWithCourse[];
   progress: Record<string, CourseProgress>;
-  ratings: Record<string, number>;
+  ratings: Record<string, MyCourseRating>;
 }
 
 export function MyCoursesContent({
@@ -68,7 +69,6 @@ export function MyCoursesContent({
             const pct = cp?.pct ?? 0;
             const completed = cp?.completed ?? 0;
             const total = cp?.total ?? 0;
-            const currentRating = ratings[enrollment.course_id] ?? null;
             const href = `/courses/${course.slug}/learn`;
 
             // The card is no longer a single Link: the star control must sit
@@ -153,8 +153,8 @@ export function MyCoursesContent({
                   <div className="mt-auto flex items-end justify-between gap-3 pt-3">
                     <CourseRatingStars
                       courseId={enrollment.course_id}
-                      initialStars={currentRating}
-                      label={`Rate ${course.title}`}
+                      courseTitle={course.title}
+                      initial={ratings[enrollment.course_id]}
                     />
                     <Link
                       href={href}
