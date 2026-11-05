@@ -29,6 +29,8 @@ import {
   Award,
   ImageIcon,
   RotateCcw,
+  ScrollText,
+  MessageCircleQuestion,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
 import { AdminRoleProvider } from "@/components/admin/admin-role-context";
@@ -84,6 +86,14 @@ const navItems: NavItem[] = [
     roles: ["super_admin", "teacher"],
   },
   {
+    // Support staff see the queue to answer "has anyone replied?" calls; only
+    // teachers and the super admin answer from it (DOUBT_ANSWER_ROLES).
+    label: "Doubts",
+    href: "/admin/doubts",
+    icon: MessageCircleQuestion,
+    roles: ["super_admin", "teacher", "support_staff"],
+  },
+  {
     label: "Students",
     href: "/admin/students",
     // Group visibility is the union of its children. Accountant is here
@@ -125,6 +135,14 @@ const navItems: NavItem[] = [
         href: "/admin/students/testimonials",
         icon: Award,
         roles: ["super_admin", "support_staff"],
+      },
+      {
+        // Teachers approve; support staff only see the queue, so they can
+        // answer a parent asking where a certificate has got to.
+        label: "Certificates",
+        href: "/admin/students/certificates",
+        icon: ScrollText,
+        roles: ["super_admin", "teacher", "support_staff"],
       },
     ],
   },
@@ -170,11 +188,14 @@ function roleLabel(role: string): string {
 export function AdminShell({
   admin,
   pendingApplications,
+  openDoubts = 0,
   children,
 }: {
   admin: AdminSession;
   /** Admin applications waiting to be reviewed. Always 0 for other roles. */
   pendingApplications: number;
+  /** Student doubts nobody has answered. Always 0 for roles without the inbox. */
+  openDoubts?: number;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -272,6 +293,14 @@ export function AdminShell({
                     aria-label={`${pending} application${pending === 1 ? "" : "s"} waiting`}
                   >
                     {pending}
+                  </span>
+                )}
+                {item.href === "/admin/doubts" && openDoubts > 0 && (
+                  <span
+                    className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-orange px-1.5 text-xs font-medium text-white"
+                    aria-label={`${openDoubts} unanswered doubt${openDoubts === 1 ? "" : "s"}`}
+                  >
+                    {openDoubts > 99 ? "99+" : openDoubts}
                   </span>
                 )}
               </Link>

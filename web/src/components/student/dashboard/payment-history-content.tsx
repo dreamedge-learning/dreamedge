@@ -125,7 +125,7 @@ function OrderCard({ order }: { order: StudentOrder }) {
               />
             )}
             {order.invoiceNumber && (
-              <Row label="Invoice number" value={order.invoiceNumber} mono />
+              <Row label="Receipt number" value={order.invoiceNumber} mono />
             )}
             {order.discountAmount > 0 && (
               <Row
@@ -136,7 +136,8 @@ function OrderCard({ order }: { order: StudentOrder }) {
             <Row label="Amount paid" value={formatINR(order.finalAmount)} strong />
           </dl>
 
-          {order.status === "completed" && order.invoiceUrl && (
+          {(order.status === "completed" || order.status === "refunded") &&
+            order.invoiceUrl && (
             <a
               href={order.invoiceUrl}
               target="_blank"
@@ -144,7 +145,7 @@ function OrderCard({ order }: { order: StudentOrder }) {
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-brand-orange bg-brand-orange/5 px-4 py-2 text-sm font-semibold text-brand-orange transition-colors hover:bg-brand-orange/10 sm:w-auto"
             >
               <Download className="h-4 w-4" />
-              Download invoice
+              View receipt
             </a>
           )}
 

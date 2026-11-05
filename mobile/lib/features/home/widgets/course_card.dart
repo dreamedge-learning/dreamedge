@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/models/course.dart';
+import '../../../config/storefront.dart';
 import '../../../shared/theme/colors.dart';
 import '../../../shared/theme/typography.dart';
 
@@ -114,6 +115,17 @@ class CourseCard extends StatelessWidget {
   }
 
   Widget _buildPriceRow() {
+    if (!Storefront.canSell) {
+      if (course.price > 0) return const SizedBox.shrink();
+      return Text(
+        'Free',
+        style: AppTypography.bodyLarge.copyWith(
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+      );
+    }
+
     return Row(
       children: [
         if (course.hasDiscount) ...[

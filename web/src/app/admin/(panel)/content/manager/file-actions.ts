@@ -28,10 +28,12 @@ export interface ContentFile {
   size_bytes: number;
   mime_type: string | null;
   weight: number;
+  /** A PowerPoint/Word/Excel original: teachers only, never served to students. */
+  is_source_document: boolean | null;
 }
 
 const SELECT =
-  "id, content_item_id, storage_path, display_name, size_bytes, mime_type, weight";
+  "id, content_item_id, storage_path, display_name, size_bytes, mime_type, weight, is_source_document";
 
 /**
  * Strips a filename down to something safe to put in an object key, keeping

@@ -14,7 +14,9 @@ import {
   UserCircle,
   Receipt,
   Bell,
+  MessageCircleQuestion,
   LogOut,
+  Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,6 +136,20 @@ export function Navbar() {
                   My Tests
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  render={<Link href="/dashboard/certificates" />}
+                  className="flex items-center gap-2"
+                >
+                  <Award className="h-4 w-4" />
+                  Certificates
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  render={<Link href="/dashboard/doubts" />}
+                  className="flex items-center gap-2"
+                >
+                  <MessageCircleQuestion className="h-4 w-4" />
+                  My doubts
+                </DropdownMenuItem>
+                <DropdownMenuItem
                   render={<Link href="/dashboard/notifications" />}
                   className="flex items-center gap-2"
                 >
@@ -233,6 +249,13 @@ export function Navbar() {
                       className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
                     >
                       My Dashboard
+                    </Link>
+                    <Link
+                      href="/dashboard/certificates"
+                      onClick={() => setMobileOpen(false)}
+                      className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
+                    >
+                      Certificates
                     </Link>
                     <Link
                       href="/dashboard/notifications"

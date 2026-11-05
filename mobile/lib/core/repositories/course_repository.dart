@@ -152,6 +152,30 @@ class CourseRepository {
     }
   }
 
+  /// The folders inside one folder, cached like a subject's top-level list.
+  ///
+  /// The cache keys each list by its owner: the subject for top-level folders,
+  /// the parent folder for subfolders. A folder belongs to exactly one list,
+  /// so the two never collide, and a folder that moves is replaced in place
+  /// the next time its new parent's list is fetched.
+  Stream<List<Topic>> watchSubfolders(String parentTopicId) async* {
+    final cached = await store.cachedTopics(parentTopicId);
+    if (cached.isNotEmpty) yield cached;
+
+    if (!connectivity.isOnline) {
+      if (cached.isEmpty) yield const [];
+      return;
+    }
+
+    try {
+      final fresh = await service.getSubfolders(parentTopicId);
+      await store.cacheTopics(parentTopicId, fresh);
+      yield fresh;
+    } catch (error) {
+      if (cached.isEmpty) rethrow;
+    }
+  }
+
   List<Course> _applyFilter(
     List<Course> courses,
     String? categoryId,

@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../config/app_config.dart';
+
 class AuthService {
   final SupabaseClient _client;
 
@@ -68,10 +70,22 @@ class AuthService {
     return response;
   }
 
+  /// Where the reset email's link lands before it hands over to the app.
+  ///
+  /// The link cannot point at the app directly: Supabase only redirects to
+  /// addresses on its allow-list, and the website's domain is on it while the
+  /// app's own scheme is not. So the email opens a page on the website, which
+  /// passes the one-time code on to `com.dreamedge.mobile://reset-password`.
+  /// The code is useless anywhere but this phone -- the matching verifier was
+  /// stored here when the reset was requested -- which is also why the web
+  /// page cannot finish the reset itself.
+  static const String passwordResetRedirect =
+      '${AppConfig.apiBaseUrl}/auth/open-app?to=reset-password';
+
   Future<void> forgotPassword(String email) async {
     await _client.auth.resetPasswordForEmail(
       email.trim(),
-      redirectTo: 'com.dreamedge.mobile://reset-password',
+      redirectTo: passwordResetRedirect,
     );
   }
 
