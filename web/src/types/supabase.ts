@@ -1938,6 +1938,63 @@ export type Database = {
           },
         ]
       }
+      student_feedback: {
+        Row: {
+          admin_note: string | null
+          app_version: string | null
+          category: string
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          message: string
+          source: string
+          status: string
+          student_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          app_version?: string | null
+          category: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          message: string
+          source: string
+          status?: string
+          student_id?: string
+        }
+        Update: {
+          admin_note?: string | null
+          app_version?: string | null
+          category?: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          message?: string
+          source?: string
+          status?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_feedback_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "admin_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_feedback_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_notifications: {
         Row: {
           created_at: string
@@ -2645,6 +2702,18 @@ export type Database = {
         Args: { end_date?: string; start_date?: string }
         Returns: Json
       }
+      get_my_feedback: {
+        Args: { p_limit?: number }
+        Returns: {
+          category: string
+          created_at: string
+          handled_at: string
+          id: string
+          message: string
+          source: string
+          status: string
+        }[]
+      }
       get_payment_method_breakdown: {
         Args: { end_date?: string; start_date?: string }
         Returns: Json
@@ -2675,6 +2744,16 @@ export type Database = {
         }[]
       }
       get_top_courses: { Args: { result_limit?: number }; Returns: Json }
+      get_weekly_leaderboard: {
+        Args: { p_course_id: string; p_week_start?: string }
+        Returns: {
+          display_name: string
+          is_me: boolean
+          rank: number
+          tests_taken: number
+          total_score: number
+        }[]
+      }
       has_admin_role: {
         Args: { allowed_roles: Database["public"]["Enums"]["user_role"][] }
         Returns: boolean
