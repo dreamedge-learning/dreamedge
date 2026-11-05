@@ -2091,6 +2091,8 @@ const notificationsDataset = defineDataset({
            student_notifications(is_read)`,
           { count: "exact" }
         )
+        // Matches the Engage log: per-reply doubt notices are not broadcasts.
+        .neq("target_type", "doubt")
         .order("sent_at", { ascending: false })
         .order("id", { ascending: true });
 

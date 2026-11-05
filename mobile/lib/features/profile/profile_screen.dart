@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/constants.dart';
+import '../../config/storefront.dart';
 import '../../core/offline/byte_format.dart';
 import '../../core/offline/download_settings.dart';
 import '../../core/providers/auth_provider.dart';
@@ -94,15 +95,23 @@ class ProfileScreen extends ConsumerWidget {
             onTap: () => context.push('/profile/edit'),
           ),
           _MenuItem(
-            icon: Icons.receipt_long_outlined,
-            title: 'Payment History',
-            onTap: () => context.push('/payment-history'),
+            icon: Icons.question_answer_outlined,
+            title: 'My Doubts',
+            onTap: () => context.push('/doubts'),
           ),
           _MenuItem(
             icon: Icons.emoji_events_outlined,
             title: 'My Certificates',
             onTap: () => context.push('/certificates'),
           ),
+          // Payment records are part of selling, which an iOS build does not
+          // do.
+          if (Storefront.canSell)
+            _MenuItem(
+              icon: Icons.receipt_long_outlined,
+              title: 'Payment History',
+              onTap: () => context.push('/payment-history'),
+            ),
           _MenuItem(
             icon: Icons.help_outline,
             title: 'Help & Support',

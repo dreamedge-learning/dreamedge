@@ -10,8 +10,14 @@ async function getCourses() {
   return data || [];
 }
 
-export default async function ContentManagerPage() {
-  const courses = await getCourses();
+export default async function ContentManagerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ course?: string }>;
+}) {
+  const [courses, { course }] = await Promise.all([getCourses(), searchParams]);
 
-  return <ContentManagerClient courses={courses} />;
+  // Every course card links here with ?course=, so arriving from a course
+  // opens that course rather than an empty picker.
+  return <ContentManagerClient courses={courses} initialCourseId={course ?? null} />;
 }

@@ -47,6 +47,10 @@ export async function fetchNotifications(limit = 50) {
     const { data, error } = await supabase
       .from("notifications")
       .select("id, title, message, channel, target_type, target_id, course_id, action_url, thumbnail_url, sent_at")
+      // "Your doubt has been answered" notices are sent one per teacher reply
+      // and live in the Doubts inbox; listing them here would bury the
+      // broadcasts this log is for.
+      .neq("target_type", "doubt")
       .order("sent_at", { ascending: false })
       .limit(limit);
 

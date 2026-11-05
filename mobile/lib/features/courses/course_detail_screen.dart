@@ -5,12 +5,14 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/course.dart';
 import '../../core/models/subject.dart';
+import '../../core/models/topic.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/content_provider.dart';
 import '../../core/providers/course_provider.dart';
 import '../../core/providers/enrollment_provider.dart';
 import '../../core/services/enrollment_service.dart';
 import '../../core/utils/extensions.dart';
+import '../../config/storefront.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
 import '../../shared/widgets/shimmer_box.dart';
@@ -250,6 +252,18 @@ class CourseDetailScreen extends ConsumerWidget {
   }
 
   Widget _buildPriceSection(Course course) {
+    // A price is an invitation to buy, which an iOS build may not make.
+    if (!Storefront.canSell) {
+      if (course.price > 0) return const SizedBox.shrink();
+      return Text(
+        'Free',
+        style: AppTypography.heading1.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w800,
+        ),
+      );
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
@@ -336,7 +350,12 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
   }
 
   /// Opens the first playable lesson of the course, falling back to the
-  /// lesson list for the first topic that has content.
+  /// lesson list of the first folder that has content.
+  ///
+  /// Folders nest, so a top-level folder may hold only subfolders. The search
+  /// goes depth first in the order the lesson list shows things -- a folder's
+  /// subfolders, then its own lessons -- which is also the order the website
+  /// steps through with Next.
   Future<void> _continueLearning() async {
     setState(() => _working = true);
 
@@ -344,21 +363,30 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
       final courseService = ref.read(courseServiceProvider);
       final contentService = ref.read(contentServiceProvider);
 
+      Future<bool> openFirstIn(Topic folder) async {
+        final subfolders = await courseService.getSubfolders(folder.id);
+        for (final child in subfolders) {
+          if (await openFirstIn(child)) return true;
+        }
+
+        final contents = await contentService.getContentsByTopic(folder.id);
+        if (contents.isEmpty) return false;
+        if (!mounted) return true;
+
+        final playable = contents.where((c) => c.hasVideo).toList();
+        if (playable.isNotEmpty) {
+          context.push('/player/${playable.first.id}');
+        } else {
+          context.push('/lessons/${folder.id}', extra: folder.name);
+        }
+        return true;
+      }
+
       final subjects = await courseService.getSubjects(widget.courseId);
       for (final subject in subjects) {
         final topics = await courseService.getTopics(subject.id);
         for (final topic in topics) {
-          final contents = await contentService.getContentsByTopic(topic.id);
-          if (contents.isEmpty) continue;
-          if (!mounted) return;
-
-          final playable = contents.where((c) => c.hasVideo).toList();
-          if (playable.isNotEmpty) {
-            context.push('/player/${playable.first.id}');
-          } else {
-            context.push('/lessons/${topic.id}', extra: topic.name);
-          }
-          return;
+          if (await openFirstIn(topic)) return;
         }
       }
 
@@ -419,6 +447,7 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
         }
 
         if (widget.price > 0) {
+          if (!Storefront.canSell) return const _NotInAccountNotice();
           return SizedBox(
             width: double.infinity,
             child: ElevatedButton(
@@ -446,7 +475,9 @@ class _EnrollButtonState extends ConsumerState<_EnrollButton> {
           child: _spinner(),
         ),
       ),
-      error: (_, _) => SizedBox(
+      error: (_, _) => widget.price > 0 && !Storefront.canSell
+          ? const _NotInAccountNotice()
+          : SizedBox(
         width: double.infinity,
         child: ElevatedButton(
           onPressed: widget.price > 0
@@ -510,8 +541,11 @@ class _SubjectTileState extends State<_SubjectTile> {
                           .copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
+                  // Counts every folder in the subject, at any depth -- which
+                  // is what the embedded count returns, so the label says so.
                   Text(
-                    '${widget.subject.topicCount} topics',
+                    '${widget.subject.topicCount} '
+                    '${widget.subject.topicCount == 1 ? 'folder' : 'folders'}',
                     style: AppTypography.caption,
                   ),
                 ],
@@ -532,7 +566,7 @@ class _SubjectTileState extends State<_SubjectTile> {
                           padding: const EdgeInsets.fromLTRB(48, 0, 16, 12),
                           child: Row(
                             children: [
-                              const Icon(Icons.play_circle_outline_rounded,
+                              const Icon(Icons.folder_outlined,
                                   size: 16, color: AppColors.orange),
                               const SizedBox(width: 10),
                               Expanded(
@@ -563,11 +597,47 @@ class _SubjectTileState extends State<_SubjectTile> {
               error: (_, _) => Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Could not load topics',
+                  'Could not load folders',
                   style: AppTypography.caption.copyWith(color: AppColors.error),
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What a paid course says on a build that does not sell.
+///
+/// Deliberately neutral: no price, no button, no link, and no hint of where
+/// the course can be bought. Apple rejects an app that points to a purchase
+/// made elsewhere. Once the student owns the course, enrolment syncs and this
+/// becomes Continue Learning.
+class _NotInAccountNotice extends StatelessWidget {
+  const _NotInAccountNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_outline_rounded,
+              size: 18, color: AppColors.gray),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'This course is not in your account yet.',
+              style: AppTypography.bodySmall
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+          ),
         ],
       ),
     );

@@ -14,6 +14,7 @@ import {
   UserCircle,
   Receipt,
   Bell,
+  MessageCircleQuestion,
   LogOut,
   Award,
 } from "lucide-react";
@@ -140,6 +141,13 @@ export function Navbar() {
                 >
                   <Award className="h-4 w-4" />
                   Certificates
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  render={<Link href="/dashboard/doubts" />}
+                  className="flex items-center gap-2"
+                >
+                  <MessageCircleQuestion className="h-4 w-4" />
+                  My doubts
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   render={<Link href="/dashboard/notifications" />}

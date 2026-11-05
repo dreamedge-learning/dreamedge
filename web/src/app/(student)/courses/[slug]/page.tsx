@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CourseDetailContent } from "@/components/student/courses/course-detail-content";
 import type {
+  SyllabusLesson,
   SyllabusSubject,
+  SyllabusTopic,
 } from "@/components/student/courses/course-syllabus";
 import type { Course } from "@/types/course";
 
@@ -112,13 +114,14 @@ export default async function CourseDetailPage({ params }: PageProps) {
 }
 
 /**
- * The syllabus, nested.
+ * The syllabus, nested to whatever depth the course uses.
  *
- * `get_course_syllabus` is a SECURITY DEFINER function because every
+ * `get_course_outline` is a SECURITY DEFINER function because every
  * student-facing policy on `content_items` requires an active enrolment, so a
  * visitor who has not bought the course could otherwise see no lesson list at
  * all. It returns titles, types, durations and posters -- never a file URL, a
- * Bunny GUID or anything else playable.
+ * Bunny GUID or anything else playable -- one row per subject, folder or
+ * lesson, each naming its parent.
  *
  * Returns an empty list on failure rather than throwing: a missing syllabus
  * should cost the page its lesson list, not the whole course page.
@@ -126,7 +129,7 @@ export default async function CourseDetailPage({ params }: PageProps) {
 async function fetchSyllabus(courseId: string): Promise<SyllabusSubject[]> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase.rpc("get_course_syllabus", {
+    const { data, error } = await supabase.rpc("get_course_outline", {
       p_course_id: courseId,
     });
 
@@ -135,41 +138,56 @@ async function fetchSyllabus(courseId: string): Promise<SyllabusSubject[]> {
       return [];
     }
 
-    const subjects: SyllabusSubject[] = [];
-    const subjectIndex = new Map<string, number>();
-    const topicIndex = new Map<string, number>();
+    const byWeight = (a: { weight: number }, b: { weight: number }) => a.weight - b.weight;
 
-    // The rows arrive already ordered by subject, topic and lesson weight, so
-    // first-seen order is the right order and nothing needs re-sorting.
+    const subjects: (SyllabusSubject & { weight: number })[] = [];
+    const folders = new Map<string, SyllabusTopic & { weight: number; parentId: string }>();
+    const lessonsByFolder = new Map<string, (SyllabusLesson & { weight: number })[]>();
+
     for (const row of data) {
-      if (!subjectIndex.has(row.subject_id)) {
-        subjectIndex.set(row.subject_id, subjects.length);
-        subjects.push({ id: row.subject_id, name: row.subject_name, topics: [] });
-      }
-      const subject = subjects[subjectIndex.get(row.subject_id)!];
-
-      const topicKey = `${row.subject_id}:${row.topic_id}`;
-      if (!topicIndex.has(topicKey)) {
-        topicIndex.set(topicKey, subject.topics.length);
-        subject.topics.push({ id: row.topic_id, name: row.topic_name, lessons: [] });
-      }
-      const topic = subject.topics[topicIndex.get(topicKey)!];
-
-      // A topic with no published lessons comes back as one row with null
-      // lesson columns, courtesy of the left join. That is a topic worth
-      // showing -- it tells a buyer what is coming -- but not a lesson.
-      if (row.item_id) {
-        topic.lessons.push({
-          id: row.item_id,
-          title: row.item_title,
+      if (row.node_kind === "subject") {
+        subjects.push({ id: row.node_id, name: row.name, weight: row.weight ?? 0, topics: [] });
+      } else if (row.node_kind === "folder") {
+        folders.set(row.node_id, {
+          id: row.node_id,
+          name: row.name,
+          weight: row.weight ?? 0,
+          parentId: row.parent_id,
+          folders: [],
+          lessons: [],
+        });
+      } else if (row.node_kind === "lesson") {
+        const list = lessonsByFolder.get(row.parent_id) ?? [];
+        list.push({
+          id: row.node_id,
+          title: row.name,
           type: row.item_type,
           isPaid: row.item_is_paid,
           durationSeconds: row.item_duration ?? null,
           posterUrl: row.item_poster_url ?? null,
+          weight: row.weight ?? 0,
         });
+        lessonsByFolder.set(row.parent_id, list);
       }
     }
 
+    // A folder's parent is either a subject or another folder. Attaching in a
+    // second pass means the rows can arrive in any order.
+    const subjectById = new Map(subjects.map((subject) => [subject.id, subject]));
+    for (const folder of folders.values()) {
+      folder.lessons = (lessonsByFolder.get(folder.id) ?? []).sort(byWeight);
+      const parentFolder = folders.get(folder.parentId);
+      if (parentFolder) parentFolder.folders.push(folder);
+      else subjectById.get(folder.parentId)?.topics.push(folder);
+    }
+
+    function sortBranch(list: SyllabusTopic[]) {
+      (list as (SyllabusTopic & { weight: number })[]).sort(byWeight);
+      for (const folder of list) sortBranch(folder.folders);
+    }
+
+    subjects.sort(byWeight);
+    for (const subject of subjects) sortBranch(subject.topics);
     return subjects;
   } catch (error) {
     console.error("[course] syllabus could not be read:", error);

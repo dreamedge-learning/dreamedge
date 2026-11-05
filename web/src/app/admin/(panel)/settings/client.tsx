@@ -1,13 +1,15 @@
 "use client";
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Users, Shield, ScrollText, Settings, UserPlus, Scale } from "lucide-react";
+import { Users, Shield, ScrollText, Settings, UserPlus, Scale, ReceiptText } from "lucide-react";
 import { AdminTeamTable } from "@/components/admin/settings/admin-team-table";
 import { RolesPermissions } from "@/components/admin/settings/roles-permissions";
 import { AuditLogTable } from "@/components/admin/settings/audit-log-table";
 import { PlatformSettings } from "@/components/admin/settings/platform-settings";
 import { ApplicationsTable } from "@/components/admin/settings/applications-table";
 import { LegalEditor } from "@/components/admin/settings/legal-editor";
+import { BillingSettings } from "@/components/admin/settings/billing-settings";
+import type { BillingProfile } from "./billing-actions";
 import type {
   AdminTeamRow,
   RoleRow,
@@ -36,6 +38,11 @@ interface SettingsPageClientProps {
   applyUrl: string;
   /** Policy pages are super-admin-only, so this is absent for `technical`. */
   legalDocuments: LegalDocument[] | null;
+  /**
+   * Receipt and GST details are super-admin-only: undefined for `technical`,
+   * null when the row could not be read.
+   */
+  billingProfile?: BillingProfile | null;
   supportEmail: string;
   supportPhone: string;
   platformName: string;
@@ -55,6 +62,7 @@ export function SettingsPageClient({
   pendingApplications,
   applyUrl,
   legalDocuments,
+  billingProfile,
   supportEmail,
   supportPhone,
   platformName,
@@ -62,6 +70,7 @@ export function SettingsPageClient({
 }: SettingsPageClientProps) {
   const showApplications = applications !== null && gate !== null;
   const showLegal = legalDocuments !== null;
+  const showBilling = billingProfile !== undefined;
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -105,6 +114,12 @@ export function SettingsPageClient({
             <TabsTrigger value="legal">
               <Scale className="mr-1.5 h-4 w-4" />
               Legal Pages
+            </TabsTrigger>
+          )}
+          {showBilling && (
+            <TabsTrigger value="billing">
+              <ReceiptText className="mr-1.5 h-4 w-4" />
+              Receipts & GST
             </TabsTrigger>
           )}
         </TabsList>
@@ -151,6 +166,12 @@ export function SettingsPageClient({
               supportPhone={supportPhone}
               platformName={platformName}
             />
+          </TabsContent>
+        )}
+
+        {showBilling && (
+          <TabsContent value="billing" className="mt-6">
+            <BillingSettings profile={billingProfile ?? null} />
           </TabsContent>
         )}
       </Tabs>

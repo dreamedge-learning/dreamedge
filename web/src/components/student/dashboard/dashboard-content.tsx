@@ -10,6 +10,7 @@ import {
   Search,
   UserCircle,
   HelpCircle,
+  MessageCircleQuestion,
   Share2,
   Copy,
   FileText,
@@ -119,6 +120,11 @@ const QUICK_ACTIONS = [
     icon: Award,
     label: "Certificates",
     href: "/dashboard/certificates",
+  },
+  {
+    icon: MessageCircleQuestion,
+    label: "My doubts",
+    href: "/dashboard/doubts",
   },
   {
     icon: Search,

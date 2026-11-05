@@ -169,6 +169,10 @@ class OfflineStore {
     return rows.map((row) => Subject.fromJson(_payload(row))).toList();
   }
 
+  /// Caches one list of folders. [subjectId] is the list's owner: the subject
+  /// for its top-level folders, or the parent folder for a subfolder list.
+  /// The column keeps its original name; it is only ever matched, never
+  /// joined, so it works as a key for either.
   Future<void> cacheTopics(String subjectId, List<Topic> topics) async {
     final owner = await _requireOwner();
     final db = await _db;
@@ -515,16 +519,67 @@ class OfflineStore {
     if (announce) _announce();
   }
 
+  /// Removes the lesson's record and the records of every file saved with it.
   Future<void> removeDownload(String contentItemId, {String? studentId}) async {
     final owner = studentId ?? await _owner();
     if (owner == null) return;
     final db = await _db;
+    await db.transaction((txn) async {
+      await txn.delete(
+        'download_files',
+        where: 'content_item_id = ? and student_id = ?',
+        whereArgs: [contentItemId, owner],
+      );
+      await txn.delete(
+        'downloads',
+        where: 'content_item_id = ? and student_id = ?',
+        whereArgs: [contentItemId, owner],
+      );
+    });
+    _announce();
+  }
+
+  // ----- Attachments saved with a lesson --------------------------------------
+
+  /// The attachments saved for one lesson, in the admin's order.
+  ///
+  /// Says nothing about whether they may be opened. That is the lesson
+  /// record's licence, which [LocalLibrary] checks before asking for these.
+  Future<List<SavedFile>> savedFiles(String contentItemId) async {
+    final owner = await _owner();
+    if (owner == null) return const [];
+    final db = await _db;
+    final rows = await db.query(
+      'download_files',
+      where: 'content_item_id = ? and student_id = ?',
+      whereArgs: [contentItemId, owner],
+      orderBy: 'weight asc, name asc',
+    );
+    return rows.map(SavedFile.fromRow).toList();
+  }
+
+  Future<void> putSavedFile(SavedFile file) async {
+    final owner = await _requireOwner();
+    final db = await _db;
+    await db.insert(
+      'download_files',
+      file.toRow(owner),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Forgets the attachment rows only, for a lesson whose files were deleted
+  /// while its record stays behind -- an expired licence keeps the row so the
+  /// Downloads screen can say why it went.
+  Future<void> forgetSavedFiles(String contentItemId) async {
+    final owner = await _owner();
+    if (owner == null) return;
+    final db = await _db;
     await db.delete(
-      'downloads',
+      'download_files',
       where: 'content_item_id = ? and student_id = ?',
       whereArgs: [contentItemId, owner],
     );
-    _announce();
   }
 
   /// Total bytes actually on the device, for the Downloads screen's header.

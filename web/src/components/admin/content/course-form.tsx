@@ -6,7 +6,7 @@ import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, FolderTree, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -154,6 +154,17 @@ export function CourseForm({ course, categories }: CourseFormProps) {
         <h1 className="text-xl font-bold">
           {isEditing ? "Edit Course" : "New Course"}
         </h1>
+        {isEditing && course && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="ml-auto"
+            render={<Link href={`/admin/content/manager?course=${course.id}`} />}
+          >
+            <FolderTree className="mr-1.5 h-3.5 w-3.5" />
+            Manage content
+          </Button>
+        )}
       </div>
 
       <form

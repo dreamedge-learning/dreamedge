@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/models/course.dart';
+import '../../../config/storefront.dart';
 import '../../../shared/theme/colors.dart';
 import '../../../shared/theme/typography.dart';
 
@@ -72,7 +73,15 @@ class CourseListTile extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      if (course.hasDiscount) ...[
+                      if (!Storefront.canSell)
+                        Text(
+                          course.price > 0 ? '' : 'Free',
+                          style: AppTypography.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        )
+                      else if (course.hasDiscount) ...[
                         Text(
                           course.formattedPrice,
                           style: AppTypography.bodyMedium.copyWith(

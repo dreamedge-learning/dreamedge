@@ -298,3 +298,54 @@ class QueuedProgress {
     );
   }
 }
+
+/// One attachment saved as part of a lesson's download.
+///
+/// Belongs to the lesson's [DownloadRecord], which carries the licence; a
+/// saved file is only readable while that record is.
+class SavedFile {
+  final String contentItemId;
+  final String fileId;
+  final String name;
+
+  /// Lower-cased, without the dot. Kept so the reader knows a PDF from an
+  /// image with no network to ask.
+  final String extension;
+
+  final String localPath;
+  final int bytes;
+  final int weight;
+
+  const SavedFile({
+    required this.contentItemId,
+    required this.fileId,
+    required this.name,
+    required this.extension,
+    required this.localPath,
+    required this.bytes,
+    required this.weight,
+  });
+
+  factory SavedFile.fromRow(Map<String, Object?> row) {
+    return SavedFile(
+      contentItemId: row['content_item_id'] as String,
+      fileId: row['file_id'] as String,
+      name: row['name'] as String? ?? '',
+      extension: row['extension'] as String? ?? '',
+      localPath: row['local_path'] as String,
+      bytes: (row['bytes'] as num?)?.toInt() ?? 0,
+      weight: (row['weight'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Map<String, Object?> toRow(String studentId) => {
+        'content_item_id': contentItemId,
+        'student_id': studentId,
+        'file_id': fileId,
+        'name': name,
+        'extension': extension,
+        'local_path': localPath,
+        'bytes': bytes,
+        'weight': weight,
+      };
+}
