@@ -14,6 +14,7 @@ import {
   UserCircle,
   Receipt,
   Bell,
+  MessageCircleQuestion,
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -132,6 +133,13 @@ export function Navbar() {
                 >
                   <FileText className="h-4 w-4" />
                   My Tests
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  render={<Link href="/dashboard/doubts" />}
+                  className="flex items-center gap-2"
+                >
+                  <MessageCircleQuestion className="h-4 w-4" />
+                  My doubts
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   render={<Link href="/dashboard/notifications" />}

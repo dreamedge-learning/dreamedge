@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
+import '../doubts/widgets/lesson_doubts_section.dart';
 import '../downloads/widgets/download_button.dart';
 import 'controller/player_controller.dart';
 import 'widgets/attachments_section.dart';
@@ -184,6 +185,12 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen>
           ),
           LessonAttachmentsSection(contentId: content.id),
           _buildLessonNav(controller),
+          // Under the lesson rather than in a menu: the moment a student is
+          // stuck is the moment they are looking at this screen.
+          LessonDoubtsSection(
+            contentId: content.id,
+            lessonTitle: content.title,
+          ),
         ],
       ),
     );

@@ -13,6 +13,7 @@ import '../../core/providers/document_provider.dart';
 import '../../core/services/document_service.dart';
 import '../../shared/theme/colors.dart';
 import '../../shared/theme/typography.dart';
+import '../doubts/ask_doubt_sheet.dart';
 
 /// Reads a lesson's files: PDFs, notes, past papers, and the images attached
 /// beside them.
@@ -143,6 +144,15 @@ class _PdfReaderScreenState extends ConsumerState<PdfReaderScreen> {
         ),
         centerTitle: false,
         actions: [
+          IconButton(
+            tooltip: 'Ask a doubt',
+            icon: const Icon(Icons.question_answer_outlined),
+            onPressed: () => showLessonDoubtsSheet(
+              context,
+              contentId: widget.contentId,
+              lessonTitle: contentAsync.valueOrNull?.title ?? 'This lesson',
+            ),
+          ),
           if (showsPages)
             Padding(
               padding: const EdgeInsets.only(right: 14),

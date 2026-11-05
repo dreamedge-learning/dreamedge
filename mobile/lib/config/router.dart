@@ -12,6 +12,8 @@ import '../features/auth/reset_password_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/courses/course_detail_screen.dart';
+import '../features/doubts/doubt_thread_screen.dart';
+import '../features/doubts/my_doubts_screen.dart';
 import '../features/lessons/lessons_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/live/live_class_detail_screen.dart';
@@ -212,6 +214,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => PdfReaderScreen(
           contentId: state.pathParameters['contentId']!,
           initialFileId: state.uri.queryParameters['file'],
+        ),
+      ),
+      // `/doubts/:id` is also the link in the "your doubt has been answered"
+      // notification; the website redirects the same path to its own page.
+      GoRoute(
+        path: '/doubts',
+        builder: (context, state) => const MyDoubtsScreen(),
+      ),
+      GoRoute(
+        path: '/doubts/:id',
+        builder: (context, state) => DoubtThreadScreen(
+          doubtId: state.pathParameters['id']!,
         ),
       ),
       GoRoute(

@@ -94,9 +94,13 @@ class ProfileScreen extends ConsumerWidget {
             title: 'Edit Profile',
             onTap: () => context.push('/profile/edit'),
           ),
+          _MenuItem(
+            icon: Icons.question_answer_outlined,
+            title: 'My Doubts',
+            onTap: () => context.push('/doubts'),
+          ),
           // Payment records are part of selling, which an iOS build does not
-          // do. "My Certificates" returns when certificates are generated; a
-          // menu item that does nothing is also grounds for App Store rejection.
+          // do.
           if (Storefront.canSell)
             _MenuItem(
               icon: Icons.receipt_long_outlined,

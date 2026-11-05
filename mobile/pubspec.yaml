@@ -40,6 +40,11 @@ dependencies:
   # URL launcher
   url_launcher: ^6.3.1
 
+  # Photos for doubts. Android's system photo picker and camera intent need no
+  # runtime permission, so the manifest gains nothing; the picker also scales
+  # the photo down before handing it over.
+  image_picker: ^1.1.2
+
   # Video player
   #
   # No chewie. ExoPlayer plays HLS natively through video_player, and the
