@@ -21,6 +21,7 @@ import '../features/onboarding/onboarding_screen.dart';
 import '../features/live/live_class_detail_screen.dart';
 import '../features/live/live_schedule_screen.dart';
 import '../features/notifications/notification_inbox_screen.dart';
+import '../features/leaderboard/leaderboard_screen.dart';
 import '../features/payments/checkout_screen.dart';
 import 'storefront.dart';
 import '../features/payments/payment_history_screen.dart';
@@ -263,6 +264,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/profile/feedback',
         builder: (context, state) => const FeedbackScreen(),
+      ),
+      GoRoute(
+        path: '/leaderboard',
+        builder: (context, state) {
+          // Optional `?courseId=...` lets the test results panel open the
+          // leaderboard already scoped to the course the student just tested
+          // in, skipping the picker.
+          final courseId = state.uri.queryParameters['courseId'];
+          return LeaderboardScreen(initialCourseId: courseId);
+        },
       ),
       GoRoute(
         path: '/certificates',

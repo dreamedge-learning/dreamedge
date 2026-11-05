@@ -1411,6 +1411,26 @@ class _ResultsPanel extends StatelessWidget {
                 ),
               ),
               const Spacer(),
+              if (test?.courseId != null) ...[
+                OutlinedButton.icon(
+                  onPressed: () => context.push(
+                      '/leaderboard?courseId=${test!.courseId}'),
+                  icon: Icon(Icons.emoji_events_outlined,
+                      color: AppColors.orange, size: 18),
+                  label: Text(
+                    'View weekly leaderboard',
+                    style: AppTypography.button
+                        .copyWith(color: AppColors.orange),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: AppColors.orange),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               FilledButton(
                 onPressed: onBack,
                 style: FilledButton.styleFrom(

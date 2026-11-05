@@ -18,6 +18,7 @@ import {
   LogOut,
   Award,
   MessageSquare,
+  Trophy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,6 +136,13 @@ export function Navbar() {
                 >
                   <FileText className="h-4 w-4" />
                   My Tests
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  render={<Link href="/dashboard/leaderboard" />}
+                  className="flex items-center gap-2"
+                >
+                  <Trophy className="h-4 w-4" />
+                  Leaderboard
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   render={<Link href="/dashboard/certificates" />}
@@ -257,6 +265,13 @@ export function Navbar() {
                       className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
                     >
                       My Dashboard
+                    </Link>
+                    <Link
+                      href="/dashboard/leaderboard"
+                      onClick={() => setMobileOpen(false)}
+                      className="rounded-lg px-3 py-2.5 text-sm font-medium text-foreground/70 transition-colors hover:bg-accent"
+                    >
+                      Leaderboard
                     </Link>
                     <Link
                       href="/dashboard/certificates"
