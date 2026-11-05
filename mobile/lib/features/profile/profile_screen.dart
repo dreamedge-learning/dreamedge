@@ -99,6 +99,11 @@ class ProfileScreen extends ConsumerWidget {
             title: 'My Doubts',
             onTap: () => context.push('/doubts'),
           ),
+          _MenuItem(
+            icon: Icons.emoji_events_outlined,
+            title: 'My Certificates',
+            onTap: () => context.push('/certificates'),
+          ),
           // Payment records are part of selling, which an iOS build does not
           // do.
           if (Storefront.canSell)

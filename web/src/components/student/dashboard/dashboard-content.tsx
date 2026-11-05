@@ -16,6 +16,7 @@ import {
   FileText,
   Receipt,
   Radio,
+  Award,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -114,6 +115,11 @@ const QUICK_ACTIONS = [
     icon: Radio,
     label: "Live classes",
     href: "/dashboard/live-classes",
+  },
+  {
+    icon: Award,
+    label: "Certificates",
+    href: "/dashboard/certificates",
   },
   {
     icon: MessageCircleQuestion,

@@ -9,10 +9,12 @@ import type {
   ContentAttachment,
   ContentItemType,
   ContentProgress,
+  LearnCertificate,
   SyllabusContentItem,
   SyllabusSubject,
   SyllabusTopic,
 } from "@/components/student/courses/learn-content";
+import { isCertificateStatus } from "@/lib/certificates";
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -253,6 +255,23 @@ async function fetchProgress(
   return map;
 }
 
+/** The student's certificate request for this course, filed on completion. */
+async function fetchCertificate(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  courseId: string,
+  studentId: string
+): Promise<LearnCertificate | null> {
+  const { data } = await supabase
+    .from("certificates")
+    .select("status, verification_code")
+    .eq("student_id", studentId)
+    .eq("course_id", courseId)
+    .maybeSingle();
+
+  if (!data || !isCertificateStatus(data.status)) return null;
+  return { status: data.status, verificationCode: data.verification_code };
+}
+
 export default async function LearnPage({ params, searchParams }: PageProps) {
   const { slug } = await params;
   const { content: initialContentId } = (await searchParams) ?? {};
@@ -285,12 +304,16 @@ export default async function LearnPage({ params, searchParams }: PageProps) {
     redirect(`/courses/${slug}`);
   }
 
-  const subjects = await fetchSyllabus(supabase, course.id, student.id);
+  const [subjects, certificate] = await Promise.all([
+    fetchSyllabus(supabase, course.id, student.id),
+    fetchCertificate(supabase, course.id, student.id),
+  ]);
 
   return (
     <LearnContent
       course={course as Course}
       subjects={subjects}
+      certificate={certificate}
       initialContentId={
         typeof initialContentId === "string" ? initialContentId : null
       }

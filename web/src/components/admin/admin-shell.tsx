@@ -29,6 +29,7 @@ import {
   Award,
   ImageIcon,
   RotateCcw,
+  ScrollText,
   MessageCircleQuestion,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
@@ -134,6 +135,14 @@ const navItems: NavItem[] = [
         href: "/admin/students/testimonials",
         icon: Award,
         roles: ["super_admin", "support_staff"],
+      },
+      {
+        // Teachers approve; support staff only see the queue, so they can
+        // answer a parent asking where a certificate has got to.
+        label: "Certificates",
+        href: "/admin/students/certificates",
+        icon: ScrollText,
+        roles: ["super_admin", "teacher", "support_staff"],
       },
     ],
   },
