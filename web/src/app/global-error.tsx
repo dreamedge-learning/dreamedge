@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { SUPPORT_EMAIL } from "@/lib/site";
 
 /**
@@ -17,6 +18,9 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
+    // A failure this high up unmounts the normal boundaries, so it is the last
+    // place to report it. A no-op until Sentry has a DSN to report to.
+    Sentry.captureException(error);
     console.error("Root layout error:", error);
   }, [error]);
 
