@@ -124,7 +124,7 @@ function SettingsPageSkeleton() {
         <Skeleton className="h-8 w-40" />
         <Skeleton className="mt-1 h-4 w-64" />
       </div>
-      <Skeleton className="h-10 w-[480px]" />
+      <Skeleton className="h-10 w-full max-w-[480px]" />
       <div className="space-y-4">
         <Skeleton className="h-[400px]" />
       </div>
