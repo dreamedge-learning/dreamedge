@@ -33,10 +33,11 @@ function CommandDialog({
   children,
   className,
   ...props
-}: React.ComponentProps<typeof Dialog> & {
+}: Omit<React.ComponentProps<typeof Dialog>, "children"> & {
   title?: string
   description?: string
   className?: string
+  children?: React.ReactNode
 }) {
   return (
     <Dialog {...props}>
