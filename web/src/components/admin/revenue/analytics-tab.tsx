@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { toast } from "sonner";
 import { ExportButton } from "@/components/admin/export-button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DateRangeFilter } from "./date-range-filter";
 import { RevenueStatsCards, RevenueStatsCardsSkeleton } from "./revenue-stats-cards";
-import {
-  MonthlyRevenueChart, DailyOrdersChart,
-  PaymentMethodChart, CourseRevenueChart, ChartSkeleton,
-} from "./revenue-charts";
 import {
   fetchRevenueAnalytics,
   fetchPaymentMethodBreakdown,
@@ -20,6 +19,40 @@ import {
   type PaymentMethodBreakdown,
   type CourseRevenue,
 } from "@/app/admin/(panel)/revenue/actions";
+
+// The charts pull in recharts, which is large and only needed once the first
+// range of data has loaded. Loading them on demand keeps it out of the tab's
+// initial bundle; the skeleton below stands in while each chunk arrives.
+function ChartSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <Skeleton className="h-5 w-36" />
+        <Skeleton className="h-4 w-48" />
+      </CardHeader>
+      <CardContent>
+        <Skeleton className="h-[250px] w-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
+const MonthlyRevenueChart = dynamic(
+  () => import("./revenue-charts").then((m) => m.MonthlyRevenueChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const DailyOrdersChart = dynamic(
+  () => import("./revenue-charts").then((m) => m.DailyOrdersChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const PaymentMethodChart = dynamic(
+  () => import("./revenue-charts").then((m) => m.PaymentMethodChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
+const CourseRevenueChart = dynamic(
+  () => import("./revenue-charts").then((m) => m.CourseRevenueChart),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
 
 function daysAgo(days: number): string {
   const d = new Date();

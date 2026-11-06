@@ -25,6 +25,7 @@ const nextConfig: NextConfig = {
         hostname: "*.b-cdn.net",
       },
     ],
+    formats: ["image/avif", "image/webp"],
   },
   async redirects() {
     return [
