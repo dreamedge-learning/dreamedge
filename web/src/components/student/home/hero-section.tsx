@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Award, Play, Sparkles, Users } from "lucide-react";
+import { ArrowRight, Award, Sparkles, Users } from "lucide-react";
 
 import { StarDisplay } from "@/components/ratings/star-display";
 
@@ -91,8 +91,7 @@ export function HeroSection({ liveClassTitle, rating }: HeroSectionProps) {
               className="rounded-full border-border px-8 text-base text-foreground hover:bg-accent"
               render={<Link href="/login" />}
             >
-              <Play className="mr-2 h-4 w-4 fill-brand-orange text-brand-orange" />
-              Start Free Trial
+              Get Started
             </Button>
           </div>
 

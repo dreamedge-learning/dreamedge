@@ -459,7 +459,6 @@ function LimitsSection({
   function handleSave() {
     startTransition(async () => {
       const result = await updateSettings([
-        { key: "free_trial_days", value: Number(settings.free_trial_days ?? 7) },
         { key: "max_devices_per_student", value: Number(settings.max_devices_per_student ?? 2) },
         { key: "video_quality_default", value: settings.video_quality_default ?? "720p" },
       ]);
@@ -477,23 +476,11 @@ function LimitsSection({
       <div>
         <h3 className="text-base font-semibold">Limits</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Saved, but not enforced anywhere yet — there is no free trial, no
-          device limit and no player default reading these. They are here for
-          when those land.
+          Saved, but not enforced anywhere yet — there is no device limit and
+          no player default reading these. They are here for when those land.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-2">
-          <Label htmlFor="s-trial">Free Trial Days</Label>
-          <Input
-            id="s-trial"
-            type="number"
-            min={0}
-            max={365}
-            value={String(settings.free_trial_days ?? 7)}
-            onChange={(e) => onChange("free_trial_days", Number(e.target.value))}
-          />
-        </div>
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="s-devices">Max Devices per Student</Label>
           <Input

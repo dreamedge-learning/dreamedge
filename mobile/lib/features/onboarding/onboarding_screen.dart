@@ -39,7 +39,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       iconColor: AppColors.success,
       title: 'Affordable & Accessible',
       description:
-          'Premium coaching at prices that make sense. Start with a free trial today.',
+          'Premium coaching at prices that make sense. Start learning today.',
     ),
   ];
 

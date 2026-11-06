@@ -210,7 +210,7 @@ export function Navbar() {
                 className="bg-brand-orange text-white hover:bg-brand-orange-dark"
                 render={<Link href="/login" />}
               >
-                Start Free Trial
+                Get Started
               </Button>
             </>
           )}
@@ -331,7 +331,7 @@ export function Navbar() {
                       className="w-full bg-brand-orange text-white hover:bg-brand-orange-dark"
                       render={<Link href="/login" onClick={() => setMobileOpen(false)} />}
                     >
-                      Start Free Trial
+                      Get Started
                     </Button>
                   </div>
                 )}
