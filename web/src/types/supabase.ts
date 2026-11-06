@@ -2547,6 +2547,16 @@ export type Database = {
           updated_by_name: string
         }[]
       }
+      admin_global_search: {
+        Args: { p_limit?: number; p_query: string }
+        Returns: {
+          entity_type: string
+          id: string
+          subtitle: string
+          title: string
+          url: string
+        }[]
+      }
       admin_list_course_ratings: {
         Args: {
           p_course_id?: string

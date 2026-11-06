@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   BarChart3, ShoppingCart, HandCoins, RotateCcw,
@@ -18,6 +20,15 @@ import type {
   InvoiceRow,
   ReferralCodeRow,
 } from "./actions";
+
+const TAB_VALUES = [
+  "overview",
+  "orders",
+  "manual",
+  "refunds",
+  "invoices",
+  "referrals",
+];
 
 interface RevenuePageClientProps {
   initialOrders: OrderRow[];
@@ -42,6 +53,19 @@ export function RevenuePageClient({
   initialReferralCodesCount,
   courses,
 }: RevenuePageClientProps) {
+  // The global search palette links an order to ?tab=orders. Controlled rather
+  // than defaulted, so the jump works even when the reader is already on this
+  // page and only the query string changes.
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState("overview");
+
+  useEffect(() => {
+    const requested = searchParams.get("tab");
+    if (requested && TAB_VALUES.includes(requested)) {
+      setTab(requested);
+    }
+  }, [searchParams]);
+
   return (
     <div className="space-y-6 max-w-7xl">
       <div>
@@ -51,7 +75,7 @@ export function RevenuePageClient({
         </p>
       </div>
 
-      <Tabs defaultValue="overview">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList variant="line" className="w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">
             <BarChart3 className="mr-1.5 h-4 w-4" />

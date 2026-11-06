@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useCallback, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -65,6 +66,15 @@ export function StudentTable({ initialData, initialCount, courses }: StudentTabl
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // The global search palette links here with ?student=<id> to open a single
+  // profile straight away. The detail sheet fetches its own row by id, so it
+  // does not matter whether that student is on the page currently loaded.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const focused = searchParams.get("student");
+    if (focused) setSelectedStudent(focused);
+  }, [searchParams]);
 
   const pageSize = 20;
   const totalPages = Math.ceil(totalCount / pageSize);

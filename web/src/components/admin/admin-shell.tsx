@@ -35,6 +35,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { signOut } from "@/app/admin/login/actions";
+import { AdminCommandPalette } from "@/components/admin/admin-command-palette";
 import { AdminRoleProvider } from "@/components/admin/admin-role-context";
 import { createClient } from "@/lib/supabase/client";
 import type { AdminSession } from "@/lib/admin";
@@ -483,6 +484,7 @@ export function AdminShell({
           >
             <Menu className="h-5 w-5" />
           </button>
+          <AdminCommandPalette />
           <div className="flex-1" />
           <span className="text-xs text-muted-foreground hidden sm:block">
             {roleLabel(admin.role_name)}
