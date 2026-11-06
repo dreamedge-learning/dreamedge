@@ -14,6 +14,7 @@ import {
 } from "@/components/admin/dashboard/course-performance";
 import { RestrictedState } from "@/components/admin/dashboard/empty-state";
 import { ExportButton } from "@/components/admin/export-button";
+import { TeacherDashboard } from "@/components/admin/teaching/teacher-dashboard";
 import { getAdminSession, type AdminSession } from "@/lib/admin";
 import {
   AUDIT_ROLES,
@@ -39,6 +40,13 @@ async function Dashboard() {
   const admin = await getAdminSession();
   // The panel layout already redirects signed-out users.
   if (!admin) return null;
+
+  // A teacher has read-only access to a narrow slice of the panel, so the
+  // finance and audit heavy KPI dashboard is neither theirs to see nor useful
+  // to them. They land on a view built around their own teaching instead.
+  if (admin.role_name === "teacher") {
+    return <TeacherDashboard admin={admin} />;
+  }
 
   const firstName = admin.full_name.split(" ")[0];
   const today = new Intl.DateTimeFormat("en-IN", {
