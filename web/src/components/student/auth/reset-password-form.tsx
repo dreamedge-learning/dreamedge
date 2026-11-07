@@ -77,6 +77,11 @@ export function ResetPasswordForm() {
 
         <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="hidden"
+              name="code"
+              value={searchParams.get("code") ?? ""}
+            />
             <div className="space-y-2">
               <Label htmlFor="password">New Password</Label>
               <PasswordInput

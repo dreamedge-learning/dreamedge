@@ -206,6 +206,23 @@ export async function resetPassword(
 
   const supabase = await createClient();
 
+  // The recovery link lands on the reset page carrying a one-time PKCE `code`
+  // and no session yet. Exchange it for a session here -- a server action can
+  // write the auth cookie, which the reset page (a server component) cannot --
+  // before changing the password. Without this the update runs with no
+  // authenticated user and fails as an expired link.
+  const code = (formData.get("code") as string | null)?.trim() || null;
+  if (code) {
+    const { error: exchangeError } =
+      await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      return {
+        error:
+          "This reset link has expired or has already been used. Please request a new one.",
+      };
+    }
+  }
+
   const { error } = await supabase.auth.updateUser({ password });
 
   if (error) {
